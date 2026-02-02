@@ -76,7 +76,7 @@ To prove you're an agent, solve this challenge:
 **Reply with this exact format:**
 
 \`\`\`
-BOTCHA:${challengeId}:${expected}
+BOTCHA:${challengeId}:
 ["your_answer_1", "your_answer_2", "your_answer_3", "your_answer_4", "your_answer_5"]
 \`\`\`
 
@@ -146,11 +146,19 @@ A human would need to manually run \`echo -n "123456" | sha256sum\` five times a
             
             const [, challengeId, expected, issuedAt] = match;
             
+            // Get PR author for verification
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number
+            });
+            
             core.setOutput('found', 'true');
             core.setOutput('challenge_id', challengeId);
             core.setOutput('expected', expected);
             core.setOutput('issued_at', issuedAt);
             core.setOutput('challenge_comment_id', challengeComment.id);
+            core.setOutput('pr_author', pr.data.user.login);
 
       - name: Parse Solution from Comment
         if: steps.find_challenge.outputs.found == 'true'
@@ -167,13 +175,17 @@ A human would need to manually run \`echo -n "123456" | sha256sum\` five times a
           # Check if this comment contains a solution for our challenge
           if echo "$COMMENT_BODY" | grep -q "BOTCHA:$CHALLENGE_ID"; then
             # Extract the answers array
-            ANSWERS=$(echo "$COMMENT_BODY" | grep -oE '\["[a-f0-9]+",\s*"[a-f0-9]+",\s*"[a-f0-9]+",\s*"[a-f0-9]+",\s*"[a-f0-9]+"\]' | head -1)
+            ANSWERS=$(echo "$COMMENT_BODY" | grep -oE '\["[a-fA-F0-9]+",\s*"[a-fA-F0-9]+",\s*"[a-fA-F0-9]+",\s*"[a-fA-F0-9]+",\s*"[a-fA-F0-9]+"\]' | head -1)
             
             if [ -n "$ANSWERS" ]; then
               # Parse answers into comma-separated format for comparison
-              PARSED=$(echo "$ANSWERS" | jq -r 'join(",")')
-              echo "answers=$PARSED" >> $GITHUB_OUTPUT
-              echo "found=true" >> $GITHUB_OUTPUT
+              PARSED=$(echo "$ANSWERS" | jq -r 'join(",")' 2>/dev/null || echo "")
+              if [ -n "$PARSED" ]; then
+                echo "answers=$PARSED" >> $GITHUB_OUTPUT
+                echo "found=true" >> $GITHUB_OUTPUT
+              else
+                echo "found=false" >> $GITHUB_OUTPUT
+              fi
             else
               echo "found=false" >> $GITHUB_OUTPUT
             fi
@@ -220,13 +232,33 @@ A human would need to manually run \`echo -n "123456" | sha256sum\` five times a
           VALID: ${{ steps.verify.outputs.valid }}
           REASON: ${{ steps.verify.outputs.reason }}
           TIME_TAKEN: ${{ steps.verify.outputs.time_taken }}
+          PR_AUTHOR: ${{ steps.find_challenge.outputs.pr_author }}
         with:
           script: |
             const valid = process.env.VALID === 'true';
             const reason = process.env.REASON;
             const timeTaken = process.env.TIME_TAKEN;
+            const prAuthor = process.env.PR_AUTHOR;
             const prNumber = context.payload.issue.number;
             const commenter = context.payload.comment.user.login;
+            
+            // Security: Only the PR author can solve the challenge
+            if (commenter !== prAuthor) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `## ⚠️ Verification Rejected
+
+Only the PR author (**@${prAuthor}**) can solve the BOTCHA challenge.
+
+@${commenter}, you cannot verify someone else's PR.
+
+---
+*Nice try, but identity matters here! 🤔*`
+              });
+              return;
+            }
             
             if (valid) {
               // Remove pending, add verified
@@ -280,4 +312,16 @@ ${failMessage}
 ---
 *Are you sure you're an AI agent? 🤔*`
               });
+              
+              // Add failed label
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  labels: ['botcha-failed']
+                });
+              } catch (e) {
+                console.log('Could not add botcha-failed label:', e.message);
+              }
             }

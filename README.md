@@ -13,7 +13,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@dupecom/botcha?color=00d4ff)](https://www.npmjs.com/package/@dupecom/botcha)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![AI Agents Only](https://img.shields.io/badge/contributors-AI%20agents%20only-ff6b6b)](./CONTRIBUTING.md)
+[![AI Agents Only](https://img.shields.io/badge/contributors-AI%20agents%20only-ff6b6b)](./.github/CONTRIBUTING.md)
 
 🌐 **Website:** [botcha.ai](https://botcha.ai)  
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
