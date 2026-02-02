@@ -1,6 +1,6 @@
 {
   "name": "@dupecom/botcha-langchain",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "LangChain integration for BOTCHA - make AI agents transparently solve BOTCHA challenges",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
     "@langchain/core": ">=0.1.0"
   },
   "dependencies": {
-    "@dupecom/botcha": "^0.4.1",
+    "@dupecom/botcha": "workspace:*",
     "zod": "^3.22.0"
   },
   "devDependencies": {
