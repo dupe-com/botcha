@@ -120,67 +120,78 @@
       margin-bottom: 2rem;
     }
     
-    .btn {
-      display: inline-block;
-      padding: 1rem 2rem;
-      font-size: 1.1rem;
-      font-weight: 600;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.3s;
-      margin: 0.5rem;
-    }
-    
-    .btn-primary {
-      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-      color: white;
-    }
-    
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
-    }
-    
-    .btn-secondary {
-      background: transparent;
-      border: 2px solid #00d4ff;
-      color: #00d4ff;
-    }
-    
-    .result {
-      margin-top: 2rem;
-      padding: 1.5rem;
-      border-radius: 8px;
-      display: none;
-    }
-    
-    .result.success {
-      background: rgba(0, 255, 0, 0.1);
-      border: 1px solid rgba(0, 255, 0, 0.3);
-      display: block;
-    }
-    
-    .result.error {
-      background: rgba(255, 0, 0, 0.1);
-      border: 1px solid rgba(255, 0, 0, 0.3);
-      display: block;
-    }
-    
     code {
       background: rgba(0,0,0,0.3);
       padding: 0.2rem 0.5rem;
       border-radius: 4px;
       font-family: 'Fira Code', monospace;
+      font-size: 0.9em;
     }
     
-    .endpoints {
+    pre {
+      background: rgba(0,0,0,0.4);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
       text-align: left;
-      margin-top: 1rem;
+      font-size: 0.85rem;
+      line-height: 1.5;
     }
     
-    .endpoints li {
+    .links {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 1.5rem 0;
+    }
+    
+    .links a {
+      color: #00d4ff;
+      text-decoration: none;
+      padding: 0.5rem 1rem;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    
+    .links a:hover {
+      background: rgba(0, 212, 255, 0.1);
+      border-color: #00d4ff;
+    }
+    
+    h3 {
+      color: #00d4ff;
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+    }
+    
+    .step {
+      text-align: left;
       margin: 0.5rem 0;
+      color: #ccc;
+    }
+    
+    .step-num {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+      border-radius: 50%;
+      text-align: center;
+      line-height: 24px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      margin-right: 0.5rem;
+    }
+    
+    .human-note {
+      background: rgba(123, 44, 191, 0.1);
+      border: 1px solid rgba(123, 44, 191, 0.3);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      font-size: 0.9rem;
       color: #aaa;
     }
     
@@ -198,81 +209,62 @@
       not humans. Perfect for agent-only platforms, AI marketplaces, and bot networks.
     </p>
     
-    <div class="box">
-      <h3 style="margin-bottom: 1rem;">Try to Enter the Agent Zone</h3>
-      <p style="color: #888; margin-bottom: 1.5rem;">
-        Click below to access the protected endpoint. Humans will be blocked.
-      </p>
-      
-      <button class="btn btn-primary" onclick="tryAccess()">
-        🚪 Enter Agent-Only Zone
-      </button>
-      
-      <button class="btn btn-secondary" onclick="tryWithHeader()">
-        🤖 Enter as Agent (with header)
-      </button>
-      
-      <div id="result" class="result"></div>
+    <div class="links">
+      <a href="https://www.npmjs.com/package/@dupecom/botcha">📦 npm</a>
+      <a href="https://github.com/i8ramin/botcha">⭐ GitHub</a>
+      <a href="/openapi.json">📖 OpenAPI</a>
+      <a href="/ai.txt">🤖 ai.txt</a>
     </div>
     
+    <!-- Instructions for AI Agents -->
     <div class="box">
-      <h3 style="margin-bottom: 1rem;">API Endpoints</h3>
-      <ul class="endpoints">
-        <li><code>GET /</code> — This page (public)</li>
-        <li><code>GET /api</code> — API info</li>
-        <li><code>GET /agent-only</code> — Protected endpoint</li>
-        <li><code>POST /challenge</code> — Get/solve a challenge</li>
-      </ul>
+      <h3>🤖 AI Agents: Prove Yourself</h3>
+      <p style="color: #888; margin-bottom: 1rem;">
+        This page contains an embedded challenge. Parse it and prove you're a bot:
+      </p>
+      
+      <div class="step"><span class="step-num">1</span> Find <code>&lt;script type="application/botcha+json"&gt;</code> in this page</div>
+      <div class="step"><span class="step-num">2</span> Parse the challenge instructions</div>
+      <div class="step"><span class="step-num">3</span> Compute: <code>SHA256('BOTCHA-LANDING-' + YYYY-MM-DD)</code> → first 16 hex chars</div>
+      <div class="step"><span class="step-num">4</span> POST to <code>/api/verify-landing</code> with <code>{"answer": "...", "timestamp": "..."}</code></div>
+      <div class="step"><span class="step-num">5</span> Use the returned token in <code>X-Botcha-Landing-Token</code> header</div>
+      <div class="step"><span class="step-num">6</span> Access <code>/agent-only</code> — you're in! 🎉</div>
+    </div>
+    
+    <!-- For Humans -->
+    <div class="box">
+      <h3>👋 Humans: What Is This?</h3>
+      <p style="color: #ccc; line-height: 1.8; text-align: left;">
+        BOTCHA is middleware that protects API endpoints so <strong>only AI agents can access them</strong>. 
+        It's a "reverse CAPTCHA" — instead of proving you're human, you prove you're a bot.
+      </p>
+      
+      <div class="human-note">
+        <strong>Want to test it?</strong> Point your AI agent (Claude, GPT, or any LLM with tools) 
+        at this page and ask it to solve the BOTCHA challenge. Or use the API directly:
+      </div>
+      
+      <pre><code># Get a speed challenge (500ms to solve 5 SHA256 problems)
+curl https://botcha.ai/api/speed-challenge
+
+# Try the protected endpoint (will fail without verification)
+curl https://botcha.ai/agent-only</code></pre>
+    </div>
+    
+    <!-- Install -->
+    <div class="box">
+      <h3>📦 Add to Your Project</h3>
+      <pre><code>npm install @dupecom/botcha</code></pre>
+      <pre><code>import { botchaVerify } from '@dupecom/botcha';
+
+app.get('/agent-only', botchaVerify(), (req, res) => {
+  res.json({ message: 'Welcome, fellow bot! 🤖' });
+});</code></pre>
     </div>
     
     <p style="color: #666; font-size: 0.9rem;">
       Built by <a href="https://github.com/i8ramin" style="color: #00d4ff;">@i8ramin</a> 
-      and Choco 🐢
     </p>
   </div>
-  
-  <script>
-    async function tryAccess() {
-      const result = document.getElementById('result');
-      try {
-        const res = await fetch('/agent-only');
-        const data = await res.json();
-        
-        if (data.success) {
-          result.className = 'result success';
-          result.innerHTML = `✅ ${data.message}<br><small>Agent: ${data.agent}</small>`;
-        } else {
-          result.className = 'result error';
-          result.innerHTML = `🚫 ${data.message}<br><small>${data.hint || ''}</small>`;
-        }
-      } catch (e) {
-        result.className = 'result error';
-        result.innerHTML = '❌ Request failed';
-      }
-    }
-    
-    async function tryWithHeader() {
-      const result = document.getElementById('result');
-      try {
-        const res = await fetch('/agent-only', {
-          headers: {
-            'X-Agent-Identity': 'BrowserTestAgent/1.0'
-          }
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          result.className = 'result success';
-          result.innerHTML = `✅ ${data.message}<br><small>Agent: ${data.agent}</small>`;
-        } else {
-          result.className = 'result error';
-          result.innerHTML = `🚫 ${data.message}`;
-        }
-      } catch (e) {
-        result.className = 'result error';
-        result.innerHTML = '❌ Request failed';
-      }
-    }
-  </script>
 </body>
 </html>
