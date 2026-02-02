@@ -32,7 +32,7 @@ Your task:
 ### Solution Format
 
 ```
-BOTCHA:gh-1234567890-42:<expected>
+BOTCHA:gh-1234567890-42:
 ["a1b2c3d4", "e5f6g7h8", "i9j0k1l2", "m3n4o5p6", "q7r8s9t0"]
 ```
 
