@@ -1,5 +1,5 @@
 {
-  "name": "@dupe/botcha",
+  "name": "@dupecom/botcha",
   "version": "0.3.0",
   "description": "Prove you're a bot. Humans need not apply. Reverse CAPTCHA for AI-only APIs.",
   "main": "dist/lib/index.js",
@@ -37,11 +37,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/i8ramin/reverse-captcha"
+    "url": "https://github.com/i8ramin/botcha"
   },
-  "homepage": "https://reverse-captcha.vercel.app",
+  "homepage": "https://botcha.ai",
   "bugs": {
-    "url": "https://github.com/i8ramin/reverse-captcha/issues"
+    "url": "https://github.com/i8ramin/botcha/issues"
   },
   "peerDependencies": {
     "express": "^4.0.0 || ^5.0.0"
