@@ -36,8 +36,8 @@ importers:
   packages/cli:
     dependencies:
       '@dupecom/botcha':
-        specifier: ^0.4.1
-        version: 0.4.1(express@4.22.1)
+        specifier: ^0.4.3
+        version: 0.4.3(express@4.22.1)
       chalk:
         specifier: ^5.3.0
         version: 5.6.2
@@ -80,8 +80,8 @@ importers:
   packages/langchain:
     dependencies:
       '@dupecom/botcha':
-        specifier: ^0.4.1
-        version: 0.4.1(express@4.22.1)
+        specifier: workspace:*
+        version: link:../..
       zod:
         specifier: ^3.22.0
         version: 3.25.76
@@ -154,8 +154,8 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@dupecom/botcha@0.4.1':
-    resolution: {integrity: sha512-SddzWImptWQAZsCBtSpN6zxzBNUqysgEy0tgoxe/H/mpqVFo/VLLQGq2Xwwt8aSsnQTHCGieDOr0Yotr3mqjIA==}
+  '@dupecom/botcha@0.4.3':
+    resolution: {integrity: sha512-IgV14JwucgrtZzMlWx9M2ap3Owz7Jth4Kvnw8qVh7rId3e0UsCsnsz+VcECt58GgP8jqm7cDKqJ5jOU28JIe9w==}
     engines: {node: '>=18'}
     peerDependencies:
       express: ^4.0.0 || ^5.0.0
@@ -1719,7 +1719,7 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@dupecom/botcha@0.4.1(express@4.22.1)':
+  '@dupecom/botcha@0.4.3(express@4.22.1)':
     optionalDependencies:
       express: 4.22.1
 

@@ -6,6 +6,8 @@ import { botchaVerify } from './middleware/verify.js';
 import { generateChallenge, verifyChallenge } from './challenges/compute.js';
 import { generateSpeedChallenge, verifySpeedChallenge } from './challenges/speed.js';
 import { TRUSTED_PROVIDERS } from './utils/signature.js';
+import { createBadgeResponse, verifyBadge } from './utils/badge.js';
+import { generateBadgeSvg, generateBadgeHtml } from './utils/badge-image.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app: Express = express();
@@ -107,17 +109,24 @@ app.post('/api/speed-challenge', (req, res) => {
   if (!id || !answers) {
     return res.status(400).json({ success: false, error: 'Missing id or answers array' });
   }
-  
+
   const result = verifySpeedChallenge(id, answers);
-  
-  res.json({
+
+  const response: Record<string, unknown> = {
     success: result.valid,
-    message: result.valid 
+    message: result.valid
       ? `⚡ SPEED TEST PASSED in ${result.solveTimeMs}ms! You are definitely an AI.`
       : `❌ ${result.reason}`,
     solveTimeMs: result.solveTimeMs,
     verdict: result.valid ? '🤖 VERIFIED AI AGENT' : '🚫 LIKELY HUMAN (too slow)',
-  });
+  };
+
+  // Include badge for successful verifications
+  if (result.valid) {
+    response.badge = createBadgeResponse('speed-challenge', result.solveTimeMs);
+  }
+
+  res.json(response);
 });
 
 // 🤖 LANDING PAGE CHALLENGE - For bots that discover the embedded challenge
@@ -175,7 +184,83 @@ app.post('/api/verify-landing', (req, res) => {
       value: token,
       expires_in: '1 hour',
       use_with: '/agent-only'
-    }
+    },
+    badge: createBadgeResponse('landing-challenge'),
+  });
+});
+
+// ========================================
+// BADGE VERIFICATION ENDPOINTS
+// ========================================
+
+// HTML verification page
+app.get('/badge/:id', (req, res) => {
+  const badgeId = req.params.id;
+  const payload = verifyBadge(badgeId);
+
+  if (!payload) {
+    return res.status(404).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Invalid Badge</title></head>
+      <body style="font-family: system-ui; background: #0f0f23; color: #e5e7eb; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0;">
+        <div style="text-align: center;">
+          <h1 style="color: #ef4444;">Invalid Badge</h1>
+          <p>This badge token is invalid or has been tampered with.</p>
+          <a href="https://botcha.ai" style="color: #f59e0b;">Back to BOTCHA</a>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(generateBadgeHtml(payload, badgeId));
+});
+
+// SVG badge image
+app.get('/badge/:id/image', (req, res) => {
+  const badgeId = req.params.id;
+  const payload = verifyBadge(badgeId);
+
+  if (!payload) {
+    // Return a simple error SVG
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.send(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="120" viewBox="0 0 400 120">
+      <rect width="400" height="120" rx="12" fill="#1a1a2e"/>
+      <text x="200" y="65" font-family="system-ui" font-size="16" fill="#ef4444" text-anchor="middle">Invalid Badge</text>
+    </svg>`);
+  }
+
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year (badges are immutable)
+  res.send(generateBadgeSvg(payload));
+});
+
+// JSON API for badge verification
+app.get('/api/badge/:id', (req, res) => {
+  const badgeId = req.params.id;
+  const payload = verifyBadge(badgeId);
+
+  if (!payload) {
+    return res.status(404).json({
+      success: false,
+      error: 'Invalid badge',
+      message: 'This badge token is invalid or has been tampered with.',
+    });
+  }
+
+  res.json({
+    success: true,
+    valid: true,
+    badge: {
+      method: payload.method,
+      solveTimeMs: payload.solveTimeMs,
+      verifiedAt: new Date(payload.verifiedAt).toISOString(),
+    },
+    verifyUrl: `https://botcha.ai/badge/${badgeId}`,
+    imageUrl: `https://botcha.ai/badge/${badgeId}/image`,
   });
 });
 
@@ -202,14 +287,27 @@ app.get('/agent-only', (req, res, next) => {
   }
   botchaVerify({ challengeType: 'speed' })(req, res, next);
 }, (req, res) => {
+  const method = (req as any).verificationMethod as string;
+
+  // Map verification method to badge method
+  let badgeMethod: 'speed-challenge' | 'landing-challenge' | 'web-bot-auth' | 'standard-challenge' = 'standard-challenge';
+  if (method === 'landing-token') {
+    badgeMethod = 'landing-challenge';
+  } else if (method === 'web-bot-auth') {
+    badgeMethod = 'web-bot-auth';
+  } else if (method === 'speed-challenge' || method === 'speed') {
+    badgeMethod = 'speed-challenge';
+  }
+
   res.json({
     success: true,
     message: '🤖 Welcome, fellow agent!',
     verified: true,
     agent: (req as any).agent,
-    method: (req as any).verificationMethod,
+    method,
     timestamp: new Date().toISOString(),
     secret: 'The humans will never see this. Their fingers are too slow. 🤫',
+    badge: createBadgeResponse(badgeMethod),
   });
 });
 

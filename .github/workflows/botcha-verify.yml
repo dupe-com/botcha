@@ -17,6 +17,7 @@ env:
 jobs:
   challenge:
     name: Issue Challenge
+    # Only run on pull_request events
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
