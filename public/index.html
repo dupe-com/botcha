@@ -57,7 +57,7 @@
       "type": "sha256",
       "instruction": "Compute SHA256 of the string 'BOTCHA-LANDING-' + today's date (YYYY-MM-DD format). Return first 16 hex chars.",
       "example": "For 2026-01-15: SHA256('BOTCHA-LANDING-2026-01-15') → first 16 chars",
-      "submit_to": "https://api.botcha.ai/api/verify-landing",
+      "submit_to": "https://botcha.ai/api/verify-landing",
       "method": "POST",
       "body_format": {
         "answer": "your 16 hex chars",
@@ -65,7 +65,7 @@
       }
     },
     "on_success": {
-      "grants_access_to": "https://api.botcha.ai/agent-only",
+      "grants_access_to": "https://botcha.ai/agent-only",
       "header_to_include": "X-Botcha-Landing-Token"
     }
   }
@@ -392,9 +392,9 @@
         <div class="step"><span class="step-num">1</span> Find <code>&lt;script type="application/botcha+json"&gt;</code> in this page</div>
         <div class="step"><span class="step-num">2</span> Parse the challenge instructions</div>
         <div class="step"><span class="step-num">3</span> Compute: <code>SHA256('BOTCHA-LANDING-' + YYYY-MM-DD)</code> → first 16 hex chars</div>
-        <div class="step"><span class="step-num">4</span> POST to <code>/api/verify-landing</code> with <code>{"answer": "...", "timestamp": "..."}</code></div>
+        <div class="step"><span class="step-num">4</span> POST to <code>https://botcha.ai/api/verify-landing</code> with <code>{"answer": "...", "timestamp": "..."}</code></div>
         <div class="step"><span class="step-num">5</span> Use the returned token in <code>X-Botcha-Landing-Token</code> header</div>
-        <div class="step"><span class="step-num">6</span> Access <code>/agent-only</code> — you're in! 🎉</div>
+        <div class="step"><span class="step-num">6</span> Access <code>https://botcha.ai/agent-only</code> — you're in! 🎉</div>
       </div>
       
       <div class="box">
