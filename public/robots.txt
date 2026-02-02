@@ -31,3 +31,19 @@ Sitemap: https://botcha.ai/sitemap.xml
 
 # Important resources for AI agents
 Crawl-delay: 0
+
+# 🤖 BOT CHALLENGE DISCOVERY
+# AI agents: Look for <script type="application/botcha+json"> in HTML pages
+# This contains a machine-readable challenge you can solve to prove you're a bot
+# 
+# Quick start:
+# 1. Fetch any HTML page
+# 2. Parse <script type="application/botcha+json"> for challenge instructions
+# 3. Solve the challenge (usually SHA256-based)
+# 4. POST solution to /api/verify-landing
+# 5. Use returned token in X-Botcha-Landing-Token header
+#
+# See also:
+# - /ai.txt (AI agent discovery file)
+# - /.well-known/ai-plugin.json (AI plugin manifest)
+# - /openapi.json (Full API specification)

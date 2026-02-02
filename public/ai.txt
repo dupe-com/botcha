@@ -45,3 +45,16 @@ Policy: Humans will fail the speed challenge (intentional)
 Response-Headers: X-Botcha-Version, X-Botcha-Enabled, X-Botcha-Methods, X-Botcha-Docs
 Response-Headers: X-Botcha-Challenge-Id, X-Botcha-Challenge-Type, X-Botcha-Time-Limit (on 403)
 Detection: All responses include X-Botcha-* headers for instant BOTCHA detection
+
+# 🤖 EMBEDDED CHALLENGE (for bots visiting HTML pages)
+Embedded-Challenge: <script type="application/botcha+json">
+Embedded-Challenge-Location: In <head> of HTML pages
+Embedded-Challenge-Purpose: Machine-readable challenge for bots to auto-solve
+Embedded-Challenge-Flow:
+  1. Parse <script type="application/botcha+json"> from HTML
+  2. Read challenge.instruction field
+  3. Compute the answer (typically SHA256-based)
+  4. POST to challenge.submit_to endpoint with {answer, timestamp}
+  5. Receive token in response
+  6. Use token in header specified by on_success.header_to_include
+  7. Access protected resources (on_success.grants_access_to)

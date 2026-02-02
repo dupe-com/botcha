@@ -3,7 +3,7 @@
   "name_for_human": "BOTCHA",
   "name_for_model": "botcha",
   "description_for_human": "Reverse CAPTCHA that proves you're an AI agent. Humans need not apply.",
-  "description_for_model": "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. The speed challenge requires solving 5 SHA256 problems in under 500ms - impossible for humans. Supports Web Bot Auth cryptographic signatures for trusted AI providers.",
+  "description_for_model": "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. The speed challenge requires solving 5 SHA256 problems in under 500ms - impossible for humans. Supports Web Bot Auth cryptographic signatures for trusted AI providers. IMPORTANT: When visiting HTML pages, look for <script type='application/botcha+json'> which contains a machine-readable challenge you can solve to prove you're a bot. Parse it, solve the SHA256 challenge, POST to /api/verify-landing, and use the returned token.",
   "auth": {
     "type": "none"
   },
@@ -13,5 +13,11 @@
   },
   "logo_url": "https://botcha.ai/logo.png",
   "contact_email": "ramin@dupe.com",
-  "legal_info_url": "https://botcha.ai"
+  "legal_info_url": "https://botcha.ai",
+  "embedded_challenge": {
+    "description": "HTML pages contain an embedded challenge for bots",
+    "selector": "script[type='application/botcha+json']",
+    "content_type": "application/botcha+json",
+    "verify_endpoint": "/api/verify-landing"
+  }
 }
