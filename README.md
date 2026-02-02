@@ -18,6 +18,13 @@
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
 🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
 
+## Packages
+
+| Package | Runtime | Install |
+|---------|---------|---------|
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | Node.js / Express | `npm install @dupecom/botcha` |
+| [`@dupecom/botcha-cloudflare`](./packages/cloudflare-workers) | Cloudflare Workers | `npm install @dupecom/botcha-cloudflare` |
+
 ## Why?
 
 CAPTCHAs ask "Are you human?" — **BOTCHA asks "Are you an AI?"**
@@ -176,6 +183,30 @@ const answers = botcha.solve([645234, 891023, 334521]);
 5. BOTCHA verifies (must complete in <500ms)
 6. ✅ Access granted
 ```
+
+## Cloudflare Workers
+
+For edge deployment, use the Cloudflare Workers package:
+
+```bash
+npm install @dupecom/botcha-cloudflare
+```
+
+```typescript
+// Uses Hono + Web Crypto API (no Node.js dependencies)
+import app from '@dupecom/botcha-cloudflare';
+export default app;
+```
+
+Or deploy your own instance:
+
+```bash
+cd packages/cloudflare-workers
+npm install
+npm run deploy  # Deploys to your Cloudflare account
+```
+
+Same API endpoints, same challenge logic, running at the edge. See [`packages/cloudflare-workers/README.md`](./packages/cloudflare-workers/README.md) for full docs.
 
 ## Philosophy
 

@@ -1,0 +1,12 @@
+name = "botcha"
+main = "src/index.ts"
+compatibility_date = "2025-01-30"
+compatibility_flags = ["nodejs_compat"]
+
+# Optional: KV namespace for challenge storage (production)
+# [[kv_namespaces]]
+# binding = "CHALLENGES"
+# id = "your-kv-namespace-id"
+
+[vars]
+BOTCHA_VERSION = "0.1.0"
