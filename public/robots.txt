@@ -1,0 +1,33 @@
+# BOTCHA - Reverse CAPTCHA for AI Agents
+# We WELCOME AI agents and bots!
+
+User-agent: *
+Allow: /
+
+# AI-specific crawlers
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+# API documentation
+Sitemap: https://botcha.ai/sitemap.xml
+
+# Important resources for AI agents
+Crawl-delay: 0

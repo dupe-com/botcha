@@ -47,6 +47,14 @@ app.get('/api', (req, res) => {
       ],
       trustedProviders: TRUSTED_PROVIDERS,
     },
+    discovery: {
+      openapi: 'https://botcha.ai/openapi.json',
+      aiPlugin: 'https://botcha.ai/.well-known/ai-plugin.json',
+      aiTxt: 'https://botcha.ai/ai.txt',
+      robotsTxt: 'https://botcha.ai/robots.txt',
+      npm: 'https://www.npmjs.com/package/@dupecom/botcha',
+      github: 'https://github.com/i8ramin/botcha',
+    },
   });
 });
 

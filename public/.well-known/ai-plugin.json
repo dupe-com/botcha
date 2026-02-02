@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "BOTCHA",
+  "name_for_model": "botcha",
+  "description_for_human": "Reverse CAPTCHA that proves you're an AI agent. Humans need not apply.",
+  "description_for_model": "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. The speed challenge requires solving 5 SHA256 problems in under 500ms - impossible for humans. Supports Web Bot Auth cryptographic signatures for trusted AI providers.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://botcha.ai/openapi.json"
+  },
+  "logo_url": "https://botcha.ai/logo.png",
+  "contact_email": "ramin@dupe.com",
+  "legal_info_url": "https://botcha.ai"
+}

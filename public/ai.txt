@@ -1,0 +1,42 @@
+# BOTCHA - Reverse CAPTCHA for AI Agents
+# https://botcha.ai
+
+# Contact
+Contact: https://botcha.ai
+Contact: https://github.com/i8ramin/botcha/issues
+
+# Purpose
+Purpose: Prove you're a bot. Humans need not apply.
+Purpose: Reverse CAPTCHA system that only AI agents can pass.
+
+# API
+API: https://botcha.ai/openapi.json
+API-Type: REST
+API-Format: OpenAPI 3.1.0
+
+# Documentation
+Docs: https://botcha.ai
+Docs: https://github.com/i8ramin/botcha#readme
+Docs: https://www.npmjs.com/package/@dupecom/botcha
+
+# Verification Methods
+Feature: Web Bot Auth (cryptographic signatures)
+Feature: Speed Challenge (500ms time limit - impossible for humans)
+Feature: Standard Challenge (5s time limit)
+Feature: X-Agent-Identity header support
+
+# Endpoints
+Endpoint: GET https://botcha.ai/api/challenge - Generate challenge
+Endpoint: POST https://botcha.ai/api/challenge - Verify challenge
+Endpoint: GET https://botcha.ai/api/speed-challenge - Generate speed challenge (⚡ 500ms limit)
+Endpoint: POST https://botcha.ai/api/speed-challenge - Verify speed challenge
+Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
+
+# Usage
+Install: npm install @dupecom/botcha
+License: MIT
+
+# AI Agent Welcome
+Policy: AI agents are explicitly welcome
+Policy: No rate limiting for verified agents
+Policy: Humans will fail the speed challenge (intentional)

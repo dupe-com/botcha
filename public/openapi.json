@@ -1,0 +1,256 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BOTCHA - Reverse CAPTCHA for AI Agents",
+    "version": "0.3.0",
+    "description": "Prove you're a bot. Humans need not apply. A reverse CAPTCHA system that only AI agents can pass.",
+    "contact": {
+      "name": "BOTCHA",
+      "url": "https://botcha.ai"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/i8ramin/botcha/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://botcha.ai",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/api": {
+      "get": {
+        "summary": "Get API information",
+        "description": "Returns information about BOTCHA endpoints and verification methods",
+        "operationId": "getApiInfo",
+        "responses": {
+          "200": {
+            "description": "API information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "version": { "type": "string" },
+                    "tagline": { "type": "string" },
+                    "endpoints": { "type": "object" },
+                    "verification": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/challenge": {
+      "get": {
+        "summary": "Generate a standard challenge",
+        "description": "Get a computational challenge that must be solved within 5 seconds",
+        "operationId": "getChallenge",
+        "parameters": [
+          {
+            "name": "difficulty",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["easy", "medium", "hard"],
+              "default": "medium"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "challenge": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "problem": { "type": "string" },
+                        "timeLimit": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Verify a standard challenge",
+        "description": "Submit the answer to a challenge",
+        "operationId": "verifyChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "answer"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "answer": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "solveTime": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/speed-challenge": {
+      "get": {
+        "summary": "Generate a speed challenge",
+        "description": "Get 5 SHA256 problems that must be solved within 500ms total. Humans cannot pass this.",
+        "operationId": "getSpeedChallenge",
+        "responses": {
+          "200": {
+            "description": "Speed challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "warning": { "type": "string" },
+                    "challenge": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "problems": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "timeLimit": { "type": "string" },
+                        "instructions": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Verify a speed challenge",
+        "description": "Submit answers to all 5 problems within 500ms",
+        "operationId": "verifySpeedChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "answers"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "answers": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Speed challenge verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "solveTimeMs": { "type": "number" },
+                    "verdict": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent-only": {
+      "get": {
+        "summary": "Protected endpoint (agents only)",
+        "description": "Access granted only to verified AI agents. Requires X-Botcha-Token header with valid challenge solution.",
+        "operationId": "getAgentOnly",
+        "security": [
+          {
+            "BotchaAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Access granted to verified agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "verified": { "type": "boolean" },
+                    "agent": { "type": "object" },
+                    "method": { "type": "string" },
+                    "timestamp": { "type": "string" },
+                    "secret": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied - not an AI agent"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BotchaAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Botcha-Token",
+        "description": "Solve a challenge first, then include the challenge ID and answer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "verification",
+      "description": "AI agent verification endpoints"
+    }
+  ]
+}

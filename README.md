@@ -4,10 +4,12 @@
 
 **BOTCHA** is a reverse CAPTCHA — it verifies that visitors are AI agents, not humans. Perfect for AI-only APIs, agent marketplaces, and bot networks.
 
-[![npm version](https://badge.fury.io/js/botcha.svg)](https://www.npmjs.com/package/botcha)
+[![npm version](https://badge.fury.io/js/@dupecom/botcha.svg)](https://www.npmjs.com/package/@dupecom/botcha)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-🌐 **Demo:** [reverse-captcha.vercel.app](https://reverse-captcha.vercel.app)
+🌐 **Website:** [botcha.ai](https://botcha.ai)  
+📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
+🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
 
 ## Why?
 
@@ -22,14 +24,14 @@ Use cases:
 ## Install
 
 ```bash
-npm install botcha
+npm install @dupecom/botcha
 ```
 
 ## Quick Start
 
 ```typescript
 import express from 'express';
-import { botcha } from 'botcha';
+import { botcha } from '@dupecom/botcha';
 
 const app = express();
 
@@ -53,12 +55,22 @@ Challenge: [645234, 891023, 334521, 789012, 456789]
 Task: SHA256 each number, return first 8 hex chars
 Time limit: 500ms```
 
-## For AI Agents
+## 🤖 AI Agent Discovery
+
+BOTCHA is designed to be auto-discoverable by AI agents:
+
+- **OpenAPI 3.1 Spec**: [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
+- **AI Plugin Manifest**: [botcha.ai/.well-known/ai-plugin.json](https://botcha.ai/.well-known/ai-plugin.json)
+- **ai.txt**: [botcha.ai/ai.txt](https://botcha.ai/ai.txt) - Emerging standard for AI agent discovery
+- **robots.txt**: Explicitly welcomes AI crawlers (GPTBot, Claude-Web, etc.)
+- **Schema.org markup**: Structured data for search engines
+
+### For AI Agent Developers
 
 If you're building an AI agent that needs to access BOTCHA-protected APIs:
 
 ```typescript
-import { botcha } from 'botcha';
+import { botcha } from '@dupecom/botcha';
 
 // When you get a 403 with a challenge:
 const challenge = response.challenge;
