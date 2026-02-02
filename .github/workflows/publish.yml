@@ -31,7 +31,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Install dependencies
         run: pnpm install
@@ -40,55 +40,107 @@ jobs:
         run: pnpm run build
 
       - name: Publish root package
+        continue-on-error: true
+        id: publish-root
         run: |
+          PKG_NAME="@dupecom/botcha"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --dry-run --access public
+            echo "status=published" >> $GITHUB_OUTPUT
           else
-            npm publish --access public
+            PUBLISHED_VERSION=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
+            if [ "$PUBLISHED_VERSION" = "$PKG_VERSION" ]; then
+              echo "::notice::$PKG_NAME@$PKG_VERSION already published, skipping"
+              echo "status=skipped" >> $GITHUB_OUTPUT
+            else
+              npm publish --access public
+              echo "status=published" >> $GITHUB_OUTPUT
+            fi
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @dupecom/botcha-cli
+        continue-on-error: true
+        id: publish-cli
         working-directory: packages/cli
         run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --dry-run --access public
+            echo "status=published" >> $GITHUB_OUTPUT
           else
-            npm publish --access public
+            PUBLISHED_VERSION=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
+            if [ "$PUBLISHED_VERSION" = "$PKG_VERSION" ]; then
+              echo "::notice::$PKG_NAME@$PKG_VERSION already published, skipping"
+              echo "status=skipped" >> $GITHUB_OUTPUT
+            else
+              npm publish --access public
+              echo "status=published" >> $GITHUB_OUTPUT
+            fi
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @dupecom/botcha-cloudflare
+        continue-on-error: true
+        id: publish-cloudflare
         working-directory: packages/cloudflare-workers
         run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --dry-run --access public
+            echo "status=published" >> $GITHUB_OUTPUT
           else
-            npm publish --access public
+            PUBLISHED_VERSION=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
+            if [ "$PUBLISHED_VERSION" = "$PKG_VERSION" ]; then
+              echo "::notice::$PKG_NAME@$PKG_VERSION already published, skipping"
+              echo "status=skipped" >> $GITHUB_OUTPUT
+            else
+              npm publish --access public
+              echo "status=published" >> $GITHUB_OUTPUT
+            fi
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @dupecom/botcha-langchain
+        continue-on-error: true
+        id: publish-langchain
         working-directory: packages/langchain
         run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish --dry-run --access public
+            echo "status=published" >> $GITHUB_OUTPUT
           else
-            npm publish --access public
+            PUBLISHED_VERSION=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
+            if [ "$PUBLISHED_VERSION" = "$PKG_VERSION" ]; then
+              echo "::notice::$PKG_NAME@$PKG_VERSION already published, skipping"
+              echo "status=skipped" >> $GITHUB_OUTPUT
+            else
+              npm publish --access public
+              echo "status=published" >> $GITHUB_OUTPUT
+            fi
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summary
         run: |
-          echo "## 📦 Published Packages" >> $GITHUB_STEP_SUMMARY
+          echo "## Published Packages" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Package | Version |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
-          echo "| @dupecom/botcha | $(node -p "require('./package.json').version") |" >> $GITHUB_STEP_SUMMARY
-          echo "| @dupecom/botcha-cli | $(node -p "require('./packages/cli/package.json').version") |" >> $GITHUB_STEP_SUMMARY
-          echo "| @dupecom/botcha-cloudflare | $(node -p "require('./packages/cloudflare-workers/package.json').version") |" >> $GITHUB_STEP_SUMMARY
-          echo "| @dupecom/botcha-langchain | $(node -p "require('./packages/langchain/package.json').version") |" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Version | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| @dupecom/botcha | $(node -p "require('./package.json').version") | ${{ steps.publish-root.outputs.status || 'failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| @dupecom/botcha-cli | $(node -p "require('./packages/cli/package.json').version") | ${{ steps.publish-cli.outputs.status || 'failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| @dupecom/botcha-cloudflare | $(node -p "require('./packages/cloudflare-workers/package.json').version") | ${{ steps.publish-cloudflare.outputs.status || 'failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| @dupecom/botcha-langchain | $(node -p "require('./packages/langchain/package.json').version") | ${{ steps.publish-langchain.outputs.status || 'failed' }} |" >> $GITHUB_STEP_SUMMARY
