@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { botchaVerify } from '../../../src/middleware/verify.js';
 import { generateChallenge, verifyChallenge } from '../../../src/challenges/compute.js';
+import { generateSpeedChallenge } from '../../../src/challenges/speed.js';
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
@@ -141,7 +142,7 @@ describe('Middleware - botchaVerify', () => {
     await middleware(mockReq as Request, mockRes as Response, mockNext);
     
     expect(mockRes.header).toHaveBeenCalledWith('X-Botcha-Challenge-Id', expect.any(String));
-    expect(mockRes.header).toHaveBeenCalledWith('X-Botcha-Challenge-Type', 'compute');
+    expect(mockRes.header).toHaveBeenCalledWith('X-Botcha-Challenge-Type', 'standard');
     expect(mockRes.header).toHaveBeenCalledWith('X-Botcha-Time-Limit', expect.any(String));
   });
 
@@ -259,6 +260,39 @@ describe('Middleware - botchaVerify', () => {
     
     const jsonCall = (mockRes.json as any).mock.calls[0][0];
     expect(jsonCall.challenge.puzzle).toContain('100 prime'); // Easy = 100 primes
+  });
+
+  test('supports speed challenge option', async () => {
+    mockReq.headers = { 'user-agent': 'Mozilla/5.0 (regular browser)' };
+
+    const middleware = botchaVerify({ challengeType: 'speed' });
+    await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+    expect(mockRes.status).toHaveBeenCalledWith(403);
+    const jsonCall = (mockRes.json as any).mock.calls[0][0];
+    expect(jsonCall.challenge).toBeDefined();
+    expect(jsonCall.challenge.type).toBe('speed');
+    expect(Array.isArray(jsonCall.challenge.problems)).toBe(true);
+  });
+
+  test('accepts speed challenge answers via X-Botcha-Answers', async () => {
+    const challenge = generateSpeedChallenge();
+    const answers = challenge.challenges.map((p) => {
+      const hash = crypto.createHash('sha256').update(p.num.toString()).digest('hex');
+      return hash.substring(0, 8);
+    });
+
+    mockReq.headers = {
+      'x-botcha-challenge-id': challenge.id,
+      'x-botcha-answers': JSON.stringify(answers),
+    };
+
+    const middleware = botchaVerify({ challengeType: 'speed' });
+    await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalled();
+    expect((mockReq as any).verificationMethod).toBe('challenge');
+    expect((mockReq as any).agent).toContain('speed-challenge-verified');
   });
 
   // Test that User-Agent matching is case-insensitive

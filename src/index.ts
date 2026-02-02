@@ -200,7 +200,7 @@ app.get('/agent-only', (req, res, next) => {
   if ((req as any).verificationMethod === 'landing-token') {
     return next();
   }
-  botchaVerify()(req, res, next);
+  botchaVerify({ challengeType: 'speed' })(req, res, next);
 }, (req, res) => {
   res.json({
     success: true,

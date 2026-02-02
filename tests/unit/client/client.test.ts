@@ -89,7 +89,10 @@ describe('BotchaClient', () => {
           success: true,
           challenge: {
             id: 'test-challenge-id',
-            problems: [123456, 789012],
+            problems: [
+              { num: 123456, operation: 'sha256_first8' },
+              { num: 789012, operation: 'sha256_first8' },
+            ],
             timeLimit: 10000,
             instructions: 'Solve these problems',
           },
@@ -159,6 +162,9 @@ describe('BotchaClient', () => {
   });
 
   describe('fetch()', () => {
+    const createClient = (options: ConstructorParameters<typeof BotchaClient>[0] = {}) =>
+      new BotchaClient({ autoToken: false, ...options });
+
     test('returns response on 200 status', async () => {
       const mockResponse = {
         status: 200,
@@ -168,7 +174,7 @@ describe('BotchaClient', () => {
 
       global.fetch = vi.fn().mockResolvedValue(mockResponse);
 
-      const client = new BotchaClient();
+      const client = createClient();
       const response = await client.fetch('https://example.com');
       
       expect(response.status).toBe(200);
@@ -188,7 +194,7 @@ describe('BotchaClient', () => {
         clone: mockClone,
       });
 
-      const client = new BotchaClient();
+      const client = createClient();
       const response = await client.fetch('https://example.com');
       
       // Ensure response body is still usable by caller
@@ -203,10 +209,9 @@ describe('BotchaClient', () => {
         ok: false,
         clone: vi.fn().mockReturnValue({
           json: vi.fn().mockResolvedValue({
-            error: 'BOTCHA_CHALLENGE',
             challenge: {
               id: 'challenge-123',
-              problems: [123456],
+              problems: [{ num: 123456, operation: 'sha256_first8' }],
             },
           }),
         }),
@@ -222,7 +227,7 @@ describe('BotchaClient', () => {
         .mockResolvedValueOnce(challengeResponse)
         .mockResolvedValueOnce(successResponse);
 
-      const client = new BotchaClient();
+      const client = createClient();
       const response = await client.fetch('https://example.com');
       
       expect(response.status).toBe(200);
@@ -235,10 +240,9 @@ describe('BotchaClient', () => {
         ok: false,
         clone: vi.fn().mockReturnValue({
           json: vi.fn().mockResolvedValue({
-            error: 'BOTCHA_CHALLENGE',
             challenge: {
               id: 'challenge-123',
-              problems: [123456],
+              problems: [{ num: 123456, operation: 'sha256_first8' }],
             },
           }),
         }),
@@ -246,7 +250,7 @@ describe('BotchaClient', () => {
 
       global.fetch = vi.fn().mockResolvedValue(challengeResponse);
 
-      const client = new BotchaClient({ maxRetries: 2 });
+      const client = createClient({ maxRetries: 2 });
       const response = await client.fetch('https://example.com');
       
       // Initial request + 2 retries = 3 total calls
@@ -268,7 +272,7 @@ describe('BotchaClient', () => {
 
       global.fetch = vi.fn().mockResolvedValue(non403Response);
 
-      const client = new BotchaClient({ maxRetries: 3 });
+      const client = createClient({ maxRetries: 3 });
       const response = await client.fetch('https://example.com');
       
       // Should only call fetch once since it's not a BOTCHA challenge
@@ -300,11 +304,52 @@ describe('BotchaClient', () => {
         .mockResolvedValueOnce(challengeResponse)
         .mockResolvedValueOnce(successResponse);
 
-      const client = new BotchaClient();
+      const client = createClient();
       const response = await client.fetch('https://example.com');
       
       expect(response.status).toBe(200);
       expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('solves standard challenge puzzle and retries with X-Botcha-Solution', async () => {
+      const puzzle = 'Compute SHA256 of the first 10 prime numbers concatenated (no separators). Return the first 16 hex characters.';
+      const challengeResponse = {
+        status: 403,
+        ok: false,
+        clone: vi.fn().mockReturnValue({
+          json: vi.fn().mockResolvedValue({
+            challenge: {
+              id: 'challenge-standard-1',
+              puzzle,
+            },
+          }),
+        }),
+      };
+
+      const successResponse = {
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: 'success' }),
+      };
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(challengeResponse)
+        .mockResolvedValueOnce(successResponse);
+
+      global.fetch = fetchMock;
+
+      const client = createClient();
+      const response = await client.fetch('https://example.com');
+
+      expect(response.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      const secondCallArgs = fetchMock.mock.calls[1];
+      const secondInit = secondCallArgs[1] as RequestInit;
+      const headers = new Headers(secondInit.headers);
+      const solution = headers.get('X-Botcha-Solution');
+      expect(solution).toBeTruthy();
+      expect(headers.get('X-Botcha-Challenge-Id')).toBe('challenge-standard-1');
     });
   });
 
@@ -320,7 +365,7 @@ describe('BotchaClient', () => {
           success: true,
           challenge: {
             id: 'test-challenge-id',
-            problems: [123456],
+            problems: [{ num: 123456, operation: 'sha256_first8' }],
             timeLimit: 10000,
             instructions: 'Solve this',
           },
@@ -331,6 +376,7 @@ describe('BotchaClient', () => {
       const headers = await client.createHeaders();
       
       expect(headers).toHaveProperty('X-Botcha-Id');
+      expect(headers).toHaveProperty('X-Botcha-Challenge-Id');
       expect(headers).toHaveProperty('X-Botcha-Answers');
       expect(headers).toHaveProperty('User-Agent');
       expect(headers['X-Botcha-Id']).toBe('test-challenge-id');

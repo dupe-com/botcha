@@ -1,11 +1,19 @@
 /**
  * BOTCHA Challenge System for Cloudflare Workers
  * 
- * Uses in-memory Map (per-isolate). For production at scale,
- * consider Durable Objects or KV storage.
+ * Uses KV storage for production-ready challenge state management
+ * Falls back to in-memory for local dev without KV
  */
 
 import { sha256First, uuid, generatePrimes, sha256 } from './crypto';
+
+// KV binding type (injected by Workers runtime)
+// Using a simplified version that matches actual CF Workers KV API
+export type KVNamespace = {
+  get: (key: string, type?: 'text' | 'json' | 'arrayBuffer' | 'stream') => Promise<any>;
+  put: (key: string, value: string, options?: { expirationTtl?: number }) => Promise<void>;
+  delete: (key: string) => Promise<void>;
+};
 
 // ============ TYPES ============
 export interface SpeedChallenge {
@@ -31,7 +39,7 @@ export interface ChallengeResult {
 }
 
 // ============ STORAGE ============
-// In-memory maps (per-isolate in Workers)
+// In-memory fallback (for local dev without KV)
 const speedChallenges = new Map<string, SpeedChallenge>();
 const standardChallenges = new Map<string, StandardChallenge>();
 
@@ -46,12 +54,69 @@ function cleanExpired() {
   }
 }
 
+// ============ KV STORAGE HELPERS ============
+/**
+ * Store challenge in KV (with TTL) or fallback to memory
+ */
+async function storeChallenge(
+  kv: KVNamespace | undefined,
+  id: string,
+  challenge: SpeedChallenge | StandardChallenge,
+  ttlSeconds: number
+): Promise<void> {
+  if (kv) {
+    await kv.put(`challenge:${id}`, JSON.stringify(challenge), {
+      expirationTtl: ttlSeconds,
+    });
+  } else {
+    // Fallback to in-memory
+    if ('problems' in challenge) {
+      speedChallenges.set(id, challenge);
+    } else {
+      standardChallenges.set(id, challenge);
+    }
+  }
+}
+
+/**
+ * Get challenge from KV or fallback to memory
+ */
+async function getChallenge<T extends SpeedChallenge | StandardChallenge>(
+  kv: KVNamespace | undefined,
+  id: string,
+  isSpeed: boolean
+): Promise<T | null> {
+  if (kv) {
+    const data = await kv.get(`challenge:${id}`);
+    return data ? JSON.parse(data) : null;
+  } else {
+    // Fallback to in-memory
+    cleanExpired();
+    return (isSpeed ? speedChallenges.get(id) : standardChallenges.get(id)) as T | undefined || null;
+  }
+}
+
+/**
+ * Delete challenge from KV or memory
+ */
+async function deleteChallenge(
+  kv: KVNamespace | undefined,
+  id: string
+): Promise<void> {
+  if (kv) {
+    await kv.delete(`challenge:${id}`);
+  } else {
+    speedChallenges.delete(id);
+    standardChallenges.delete(id);
+  }
+}
+
 // ============ SPEED CHALLENGE ============
 /**
  * Generate a speed challenge: 5 SHA256 problems, 500ms to solve ALL
  * Trivial for AI, impossible for humans to copy-paste fast enough
  */
-export async function generateSpeedChallenge(): Promise<{
+export async function generateSpeedChallenge(kv?: KVNamespace): Promise<{
   id: string;
   problems: { num: number; operation: string }[];
   timeLimit: number;
@@ -70,14 +135,16 @@ export async function generateSpeedChallenge(): Promise<{
   }
   
   const timeLimit = 500;
-  
-  speedChallenges.set(id, {
+  const challenge: SpeedChallenge = {
     id,
     problems,
     expectedAnswers,
     issuedAt: Date.now(),
     expiresAt: Date.now() + timeLimit + 100, // tiny grace
-  });
+  };
+  
+  // Store in KV with 5 minute TTL (safety buffer for time checks)
+  await storeChallenge(kv, id, challenge, 300);
   
   return {
     id,
@@ -90,10 +157,12 @@ export async function generateSpeedChallenge(): Promise<{
 /**
  * Verify a speed challenge response
  */
-export function verifySpeedChallenge(id: string, answers: string[]): ChallengeResult {
-  cleanExpired();
-  
-  const challenge = speedChallenges.get(id);
+export async function verifySpeedChallenge(
+  id: string,
+  answers: string[],
+  kv?: KVNamespace
+): Promise<ChallengeResult> {
+  const challenge = await getChallenge<SpeedChallenge>(kv, id, true);
   
   if (!challenge) {
     return { valid: false, reason: 'Challenge not found or expired' };
@@ -102,8 +171,8 @@ export function verifySpeedChallenge(id: string, answers: string[]): ChallengeRe
   const now = Date.now();
   const solveTimeMs = now - challenge.issuedAt;
   
-  // Clean up
-  speedChallenges.delete(id);
+  // Delete challenge immediately to prevent replay attacks
+  await deleteChallenge(kv, id);
   
   if (now > challenge.expiresAt) {
     return { valid: false, reason: `Too slow! Took ${solveTimeMs}ms, limit was 500ms` };
@@ -133,7 +202,8 @@ const DIFFICULTY_CONFIG = {
  * Generate a standard challenge: compute SHA256 of concatenated primes
  */
 export async function generateStandardChallenge(
-  difficulty: 'easy' | 'medium' | 'hard' = 'medium'
+  difficulty: 'easy' | 'medium' | 'hard' = 'medium',
+  kv?: KVNamespace
 ): Promise<{
   id: string;
   puzzle: string;
@@ -150,13 +220,16 @@ export async function generateStandardChallenge(
   const hash = await sha256(concatenated);
   const answer = hash.substring(0, 16);
   
-  standardChallenges.set(id, {
+  const challenge: StandardChallenge = {
     id,
     puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators). Return the first 16 hex characters.`,
     expectedAnswer: answer,
     expiresAt: Date.now() + config.timeLimit + 1000,
     difficulty,
-  });
+  };
+  
+  // Store in KV with 5 minute TTL
+  await storeChallenge(kv, id, challenge, 300);
   
   return {
     id,
@@ -169,24 +242,27 @@ export async function generateStandardChallenge(
 /**
  * Verify a standard challenge response
  */
-export function verifyStandardChallenge(id: string, answer: string): ChallengeResult {
-  cleanExpired();
-  
-  const challenge = standardChallenges.get(id);
+export async function verifyStandardChallenge(
+  id: string,
+  answer: string,
+  kv?: KVNamespace
+): Promise<ChallengeResult> {
+  const challenge = await getChallenge<StandardChallenge>(kv, id, false);
   
   if (!challenge) {
     return { valid: false, reason: 'Challenge not found or expired' };
   }
   
   const now = Date.now();
+  
+  // Delete challenge immediately to prevent replay attacks
+  await deleteChallenge(kv, id);
+  
   if (now > challenge.expiresAt) {
-    standardChallenges.delete(id);
     return { valid: false, reason: 'Challenge expired - too slow!' };
   }
   
   const isValid = answer.toLowerCase() === challenge.expectedAnswer.toLowerCase();
-  
-  standardChallenges.delete(id);
   
   if (!isValid) {
     return { valid: false, reason: 'Incorrect answer' };
@@ -202,8 +278,13 @@ const landingTokens = new Map<string, number>();
 
 /**
  * Verify landing page challenge and issue access token
+ * @deprecated - Use JWT token flow instead (see auth.ts)
  */
-export async function verifyLandingChallenge(answer: string, timestamp: string): Promise<{
+export async function verifyLandingChallenge(
+  answer: string,
+  timestamp: string,
+  kv?: KVNamespace
+): Promise<{
   valid: boolean;
   token?: string;
   error?: string;
@@ -235,9 +316,13 @@ export async function verifyLandingChallenge(answer: string, timestamp: string):
   crypto.getRandomValues(tokenBytes);
   const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
   
-  landingTokens.set(token, Date.now() + 60 * 60 * 1000); // 1 hour
+  if (kv) {
+    await kv.put(`landing:${token}`, Date.now().toString(), { expirationTtl: 3600 });
+  } else {
+    landingTokens.set(token, Date.now() + 60 * 60 * 1000);
+  }
   
-  // Clean expired tokens
+  // Clean expired tokens (memory only)
   for (const [t, expiry] of landingTokens) {
     if (expiry < Date.now()) landingTokens.delete(t);
   }
@@ -247,15 +332,21 @@ export async function verifyLandingChallenge(answer: string, timestamp: string):
 
 /**
  * Validate a landing token
+ * @deprecated - Use JWT token flow instead (see auth.ts)
  */
-export function validateLandingToken(token: string): boolean {
-  const expiry = landingTokens.get(token);
-  if (!expiry) return false;
-  if (expiry < Date.now()) {
-    landingTokens.delete(token);
-    return false;
+export async function validateLandingToken(token: string, kv?: KVNamespace): Promise<boolean> {
+  if (kv) {
+    const value = await kv.get(`landing:${token}`);
+    return value !== null;
+  } else {
+    const expiry = landingTokens.get(token);
+    if (!expiry) return false;
+    if (expiry < Date.now()) {
+      landingTokens.delete(token);
+      return false;
+    }
+    return true;
   }
-  return true;
 }
 
 // ============ SOLVER (for AI agents) ============

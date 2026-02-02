@@ -97,9 +97,11 @@ When a 403 is returned with a challenge:
 
 ```http
 X-Botcha-Challenge-Id: abc123
-X-Botcha-Challenge-Type: compute
-X-Botcha-Time-Limit: 5000
+X-Botcha-Challenge-Type: speed
+X-Botcha-Time-Limit: 500
 ```
+
+`X-Botcha-Challenge-Type` can be `speed` or `standard` depending on the configured challenge mode.
 
 **Example**: An agent can detect BOTCHA just by inspecting headers on ANY request:
 
@@ -206,7 +208,7 @@ npm install
 npm run deploy  # Deploys to your Cloudflare account
 ```
 
-Same API endpoints, same challenge logic, running at the edge. See [`packages/cloudflare-workers/README.md`](./packages/cloudflare-workers/README.md) for full docs.
+The Workers package runs a v1 JWT-based flow and keeps legacy `/api/*` endpoints for backward compatibility. See [`packages/cloudflare-workers/README.md`](./packages/cloudflare-workers/README.md) for full docs.
 
 ## Philosophy
 

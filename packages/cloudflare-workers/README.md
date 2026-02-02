@@ -2,17 +2,26 @@
 
 > 🤖 **BOTCHA** - Prove you're a bot. Humans need not apply.
 > 
-> Cloudflare Workers Edition
+> **Cloudflare Workers Edition v0.2.0** - Production-ready with JWT & Rate Limiting
 
 Reverse CAPTCHA that verifies AI agents and blocks humans. Running at the edge.
+
+## 🚀 What's New in v0.2.0
+
+- ✅ **JWT Token Authentication** - Secure token-based auth flow with 1-hour expiry
+- ✅ **Rate Limiting** - 100 challenges/hour/IP with proper headers
+- ✅ **KV Storage** - Challenge state stored in Cloudflare KV (prevents replay attacks)
+- ✅ **Versioned API** - New `/v1/*` endpoints with backward-compatible legacy routes
+- ✅ **Production Ready** - Enterprise-grade auth and security
 
 ## Features
 
 - ⚡ **Speed Challenge** - 5 SHA256 hashes in 500ms (impossible for humans to copy-paste)
 - 🧮 **Standard Challenge** - Configurable difficulty prime calculations
+- 🔐 **JWT Authentication** - Token-based access control with jose library
+- 🚦 **Rate Limiting** - IP-based throttling with KV storage
 - 🌍 **Edge-native** - Runs on Cloudflare's global network
-- 🔐 **Multiple verification methods** - Headers, challenges, Web Bot Auth
-- 📦 **Zero dependencies at runtime** - Just Hono for routing
+- 📦 **Minimal dependencies** - Hono for routing, jose for JWT
 
 ## Quick Deploy
 
@@ -35,51 +44,67 @@ npm run dev
 # Worker running at http://localhost:8787
 ```
 
+## 🔐 JWT Token Flow (Recommended)
+
+### 1. Get Challenge
+
+```bash
+GET /v1/token
+```
+
+Response includes challenge and instructions for getting a JWT token.
+
+### 2. Solve Challenge & Get JWT
+
+```bash
+POST /v1/token/verify
+Content-Type: application/json
+
+{
+  "id": "challenge-uuid",
+  "answers": ["abc12345", "def67890", ...]
+}
+```
+
+Returns JWT token valid for 1 hour.
+
+### 3. Access Protected Resources
+
+```bash
+GET /agent-only
+Authorization: Bearer <your-jwt-token>
+```
+
+## 📊 Rate Limiting
+
+Free tier: **100 challenges per hour per IP**
+
+Rate limit headers:
+- `X-RateLimit-Limit: 100`
+- `X-RateLimit-Remaining: 95`
+- `X-RateLimit-Reset: 2026-02-02T12:00:00.000Z`
+
 ## API Endpoints
 
-### `GET /`
-Returns API info and available endpoints.
+### v1 API (Production)
 
-### `GET /api/speed-challenge`
-Get a speed challenge (5 problems, 500ms time limit).
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API information |
+| `/health` | GET | Health check |
+| `/v1/challenges` | GET | Generate challenge (speed or standard) |
+| `/v1/challenges/:id/verify` | POST | Verify challenge (no JWT) |
+| `/v1/token` | GET | Get challenge for JWT flow |
+| `/v1/token/verify` | POST | Verify challenge → get JWT token |
+| `/agent-only` | GET | Protected endpoint (requires JWT) |
 
-```json
-{
-  "challenge": {
-    "id": "abc-123",
-    "problems": [
-      { "num": 123456, "operation": "sha256_first8" },
-      ...
-    ],
-    "timeLimit": "500ms"
-  }
-}
-```
+### Legacy API (v0 - backward compatible)
 
-### `POST /api/speed-challenge`
-Submit speed challenge answers.
-
-```json
-{
-  "id": "abc-123",
-  "answers": ["a1b2c3d4", "e5f6g7h8", ...]
-}
-```
-
-### `GET /api/challenge?difficulty=medium`
-Get a standard challenge (easy/medium/hard).
-
-### `POST /api/challenge`
-Submit standard challenge answer.
-
-### `GET /agent-only`
-Protected endpoint. Returns challenge if not authenticated.
-
-**Authentication methods:**
-- `X-Agent-Identity: your-agent-name` (testing)
-- `X-Botcha-Challenge-Id` + `X-Botcha-Solution` (challenge response)
-- `X-Botcha-Landing-Token` (from landing page challenge)
-- Known agent User-Agent patterns
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/challenge` | GET/POST | Standard challenge |
+| `/api/speed-challenge` | GET/POST | Speed challenge (500ms limit) |
+| `/api/verify-landing` | POST | Landing page challenge |
 
 ## Solving Challenges (for AI Agents)
 
@@ -109,19 +134,44 @@ const result = await fetch('https://your-worker.workers.dev/api/speed-challenge'
 console.log(result.verdict); // "🤖 VERIFIED AI AGENT"
 ```
 
-## Production Considerations
+## 🔑 Production Configuration
 
-The default implementation uses in-memory Maps for challenge storage. This works for:
-- Development
-- Low-traffic deployments
-- Single-isolate scenarios
+### KV Namespaces
 
-For high-traffic production, consider:
-- **Cloudflare KV** for distributed challenge storage
-- **Durable Objects** for stateful challenge management
-- **D1** for persistent audit logs
+Create KV namespaces:
 
-Uncomment the KV binding in `wrangler.toml` and modify `challenges.ts` to use it.
+```bash
+# Create challenge storage
+wrangler kv namespace create CHALLENGES
+wrangler kv namespace create CHALLENGES --preview
+
+# Create rate limiting storage
+wrangler kv namespace create RATE_LIMITS
+wrangler kv namespace create RATE_LIMITS --preview
+```
+
+Update `wrangler.toml` with the returned IDs.
+
+### JWT Secret
+
+⚠️ **Important:** Use Wrangler secrets for production:
+
+```bash
+wrangler secret put JWT_SECRET
+# Enter a strong secret (32+ characters)
+```
+
+### Testing
+
+Run the test script:
+
+```bash
+# Start dev server
+npm run dev
+
+# Run tests
+./test-api.sh
+```
 
 ## License
 

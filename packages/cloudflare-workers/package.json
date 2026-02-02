@@ -1,6 +1,6 @@
 {
   "name": "@dupecom/botcha-cloudflare",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "BOTCHA for Cloudflare Workers - Prove you're a bot. Humans need not apply.",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,8 @@
   },
   "homepage": "https://botcha.ai",
   "dependencies": {
-    "hono": "^4.7.0"
+    "hono": "^4.7.0",
+    "jose": "^5.9.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250124.0",

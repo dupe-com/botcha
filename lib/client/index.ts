@@ -3,31 +3,24 @@ import crypto from 'crypto';
 // SDK version - hardcoded since npm_package_version is unreliable when used as a library
 const SDK_VERSION = '0.4.0';
 
-export interface BotchaClientOptions {
-  /** Base URL of BOTCHA service (default: https://botcha.ai) */
-  baseUrl?: string;
-  /** Custom identity header value */
-  agentIdentity?: string;
-  /** Max retries for challenge solving */
-  maxRetries?: number;
-}
+// Export types
+export type {
+  SpeedProblem,
+  BotchaClientOptions,
+  ChallengeResponse,
+  StandardChallengeResponse,
+  VerifyResponse,
+  TokenResponse,
+} from './types.js';
 
-export interface ChallengeResponse {
-  success: boolean;
-  challenge?: {
-    id: string;
-    problems: number[];
-    timeLimit: number;
-    instructions: string;
-  };
-}
-
-export interface VerifyResponse {
-  success: boolean;
-  message: string;
-  solveTimeMs?: number;
-  verdict?: string;
-}
+import type {
+  SpeedProblem,
+  BotchaClientOptions,
+  ChallengeResponse,
+  StandardChallengeResponse,
+  VerifyResponse,
+  TokenResponse,
+} from './types.js';
 
 /**
  * BOTCHA Client SDK for AI Agents
@@ -48,11 +41,15 @@ export class BotchaClient {
   private baseUrl: string;
   private agentIdentity: string;
   private maxRetries: number;
+  private autoToken: boolean;
+  private cachedToken: string | null = null;
+  private tokenExpiresAt: number | null = null;
 
   constructor(options: BotchaClientOptions = {}) {
     this.baseUrl = options.baseUrl || 'https://botcha.ai';
     this.agentIdentity = options.agentIdentity || `BotchaClient/${SDK_VERSION}`;
     this.maxRetries = options.maxRetries || 3;
+    this.autoToken = options.autoToken !== undefined ? options.autoToken : true;
   }
 
   /**
@@ -65,6 +62,86 @@ export class BotchaClient {
     return problems.map(num =>
       crypto.createHash('sha256').update(num.toString()).digest('hex').substring(0, 8)
     );
+  }
+
+  /**
+   * Get a JWT token from the BOTCHA service using the token flow.
+   * Automatically solves the challenge and verifies to obtain a token.
+   * Token is cached until near expiry (refreshed at 55 minutes).
+   * 
+   * @returns JWT token string
+   * @throws Error if token acquisition fails
+   */
+  async getToken(): Promise<string> {
+    // Check if we have a valid cached token (refresh at 55min = 3300000ms)
+    if (this.cachedToken && this.tokenExpiresAt) {
+      const now = Date.now();
+      const timeUntilExpiry = this.tokenExpiresAt - now;
+      const refreshThreshold = 5 * 60 * 1000; // 5 minutes before expiry
+      
+      if (timeUntilExpiry > refreshThreshold) {
+        return this.cachedToken;
+      }
+    }
+
+    // Step 1: Get challenge from GET /v1/token
+    const challengeRes = await fetch(`${this.baseUrl}/v1/token`, {
+      headers: { 'User-Agent': this.agentIdentity },
+    });
+
+    if (!challengeRes.ok) {
+      throw new Error(`Token request failed with status ${challengeRes.status} ${challengeRes.statusText}`);
+    }
+
+    const challengeData = await challengeRes.json() as TokenResponse;
+    
+    if (!challengeData.challenge) {
+      throw new Error('No challenge provided in token response');
+    }
+
+    // Step 2: Solve the challenge
+    const problems = normalizeProblems(challengeData.challenge.problems);
+    if (!problems) {
+      throw new Error('Invalid challenge problems format');
+    }
+    const answers = this.solve(problems);
+
+    // Step 3: Submit solution to POST /v1/token/verify
+    const verifyRes = await fetch(`${this.baseUrl}/v1/token/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': this.agentIdentity,
+      },
+      body: JSON.stringify({
+        id: challengeData.challenge.id,
+        answers,
+      }),
+    });
+
+    if (!verifyRes.ok) {
+      throw new Error(`Token verification failed with status ${verifyRes.status} ${verifyRes.statusText}`);
+    }
+
+    const verifyData = await verifyRes.json() as TokenResponse;
+
+    if (!verifyData.success || !verifyData.token) {
+      throw new Error('Failed to obtain token from verification');
+    }
+
+    // Cache the token - default expiry is 1 hour
+    this.cachedToken = verifyData.token;
+    this.tokenExpiresAt = Date.now() + 60 * 60 * 1000; // 1 hour from now
+
+    return this.cachedToken;
+  }
+
+  /**
+   * Clear the cached token, forcing a refresh on the next request
+   */
+  clearToken(): void {
+    this.cachedToken = null;
+    this.tokenExpiresAt = null;
   }
 
   /**
@@ -90,7 +167,11 @@ export class BotchaClient {
       throw new Error('Failed to get challenge');
     }
 
-    const answers = this.solve(data.challenge.problems);
+    const problems = normalizeProblems(data.challenge.problems);
+    if (!problems) {
+      throw new Error('Invalid challenge problems format');
+    }
+    const answers = this.solve(problems);
     return { id: data.challenge.id, answers };
   }
 
@@ -120,7 +201,8 @@ export class BotchaClient {
   }
 
   /**
-   * Fetch a URL, automatically solving BOTCHA challenges if encountered
+   * Fetch a URL, automatically solving BOTCHA challenges if encountered.
+   * If autoToken is enabled (default), automatically acquires and uses JWT tokens.
    * 
    * @example
    * ```typescript
@@ -129,43 +211,78 @@ export class BotchaClient {
    * ```
    */
   async fetch(url: string, init?: RequestInit): Promise<Response> {
+    const headers = new Headers(init?.headers);
+    headers.set('User-Agent', this.agentIdentity);
+
+    // If autoToken is enabled, try to use token-based auth
+    if (this.autoToken) {
+      try {
+        const token = await this.getToken();
+        headers.set('Authorization', `Bearer ${token}`);
+      } catch (error) {
+        // If token acquisition fails, fall back to challenge header method
+        console.warn('Failed to acquire token, falling back to challenge headers:', error);
+      }
+    }
+
     let response = await fetch(url, {
       ...init,
-      headers: {
-        ...Object.fromEntries(new Headers(init?.headers).entries()),
-        'User-Agent': this.agentIdentity,
-      },
+      headers,
     });
     
+    // Handle 401 by refreshing token and retrying once
+    if (response.status === 401 && this.autoToken) {
+      this.clearToken();
+      try {
+        const token = await this.getToken();
+        headers.set('Authorization', `Bearer ${token}`);
+        response = await fetch(url, { ...init, headers });
+      } catch (error) {
+        // Token refresh failed, return the 401 response
+      }
+    }
+
     let retries = 0;
 
+    // Fall back to challenge header method for 403 responses
     while (response.status === 403 && retries < this.maxRetries) {
       // Clone response before reading body to preserve it for the caller
       const clonedResponse = response.clone();
       const body = await clonedResponse.json().catch(() => null);
       
       // Check if this is a BOTCHA challenge
-      if (body?.error === 'BOTCHA_CHALLENGE' || body?.challenge?.problems) {
-        const challenge = body.challenge;
-        
-        if (challenge?.problems && Array.isArray(challenge.problems)) {
-          // Solve the challenge
-          const answers = this.solve(challenge.problems);
-          
-          // Create fresh headers for retry to avoid state issues
-          const retryHeaders = new Headers(init?.headers);
-          retryHeaders.set('User-Agent', this.agentIdentity);
-          retryHeaders.set('X-Botcha-Id', challenge.id);
-          retryHeaders.set('X-Botcha-Answers', JSON.stringify(answers));
-          
-          response = await fetch(url, { ...init, headers: retryHeaders });
-          retries++;
-        } else {
+      const challenge = body?.challenge;
+      if (!challenge) {
+        break;
+      }
+
+      if (!canRetryBody(init?.body)) {
+        break;
+      }
+
+      const retryHeaders = new Headers(init?.headers);
+      retryHeaders.set('User-Agent', this.agentIdentity);
+
+      if (challenge?.problems && Array.isArray(challenge.problems)) {
+        const problems = normalizeProblems(challenge.problems);
+        if (!problems) {
           break;
         }
+        const answers = this.solve(problems);
+        retryHeaders.set('X-Botcha-Id', challenge.id);
+        retryHeaders.set('X-Botcha-Challenge-Id', challenge.id);
+        retryHeaders.set('X-Botcha-Answers', JSON.stringify(answers));
+        retryHeaders.set('X-Botcha-Solution', JSON.stringify(answers));
+      } else if (challenge?.puzzle && typeof challenge.puzzle === 'string') {
+        const solution = solveStandardPuzzle(challenge.puzzle);
+        retryHeaders.set('X-Botcha-Challenge-Id', challenge.id);
+        retryHeaders.set('X-Botcha-Solution', solution);
       } else {
         break;
       }
+
+      response = await fetch(url, { ...init, headers: retryHeaders });
+      retries++;
     }
 
     return response;
@@ -185,6 +302,7 @@ export class BotchaClient {
     
     return {
       'X-Botcha-Id': id,
+      'X-Botcha-Challenge-Id': id,
       'X-Botcha-Answers': JSON.stringify(answers),
       'User-Agent': this.agentIdentity,
     };
@@ -207,3 +325,72 @@ export function solveBotcha(problems: number[]): string[] {
 }
 
 export default BotchaClient;
+
+function normalizeProblems(problems: SpeedProblem[]): number[] | null {
+  if (!Array.isArray(problems)) return null;
+  const numbers: number[] = [];
+  for (const problem of problems) {
+    if (typeof problem === 'number') {
+      numbers.push(problem);
+      continue;
+    }
+    if (typeof problem === 'object' && problem !== null && typeof problem.num === 'number') {
+      numbers.push(problem.num);
+      continue;
+    }
+    return null;
+  }
+  return numbers;
+}
+
+function solveStandardPuzzle(puzzle: string): string {
+  const primeMatch = puzzle.match(/first\s+(\d+)\s+prime/i);
+  if (!primeMatch) {
+    throw new Error('Unsupported standard challenge puzzle format');
+  }
+  const primeCount = Number.parseInt(primeMatch[1], 10);
+  if (!Number.isFinite(primeCount) || primeCount <= 0) {
+    throw new Error('Invalid prime count in puzzle');
+  }
+  const primes = generatePrimes(primeCount);
+  const concatenated = primes.join('');
+  const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
+  return hash.substring(0, 16);
+}
+
+function generatePrimes(count: number): number[] {
+  const primes: number[] = [];
+  let num = 2;
+
+  while (primes.length < count) {
+    if (isPrime(num)) {
+      primes.push(num);
+    }
+    num++;
+  }
+
+  return primes;
+}
+
+function isPrime(n: number): boolean {
+  if (n < 2) return false;
+  if (n === 2) return true;
+  if (n % 2 === 0) return false;
+
+  for (let i = 3; i <= Math.sqrt(n); i += 2) {
+    if (n % i === 0) return false;
+  }
+
+  return true;
+}
+
+function canRetryBody(body: RequestInit['body']): boolean {
+  if (body == null) return true;
+  if (typeof body === 'string') return true;
+  if (body instanceof URLSearchParams) return true;
+  if (body instanceof ArrayBuffer) return true;
+  if (ArrayBuffer.isView(body)) return true;
+  if (typeof Blob !== 'undefined' && body instanceof Blob) return true;
+  if (typeof FormData !== 'undefined' && body instanceof FormData) return true;
+  return false;
+}

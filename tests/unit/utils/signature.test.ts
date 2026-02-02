@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { isTrustedProvider, TRUSTED_PROVIDERS, verifyWebBotAuth } from '../../../src/utils/signature.js';
 
 describe('Signature Utils', () => {
@@ -97,18 +97,28 @@ describe('Signature Utils', () => {
     });
 
     test('handles invalid directory URL gracefully', async () => {
-      const result = await verifyWebBotAuth(
-        {
-          'signature-agent': 'https://invalid-provider.example/bad-directory',
-          'signature': 'sig1=:abc123:',
-          'signature-input': 'sig1=("@method" "@path");keyid="key-1"',
-        },
-        'GET',
-        '/api/challenge'
-      );
+      const originalFetch = globalThis.fetch;
+      const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      (globalThis as typeof globalThis & { fetch: typeof fetchMock }).fetch = fetchMock;
 
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('Could not fetch agent directory');
+      try {
+        const result = await verifyWebBotAuth(
+          {
+            'signature-agent': 'https://invalid-provider.example/bad-directory',
+            'signature': 'sig1=:abc123:',
+            'signature-input': 'sig1=("@method" "@path");keyid="key-1"',
+          },
+          'GET',
+          '/api/challenge'
+        );
+
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('Could not fetch agent directory');
+      } finally {
+        (globalThis as typeof globalThis & { fetch: typeof originalFetch }).fetch = originalFetch;
+        errorSpy.mockRestore();
+      }
     });
 
     test('returns error details in response', async () => {
