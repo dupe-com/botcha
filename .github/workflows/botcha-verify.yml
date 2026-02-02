@@ -126,8 +126,8 @@ A human would need to manually run \`echo -n "123456" | sha256sum\` five times a
               issue_number: context.payload.issue.number
             });
             
-            // Find the BOTCHA challenge comment
-            const challengeComment = comments.data.find(c => 
+            // Find the BOTCHA challenge comment (most recent one, in case PR was reopened)
+            const challengeComment = comments.data.reverse().find(c => 
               c.body.includes('BOTCHA_DATA:') && 
               c.user.login === 'github-actions[bot]'
             );
