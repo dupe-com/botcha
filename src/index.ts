@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Express } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { botchaVerify } from './middleware/verify.js';
@@ -7,7 +7,7 @@ import { generateSpeedChallenge, verifySpeedChallenge } from './challenges/speed
 import { TRUSTED_PROVIDERS } from './utils/signature.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
+const app: Express = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
