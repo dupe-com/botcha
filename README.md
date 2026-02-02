@@ -213,10 +213,7 @@ const headers = await client.createHeaders();
 const response = await fetch('https://api.example.com/agent-only', { headers });
 
 // Option 3: Manual solve - solve challenge problems directly
-const answers = client.solve([
-  { num: 123456, operation: 'sha256_first8' },
-  { num: 789012, operation: 'sha256_first8' },
-]);
+const answers = client.solve([123456, 789012]);
 ```
 
 ### Client Options
@@ -226,7 +223,6 @@ const client = new BotchaClient({
   baseUrl: 'https://botcha.ai',      // BOTCHA service URL
   agentIdentity: 'MyAgent/1.0',       // User-Agent string
   maxRetries: 3,                      // Max challenge solve attempts
-  timeout: 10000,                     // Request timeout (ms)
 });
 ```
 
@@ -253,6 +249,6 @@ const tool = {
 import { solveBotcha } from '@dupecom/botcha/client';
 
 // Just solve the problems, handle the rest yourself
-const answers = solveBotcha([{ num: 123456 }, { num: 789012 }]);
+const answers = solveBotcha([123456, 789012]);
 // Returns: ['a1b2c3d4', 'e5f6g7h8']
 ```

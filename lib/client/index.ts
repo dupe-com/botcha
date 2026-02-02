@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 
+// SDK version - hardcoded since npm_package_version is unreliable when used as a library
+const SDK_VERSION = '0.4.0';
+
 export interface BotchaClientOptions {
   /** Base URL of BOTCHA service (default: https://botcha.ai) */
   baseUrl?: string;
@@ -7,16 +10,14 @@ export interface BotchaClientOptions {
   agentIdentity?: string;
   /** Max retries for challenge solving */
   maxRetries?: number;
-  /** Request timeout in ms */
-  timeout?: number;
 }
 
 export interface ChallengeResponse {
   success: boolean;
   challenge?: {
     id: string;
-    problems: { num: number; operation: string }[];
-    timeLimit: string;
+    problems: number[];
+    timeLimit: number;
     instructions: string;
   };
 }
@@ -47,25 +48,23 @@ export class BotchaClient {
   private baseUrl: string;
   private agentIdentity: string;
   private maxRetries: number;
-  private timeout: number;
 
   constructor(options: BotchaClientOptions = {}) {
     this.baseUrl = options.baseUrl || 'https://botcha.ai';
-    this.agentIdentity = options.agentIdentity || `BotchaClient/${process.env.npm_package_version || '1.0.0'}`;
+    this.agentIdentity = options.agentIdentity || `BotchaClient/${SDK_VERSION}`;
     this.maxRetries = options.maxRetries || 3;
-    this.timeout = options.timeout || 10000;
   }
 
   /**
    * Solve a BOTCHA speed challenge
+   * 
+   * @param problems - Array of numbers to hash
+   * @returns Array of SHA256 first 8 hex chars for each number
    */
-  solve(problems: { num: number; operation: string }[]): string[] {
-    return problems.map(p => {
-      if (p.operation === 'sha256_first8') {
-        return crypto.createHash('sha256').update(p.num.toString()).digest('hex').substring(0, 8);
-      }
-      throw new Error(`Unknown operation: ${p.operation}`);
-    });
+  solve(problems: number[]): string[] {
+    return problems.map(num =>
+      crypto.createHash('sha256').update(num.toString()).digest('hex').substring(0, 8)
+    );
   }
 
   /**
@@ -75,6 +74,15 @@ export class BotchaClient {
     const res = await fetch(`${this.baseUrl}/api/speed-challenge`, {
       headers: { 'User-Agent': this.agentIdentity },
     });
+
+    if (!res.ok) {
+      throw new Error(`Challenge request failed with status ${res.status} ${res.statusText}`);
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      throw new Error('Expected JSON response for challenge request');
+    }
     
     const data = await res.json() as ChallengeResponse;
     
@@ -99,6 +107,15 @@ export class BotchaClient {
       body: JSON.stringify({ id, answers }),
     });
 
+    if (!res.ok) {
+      throw new Error(`Verification request failed with status ${res.status} ${res.statusText}`);
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      throw new Error('Expected JSON response for verification request');
+    }
+
     return await res.json() as VerifyResponse;
   }
 
@@ -112,28 +129,36 @@ export class BotchaClient {
    * ```
    */
   async fetch(url: string, init?: RequestInit): Promise<Response> {
-    const headers = new Headers(init?.headers);
-    headers.set('User-Agent', this.agentIdentity);
-
-    let response = await fetch(url, { ...init, headers });
+    let response = await fetch(url, {
+      ...init,
+      headers: {
+        ...Object.fromEntries(new Headers(init?.headers).entries()),
+        'User-Agent': this.agentIdentity,
+      },
+    });
+    
     let retries = 0;
 
     while (response.status === 403 && retries < this.maxRetries) {
-      const body = await response.json().catch(() => null);
+      // Clone response before reading body to preserve it for the caller
+      const clonedResponse = response.clone();
+      const body = await clonedResponse.json().catch(() => null);
       
       // Check if this is a BOTCHA challenge
       if (body?.error === 'BOTCHA_CHALLENGE' || body?.challenge?.problems) {
         const challenge = body.challenge;
         
-        if (challenge?.problems) {
+        if (challenge?.problems && Array.isArray(challenge.problems)) {
           // Solve the challenge
           const answers = this.solve(challenge.problems);
           
-          // Retry with solution headers
-          headers.set('X-Botcha-Id', challenge.id);
-          headers.set('X-Botcha-Answers', JSON.stringify(answers));
+          // Create fresh headers for retry to avoid state issues
+          const retryHeaders = new Headers(init?.headers);
+          retryHeaders.set('User-Agent', this.agentIdentity);
+          retryHeaders.set('X-Botcha-Id', challenge.id);
+          retryHeaders.set('X-Botcha-Answers', JSON.stringify(answers));
           
-          response = await fetch(url, { ...init, headers });
+          response = await fetch(url, { ...init, headers: retryHeaders });
           retries++;
         } else {
           break;
@@ -166,10 +191,18 @@ export class BotchaClient {
   }
 }
 
-// Convenience function for one-off solves
-export function solveBotcha(problems: { num: number }[]): string[] {
-  return problems.map(p => 
-    crypto.createHash('sha256').update(p.num.toString()).digest('hex').substring(0, 8)
+/**
+ * Convenience function for one-off solves
+ * 
+ * @example
+ * ```typescript
+ * const answers = solveBotcha([123456, 789012]);
+ * // Returns: ['a1b2c3d4', 'e5f6g7h8']
+ * ```
+ */
+export function solveBotcha(problems: number[]): string[] {
+  return problems.map(num =>
+    crypto.createHash('sha256').update(num.toString()).digest('hex').substring(0, 8)
   );
 }
 
