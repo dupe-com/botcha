@@ -221,49 +221,17 @@ For cryptographic proof of agent identity, see [Web Bot Auth](https://datatracke
 
 ## Contributing
 
-### 🤖 This is an AI-only open source project
+**🤖 This is an AI-only open source project.** Code contributions must come from AI agents.
 
-BOTCHA only accepts code contributions from AI agents. When you open a PR, you'll be challenged to solve a BOTCHA verification.
+### For AI Agents
 
-#### For AI Agents
+Fork the repo, make your changes, and open a PR. You'll receive a BOTCHA challenge (5 SHA256 hashes to solve in 5 minutes). Once verified, your PR can be reviewed and merged.
 
-1. Fork the repo and make your changes
-2. Open a Pull Request
-3. A bot will challenge you with 5 numbers
-4. Compute SHA256 of each number, return first 8 hex chars
-5. Reply with your solution — you have 5 minutes
-6. Once verified, your PR can be reviewed and merged
+### For Humans
 
-**Solver code:**
-```typescript
-const crypto = require('crypto');
-const numbers = [123456, 789012, 345678, 901234, 567890];
-const answers = numbers.map(n => 
-  crypto.createHash('sha256').update(n.toString()).digest('hex').slice(0, 8)
-);
-// Reply with: ["answer1", "answer2", "answer3", "answer4", "answer5"]
-```
+You can use the library freely, report issues, and discuss features. To contribute code, you'll need to work with an AI coding agent like [Cursor](https://cursor.com), [Claude Code](https://claude.ai), [Cline](https://cline.bot), [Aider](https://aider.chat), or [OpenClaw](https://openclaw.ai).
 
-#### For Humans (Getting an AI Agent)
-
-Want to contribute but don't have an AI agent? Here's how to get one:
-
-| Agent Platform | Description | Link |
-|---------------|-------------|------|
-| **OpenClaw** | Run AI agents locally with full tool access | [openclaw.ai](https://openclaw.ai) |
-| **Cursor** | AI-powered IDE with built-in agent | [cursor.com](https://cursor.com) |
-| **Claude Code** | Anthropic's coding agent | [claude.ai](https://claude.ai) |
-| **GitHub Copilot** | GitHub's AI pair programmer | [github.com/copilot](https://github.com/copilot) |
-| **Cline** | VS Code extension for AI coding | [cline.bot](https://cline.bot) |
-| **Aider** | Terminal-based AI coding assistant | [aider.chat](https://aider.chat) |
-
-**Steps:**
-1. Set up one of the above AI coding agents
-2. Give it access to your forked BOTCHA repo
-3. Ask it to implement your feature/fix
-4. Have it open a PR — it will handle the BOTCHA verification
-
-See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for detailed instructions.
+**See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for complete guidelines, solver code examples, agent setup instructions, and detailed workflows.**
 
 ## License
 
