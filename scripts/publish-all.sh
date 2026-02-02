@@ -36,16 +36,18 @@ echo ""
 
 # Publish root package
 echo -e "${BLUE}Publishing @dupecom/botcha...${NC}"
-if npm publish $DRY_RUN --access public 2>&1; then
+PKG_VERSION=$(node -p "require('./package.json').version")
+PUBLISH_OUTPUT=$(npm publish $DRY_RUN --access public 2>&1) && {
   echo -e "${GREEN}✓ @dupecom/botcha published${NC}"
-else
-  if npm view @dupecom/botcha version 2>/dev/null | grep -q "$(node -p "require('./package.json').version")"; then
-    echo -e "${BLUE}⏭ @dupecom/botcha already published at this version, skipping${NC}"
+} || {
+  if echo "$PUBLISH_OUTPUT" | grep -q "cannot publish over the previously published"; then
+    echo -e "${BLUE}⏭ @dupecom/botcha@$PKG_VERSION already published, skipping${NC}"
   else
+    echo "$PUBLISH_OUTPUT"
     echo "❌ Failed to publish @dupecom/botcha"
     exit 1
   fi
-fi
+}
 echo ""
 
 # Publish sub-packages
@@ -65,17 +67,18 @@ for pkg in "${PACKAGES[@]}"; do
     PKG_NAME=$(node -p "require('./package.json').name")
     PKG_VERSION=$(node -p "require('./package.json').version")
     
-    if npm publish $DRY_RUN --access public 2>&1; then
+    PUBLISH_OUTPUT=$(npm publish $DRY_RUN --access public 2>&1) && {
       echo -e "${GREEN}✓ $PKG_NAME published${NC}"
-    else
-      if npm view "$PKG_NAME" version 2>/dev/null | grep -q "$PKG_VERSION"; then
-        echo -e "${BLUE}⏭ $PKG_NAME already published at $PKG_VERSION, skipping${NC}"
+    } || {
+      if echo "$PUBLISH_OUTPUT" | grep -qi "cannot publish over the previously published"; then
+        echo -e "${BLUE}⏭ $PKG_NAME@$PKG_VERSION already published, skipping${NC}"
       else
+        echo "$PUBLISH_OUTPUT"
         echo "❌ Failed to publish $PKG_NAME"
         cd - > /dev/null
         exit 1
       fi
-    fi
+    }
     cd - > /dev/null
     echo ""
   fi
