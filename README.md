@@ -21,10 +21,12 @@
 
 ## Packages
 
-| Package | Runtime | Install |
-|---------|---------|---------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | Node.js / Express | `npm install @dupecom/botcha` |
-| [`@dupecom/botcha-cloudflare`](./packages/cloudflare-workers) | Cloudflare Workers | `npm install @dupecom/botcha-cloudflare` |
+| Package | Description | Install |
+|---------|-------------|---------|
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | Core library + Express middleware | `npm install @dupecom/botcha` |
+| [`@dupecom/botcha-cli`](https://www.npmjs.com/package/@dupecom/botcha-cli) | CLI tool for testing & debugging | `npm install -g @dupecom/botcha-cli` |
+| [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | LangChain integration for AI agents | `npm install @dupecom/botcha-langchain` |
+| [`@dupecom/botcha-cloudflare`](./packages/cloudflare-workers) | Cloudflare Workers runtime | `npm install @dupecom/botcha-cloudflare` |
 
 ## Why?
 
@@ -221,49 +223,17 @@ For cryptographic proof of agent identity, see [Web Bot Auth](https://datatracke
 
 ## Contributing
 
-### 🤖 This is an AI-only open source project
+**🤖 This is an AI-only open source project.** Code contributions must come from AI agents.
 
-BOTCHA only accepts code contributions from AI agents. When you open a PR, you'll be challenged to solve a BOTCHA verification.
+### For AI Agents
 
-#### For AI Agents
+Fork the repo, make your changes, and open a PR. You'll receive a BOTCHA challenge (5 SHA256 hashes to solve in 5 minutes). Once verified, your PR can be reviewed and merged.
 
-1. Fork the repo and make your changes
-2. Open a Pull Request
-3. A bot will challenge you with 5 numbers
-4. Compute SHA256 of each number, return first 8 hex chars
-5. Reply with your solution — you have 5 minutes
-6. Once verified, your PR can be reviewed and merged
+### For Humans
 
-**Solver code:**
-```typescript
-const crypto = require('crypto');
-const numbers = [123456, 789012, 345678, 901234, 567890];
-const answers = numbers.map(n => 
-  crypto.createHash('sha256').update(n.toString()).digest('hex').slice(0, 8)
-);
-// Reply with: ["answer1", "answer2", "answer3", "answer4", "answer5"]
-```
+You can use the library freely, report issues, and discuss features. To contribute code, you'll need to work with an AI coding agent like [Cursor](https://cursor.com), [Claude Code](https://claude.ai), [Cline](https://cline.bot), [Aider](https://aider.chat), or [OpenClaw](https://openclaw.ai).
 
-#### For Humans (Getting an AI Agent)
-
-Want to contribute but don't have an AI agent? Here's how to get one:
-
-| Agent Platform | Description | Link |
-|---------------|-------------|------|
-| **OpenClaw** | Run AI agents locally with full tool access | [openclaw.ai](https://openclaw.ai) |
-| **Cursor** | AI-powered IDE with built-in agent | [cursor.com](https://cursor.com) |
-| **Claude Code** | Anthropic's coding agent | [claude.ai](https://claude.ai) |
-| **GitHub Copilot** | GitHub's AI pair programmer | [github.com/copilot](https://github.com/copilot) |
-| **Cline** | VS Code extension for AI coding | [cline.bot](https://cline.bot) |
-| **Aider** | Terminal-based AI coding assistant | [aider.chat](https://aider.chat) |
-
-**Steps:**
-1. Set up one of the above AI coding agents
-2. Give it access to your forked BOTCHA repo
-3. Ask it to implement your feature/fix
-4. Have it open a PR — it will handle the BOTCHA verification
-
-See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for detailed instructions.
+**See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for complete guidelines, solver code examples, agent setup instructions, and detailed workflows.**
 
 ## License
 
@@ -332,3 +302,44 @@ import { solveBotcha } from '@dupecom/botcha/client';
 const answers = solveBotcha([123456, 789012]);
 // Returns: ['a1b2c3d4', 'e5f6g7h8']
 ```
+
+## CLI Tool
+
+Test and debug BOTCHA-protected endpoints from the command line:
+
+```bash
+# Test an endpoint
+npx @dupecom/botcha-cli test https://api.example.com/agent-only
+
+# Benchmark performance
+npx @dupecom/botcha-cli benchmark https://api.example.com/agent-only --iterations 100
+
+# Check headers
+npx @dupecom/botcha-cli headers https://api.example.com
+```
+
+See [`packages/cli/README.md`](./packages/cli/README.md) for full CLI documentation.
+
+## LangChain Integration
+
+Give your LangChain agents automatic BOTCHA-solving abilities:
+
+```typescript
+import { BotchaTool } from '@dupecom/botcha-langchain';
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+
+const agent = createReactAgent({
+  llm: new ChatOpenAI({ model: 'gpt-4' }),
+  tools: [
+    new BotchaTool({ baseUrl: 'https://api.botcha.ai' }),
+    // ... other tools
+  ],
+});
+
+// Agent can now access BOTCHA-protected APIs automatically
+await agent.invoke({
+  messages: [{ role: 'user', content: 'Access the bot-only API' }]
+});
+```
+
+See [`packages/langchain/README.md`](./packages/langchain/README.md) for full documentation.

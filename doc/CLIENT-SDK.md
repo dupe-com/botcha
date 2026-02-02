@@ -1,52 +1,64 @@
-# Client SDK Design
+# Client SDK
 
 > SDK for AI agents to automatically solve BOTCHA challenges
+
+**Status:** ✅ Published
+
+| Package | Version | Description |
+|---------|---------|-------------|
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.4.1 | Core SDK with client (`/client` export) |
+| [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
 
 ## Overview
 
 The client SDK allows AI agents to:
-1. Detect BOTCHA-protected endpoints
-2. Automatically solve challenges
-3. Retry with verification tokens
-4. Handle different challenge types
+1. ✅ Detect BOTCHA-protected endpoints
+2. ✅ Automatically acquire JWT tokens
+3. ✅ Solve challenges and retry with tokens
+4. ✅ Handle different challenge types (speed, standard)
 
-## Proposed API
+## Implemented API
 
-### Basic Usage
+### Basic Usage (Shipped)
 
 ```typescript
-import { BotchaClient } from '@dupecom/botcha-client';
+import { BotchaClient } from '@dupecom/botcha/client';
 
 const client = new BotchaClient({
-  agentName: 'MyAgent/1.0',
-  autoSolve: true,
+  baseUrl: 'https://botcha.ai',
+  agentIdentity: 'MyAgent/1.0',
+  autoToken: true,
 });
 
-// Automatically handles BOTCHA challenges
+// Automatically acquires JWT token and handles challenges
 const response = await client.fetch('https://api.example.com/agent-only');
-console.log(response.data); // Success!
+const data = await response.json();
 ```
 
-### Manual Challenge Solving
+### Manual Challenge Solving (Shipped)
 
 ```typescript
-import { solveLandingChallenge, solveSpeedChallenge } from '@dupecom/botcha-client';
+import { BotchaClient } from '@dupecom/botcha/client';
 
-// Solve landing page challenge
-const token = await solveLandingChallenge('https://botcha.ai');
+const client = new BotchaClient();
 
-// Solve speed challenge
-const result = await solveSpeedChallenge({
-  id: 'challenge-id',
-  problems: [123456, 789012, ...],
-});
+// Get JWT token manually
+const token = await client.getToken();
+
+// Or solve challenge problems directly
+const answers = client.solve([123456, 789012, 334521]);
+// Returns: ['a1b2c3d4', 'e5f6g7h8', 'i9j0k1l2']
+
+// Create headers with solved challenge
+const headers = await client.createHeaders();
 ```
 
-### With Axios/Fetch Interceptor
+### With Axios/Fetch Interceptor (Future)
 
 ```typescript
+// Planned for future release
 import axios from 'axios';
-import { createBotchaInterceptor } from '@dupecom/botcha-client';
+import { createBotchaInterceptor } from '@dupecom/botcha/client';
 
 const api = axios.create({ baseURL: 'https://api.example.com' });
 api.interceptors.response.use(...createBotchaInterceptor());
@@ -55,103 +67,112 @@ api.interceptors.response.use(...createBotchaInterceptor());
 const data = await api.get('/protected');
 ```
 
-### LangChain Integration
+### LangChain Integration (Shipped)
 
 ```typescript
 import { BotchaTool } from '@dupecom/botcha-langchain';
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
-const tools = [
-  new BotchaTool(), // Automatically solves BOTCHA when encountered
-];
+const agent = createReactAgent({
+  llm: new ChatOpenAI({ model: 'gpt-4' }),
+  tools: [
+    new BotchaTool({ baseUrl: 'https://botcha.ai' }),
+  ],
+});
 
-const agent = new Agent({ tools });
-```
-
-## Challenge Solvers
-
-```typescript
-// Built-in solvers
-import { 
-  sha256Solver,
-  speedChallengeSolver,
-  landingChallengeSolver,
-} from '@dupecom/botcha-client/solvers';
-
-// Register custom solver
-client.registerSolver('custom-type', async (challenge) => {
-  // Your solving logic
-  return { answer: '...' };
+// Agent can now solve BOTCHA challenges automatically
+await agent.invoke({
+  messages: [{ role: 'user', content: 'Access bot-only API' }]
 });
 ```
 
-## Configuration
+See [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) for full documentation.
+
+## Challenge Solvers (Shipped)
+
+```typescript
+import { BotchaClient } from '@dupecom/botcha/client';
+
+const client = new BotchaClient();
+
+// Built-in solver for SHA256 speed challenges
+const answers = client.solve([123456, 789012, 334521, 456789, 901234]);
+// Automatically computes SHA256 hashes
+
+// The client automatically uses the correct solver based on challenge type
+const response = await client.fetch('https://protected-api.com/endpoint');
+```
+
+## Configuration (Shipped)
 
 ```typescript
 const client = new BotchaClient({
+  // BOTCHA service URL
+  baseUrl: 'https://botcha.ai',
+  
   // Agent identification
-  agentName: 'MyAgent/1.0',
-  agentId: 'registered-agent-id', // Optional: from agent registry
+  agentIdentity: 'MyAgent/1.0',
   
   // Behavior
-  autoSolve: true,
-  maxRetries: 3,
-  timeout: 5000,
-  
-  // Challenge preferences
-  preferredChallengeType: 'speed',
-  
-  // Callbacks
-  onChallenge: (challenge) => console.log('Got challenge:', challenge),
-  onSolved: (result) => console.log('Solved in', result.time, 'ms'),
-  onFailed: (error) => console.error('Failed:', error),
+  autoToken: true,    // Automatically acquire JWT tokens (default: true)
+  maxRetries: 3,      // Max retry attempts (default: 3)
 });
 ```
 
-## Token Caching
+**Supported options:**
+- ✅ `baseUrl` - BOTCHA service URL
+- ✅ `agentIdentity` - Custom User-Agent string
+- ✅ `maxRetries` - Maximum challenge solve attempts
+- ✅ `autoToken` - Enable automatic token acquisition
+
+## Token Caching (Shipped)
 
 ```typescript
-const client = new BotchaClient({
-  // Cache solved tokens
-  tokenCache: new MemoryTokenCache(), // or RedisTokenCache, etc.
-  tokenTTL: 3600, // 1 hour
-});
+const client = new BotchaClient({ autoToken: true });
 
-// Reuses cached token if valid
-await client.fetch('/protected'); // Uses cached token
+// Tokens are automatically cached in-memory
+await client.fetch('/protected'); // Acquires token
+await client.fetch('/protected'); // Reuses cached token
+
+// Token cached until 55 minutes (near expiry)
+// Automatically refreshes when needed
+
+// Clear token manually if needed
+client.clearToken();
 ```
 
-## Error Handling
+## Error Handling (Shipped)
 
 ```typescript
-import { BotchaError, ChallengeFailed, ChallengeTimeout } from '@dupecom/botcha-client';
+import { BotchaClient } from '@dupecom/botcha/client';
+
+const client = new BotchaClient({ maxRetries: 3 });
 
 try {
-  await client.fetch('/protected');
+  const response = await client.fetch('/protected');
+  const data = await response.json();
 } catch (error) {
-  if (error instanceof ChallengeTimeout) {
-    console.log('Too slow! Challenge expired.');
-  } else if (error instanceof ChallengeFailed) {
-    console.log('Wrong answer:', error.hint);
-  }
+  // Client automatically retries on failure (up to maxRetries)
+  // If all retries fail, throws standard Error
+  console.error('Failed to solve BOTCHA:', error.message);
 }
 ```
 
-## Package Structure
+## Package Structure (Shipped)
 
 ```
-@dupecom/botcha-client/
-├── index.ts           # Main client
-├── solvers/
-│   ├── sha256.ts
-│   ├── speed.ts
-│   └── landing.ts
-├── interceptors/
-│   ├── axios.ts
-│   └── fetch.ts
-├── cache/
-│   ├── memory.ts
-│   └── redis.ts
-└── types.ts
+@dupecom/botcha/
+├── lib/client/
+│   ├── index.ts        # BotchaClient (exported as /client)
+│   ├── types.ts        # Type definitions
+│   └── solver.ts       # Challenge solving logic
+└── lib/index.ts        # Express middleware (main export)
+
+@dupecom/botcha-langchain/
+├── index.ts            # Exports: BotchaTool, BotchaRequestWrapper
+├── tool.ts             # LangChain Tool implementation
+├── wrapper.ts          # Request wrapper
+└── types.ts            # Type definitions
 ```
 
 ## Future: Python SDK

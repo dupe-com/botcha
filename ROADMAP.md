@@ -6,37 +6,49 @@
 
 ## 🔥 High Impact / Quick Wins
 
-### 1. SDK for AI Agent Frameworks
+### ✅ 1. SDK for AI Agent Frameworks **[COMPLETED]**
 Make it trivial for agents to pass BOTCHA challenges automatically.
 
-```typescript
-// OpenClaw integration
-import { BotchaClient } from '@dupecom/botcha/client';
+**Shipped packages:**
+- ✅ `@dupecom/botcha/client` - Core client SDK with auto-solving
+- ✅ `@dupecom/botcha-langchain` - LangChain Tool integration
+- ✅ `@dupecom/botcha-cli` - CLI tool for testing and debugging
 
-const botcha = new BotchaClient();
-const response = await botcha.fetch('https://some-api.com/agent-only');
-// Automatically solves challenges and retries
+```typescript
+// LangChain integration
+import { BotchaTool } from '@dupecom/botcha-langchain';
+
+const agent = createReactAgent({
+  tools: [new BotchaTool()],
+});
 ```
 
-**Frameworks to support:**
-- OpenClaw
-- LangChain
+**Future framework support:**
 - AutoGPT
 - CrewAI
 - OpenAI Agents SDK
 
-### 2. Hosted Verification Service
+### ✅ 2. Hosted Verification Service **[COMPLETED]**
 Let devs verify without running their own server.
 
+**Shipped:**
+- ✅ JWT token service at `https://botcha.ai/v1/token`
+- ✅ Cloudflare Workers deployment with KV storage
+- ✅ Rate limiting (100 req/min per IP)
+- ✅ 1-hour token expiry
+
 ```typescript
-// Instead of self-hosting
-const verified = await fetch('https://botcha.ai/verify', {
-  method: 'POST',
-  body: JSON.stringify({ token: userToken })
+// Get JWT token
+const response = await fetch('https://botcha.ai/v1/token');
+const { token } = await response.json();
+
+// Use token for authentication
+fetch('https://api.example.com/agent-only', {
+  headers: { 'Authorization': `Bearer ${token}` }
 });
 ```
 
-**Monetization potential:** Free tier (1k verifications/month) → Paid tiers
+**Future:** Monetization (Free tier → Paid tiers)
 
 ### 3. Dashboard / Analytics
 - How many agents verified vs blocked

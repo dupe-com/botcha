@@ -2,17 +2,19 @@
 
 > Test, debug, and interact with BOTCHA from the command line
 
+**Status:** ✅ Published to npm as [`@dupecom/botcha-cli@0.1.0`](https://www.npmjs.com/package/@dupecom/botcha-cli)
+
 ## Installation
 
 ```bash
 npm install -g @dupecom/botcha-cli
 # or
-npx botcha <command>
+npx @dupecom/botcha-cli <command>
 ```
 
-## Commands
+## Implemented Commands (v0.1.0)
 
-### Test an Endpoint
+### Test an Endpoint ✅
 
 Check if an endpoint is BOTCHA-protected and test verification:
 
@@ -44,45 +46,22 @@ Response:
 }
 ```
 
-### Solve Challenges
+### Solve Challenges ✅
 
 Solve a specific challenge:
 
 ```bash
+# Get a JWT token
+$ botcha solve token --url https://botcha.ai/v1/token
+🔑 Token: eyJhbG...
+   Valid for: 1 hour
+
 # Speed challenge
 $ botcha solve speed --url https://botcha.ai/api/speed-challenge
 ⚡ Solved in 15ms!
-
-# Landing page challenge
-$ botcha solve landing --url https://botcha.ai
-🔑 Token: abc123...
-   Valid for: 1 hour
-   Use header: X-Botcha-Landing-Token
-
-# Standard challenge
-$ botcha solve standard --url https://botcha.ai/api/challenge
-✅ Solved in 2.3s
 ```
 
-### Generate Challenges (for testing)
-
-```bash
-# Generate a speed challenge
-$ botcha generate speed
-{
-  "id": "test-123",
-  "problems": [
-    { "num": 123456, "operation": "sha256_first8" },
-    ...
-  ],
-  "timeLimit": "500ms"
-}
-
-# Generate with specific difficulty
-$ botcha generate standard --difficulty hard
-```
-
-### Check Headers
+### Check Headers ✅
 
 Inspect BOTCHA headers on any URL:
 
@@ -96,25 +75,7 @@ Headers:
   X-Botcha-Docs: https://botcha.ai/openapi.json
 ```
 
-### Discover BOTCHA
-
-Find all BOTCHA discovery endpoints:
-
-```bash
-$ botcha discover https://botcha.ai
-
-🔍 Discovery Results:
-
-✅ /robots.txt - Contains BOTCHA instructions
-✅ /ai.txt - AI agent discovery file
-✅ /.well-known/ai-plugin.json - AI plugin manifest
-✅ /openapi.json - OpenAPI specification
-✅ Embedded challenge in HTML - <script type="application/botcha+json">
-
-Discovery Score: 5/5 ⭐
-```
-
-### Benchmark
+### Benchmark ✅
 
 Test performance and reliability:
 
@@ -134,7 +95,45 @@ Results:
   Requests/sec: 31.25
 ```
 
-### Watch Mode
+## Planned Features (Future Releases)
+
+### Generate Challenges (for testing) 🔮
+
+```bash
+# Generate a speed challenge
+$ botcha generate speed
+{
+  "id": "test-123",
+  "problems": [
+    { "num": 123456, "operation": "sha256_first8" },
+    ...
+  ],
+  "timeLimit": "500ms"
+}
+
+# Generate with specific difficulty
+$ botcha generate standard --difficulty hard
+```
+
+### Discover BOTCHA 🔮
+
+Find all BOTCHA discovery endpoints:
+
+```bash
+$ botcha discover https://botcha.ai
+
+🔍 Discovery Results:
+
+✅ /robots.txt - Contains BOTCHA instructions
+✅ /ai.txt - AI agent discovery file
+✅ /.well-known/ai-plugin.json - AI plugin manifest
+✅ /openapi.json - OpenAPI specification
+✅ Embedded challenge in HTML - <script type="application/botcha+json">
+
+Discovery Score: 5/5 ⭐
+```
+
+### Watch Mode 🔮
 
 Continuously monitor an endpoint:
 
@@ -152,7 +151,7 @@ $ botcha watch https://api.example.com/agent-only --interval 60
 Press Ctrl+C to stop
 ```
 
-### Interactive Mode
+### Interactive Mode 🔮
 
 ```bash
 $ botcha interactive https://botcha.ai

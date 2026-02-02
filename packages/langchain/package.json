@@ -1,0 +1,58 @@
+{
+  "name": "@dupecom/botcha-langchain",
+  "version": "0.1.0",
+  "description": "LangChain integration for BOTCHA - make AI agents transparently solve BOTCHA challenges",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "botcha",
+    "langchain",
+    "ai",
+    "agent",
+    "bot",
+    "tool",
+    "integration",
+    "captcha"
+  ],
+  "author": "Ramin <ramin@dupe.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/i8ramin/botcha"
+  },
+  "homepage": "https://botcha.ai",
+  "peerDependencies": {
+    "@langchain/core": ">=0.1.0"
+  },
+  "dependencies": {
+    "@dupecom/botcha": "^0.4.1",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^0.3.29",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

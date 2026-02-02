@@ -1,0 +1,50 @@
+{
+  "name": "@dupecom/botcha-cli",
+  "version": "0.1.0",
+  "description": "CLI tool for testing and debugging BOTCHA-protected endpoints",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "botcha": "./bin/botcha.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "botcha",
+    "cli",
+    "bot",
+    "ai",
+    "agent",
+    "testing",
+    "debug"
+  ],
+  "author": "Ramin <ramin@dupe.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/i8ramin/botcha"
+  },
+  "homepage": "https://botcha.ai",
+  "dependencies": {
+    "@dupecom/botcha": "^0.4.1",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
