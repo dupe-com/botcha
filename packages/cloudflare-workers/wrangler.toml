@@ -3,10 +3,20 @@ main = "src/index.ts"
 compatibility_date = "2025-01-30"
 compatibility_flags = ["nodejs_compat"]
 
-# Optional: KV namespace for challenge storage (production)
-# [[kv_namespaces]]
-# binding = "CHALLENGES"
-# id = "your-kv-namespace-id"
+# KV namespace for challenge storage (production)
+# For local dev: wrangler will use --local mode automatically
+# For production: set id after: wrangler kv namespace create CHALLENGES
+[[kv_namespaces]]
+binding = "CHALLENGES"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-kv-namespace-id"
+
+# Rate limiting KV namespace
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "your-rate-limit-kv-namespace-id"
+preview_id = "your-preview-rate-limit-kv-namespace-id"
 
 [vars]
-BOTCHA_VERSION = "0.1.0"
+BOTCHA_VERSION = "0.2.0"
+JWT_SECRET = "change-this-in-production-use-wrangler-secret"
