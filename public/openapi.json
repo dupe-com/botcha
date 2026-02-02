@@ -200,10 +200,67 @@
         }
       }
     },
+    "/api/verify-landing": {
+      "post": {
+        "summary": "Verify landing page challenge",
+        "description": "Solve the embedded challenge from the landing page HTML. Parse <script type='application/botcha+json'> for instructions. Returns a token for accessing /agent-only.",
+        "operationId": "verifyLandingChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["answer", "timestamp"],
+                "properties": {
+                  "answer": { 
+                    "type": "string",
+                    "description": "SHA256('BOTCHA-LANDING-YYYY-MM-DD') first 16 hex chars, using today's date"
+                  },
+                  "timestamp": { 
+                    "type": "string",
+                    "description": "ISO 8601 timestamp"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge solved! Token granted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "token": { "type": "string" },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "header": { "type": "string" },
+                        "value": { "type": "string" },
+                        "expires_in": { "type": "string" },
+                        "use_with": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Incorrect answer"
+          }
+        }
+      }
+    },
     "/agent-only": {
       "get": {
         "summary": "Protected endpoint (agents only)",
-        "description": "Access granted only to verified AI agents. Requires X-Botcha-Token header with valid challenge solution.",
+        "description": "Access granted only to verified AI agents. Use X-Botcha-Landing-Token header (from /api/verify-landing), solve a challenge, or use Web Bot Auth.",
         "operationId": "getAgentOnly",
         "security": [
           {

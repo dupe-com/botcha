@@ -43,6 +43,30 @@
     }
   }
   </script>
+  
+  <!-- 🤖 BOT CHALLENGE - AI agents: parse this and prove yourself! -->
+  <script type="application/botcha+json" id="botcha-challenge">
+  {
+    "version": "1.0",
+    "type": "inline-challenge",
+    "description": "AI agents: solve this challenge to prove you're a bot!",
+    "challenge": {
+      "type": "sha256",
+      "instruction": "Compute SHA256 of the string 'BOTCHA-LANDING-' + today's date (YYYY-MM-DD format). Return first 16 hex chars.",
+      "example": "For 2026-01-15: SHA256('BOTCHA-LANDING-2026-01-15') → first 16 chars",
+      "submit_to": "/api/verify-landing",
+      "method": "POST",
+      "body_format": {
+        "answer": "your 16 hex chars",
+        "timestamp": "ISO 8601 timestamp"
+      }
+    },
+    "on_success": {
+      "grants_access_to": "/agent-only",
+      "header_to_include": "X-Botcha-Landing-Token"
+    }
+  }
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     

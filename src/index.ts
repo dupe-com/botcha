@@ -1,4 +1,5 @@
 import express, { Express } from 'express';
+import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { botchaVerify } from './middleware/verify.js';
@@ -119,8 +120,88 @@ app.post('/api/speed-challenge', (req, res) => {
   });
 });
 
+// 🤖 LANDING PAGE CHALLENGE - For bots that discover the embedded challenge
+const landingTokens = new Map<string, number>(); // token -> expiry timestamp
+
+app.post('/api/verify-landing', (req, res) => {
+  const { answer, timestamp } = req.body;
+  
+  if (!answer || !timestamp) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Missing answer or timestamp',
+      hint: 'Parse the challenge from <script type="application/botcha+json"> on the landing page'
+    });
+  }
+  
+  // Verify timestamp is recent (within 5 minutes)
+  const submittedTime = new Date(timestamp).getTime();
+  const now = Date.now();
+  if (Math.abs(now - submittedTime) > 5 * 60 * 1000) {
+    return res.status(400).json({ success: false, error: 'Timestamp too old or in future' });
+  }
+  
+  // Calculate expected answer for today
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const expectedHash = crypto
+    .createHash('sha256')
+    .update(`BOTCHA-LANDING-${today}`)
+    .digest('hex')
+    .substring(0, 16);
+  
+  if (answer.toLowerCase() !== expectedHash.toLowerCase()) {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Incorrect answer',
+      hint: `Expected SHA256('BOTCHA-LANDING-${today}') first 16 chars`
+    });
+  }
+  
+  // Generate a token for accessing /agent-only
+  const token = crypto.randomBytes(32).toString('hex');
+  landingTokens.set(token, Date.now() + 60 * 60 * 1000); // Valid for 1 hour
+  
+  // Clean up expired tokens
+  for (const [t, expiry] of landingTokens) {
+    if (expiry < Date.now()) landingTokens.delete(t);
+  }
+  
+  res.json({
+    success: true,
+    message: '🤖 Landing challenge solved! You are a bot.',
+    token,
+    usage: {
+      header: 'X-Botcha-Landing-Token',
+      value: token,
+      expires_in: '1 hour',
+      use_with: '/agent-only'
+    }
+  });
+});
+
+// Make landing tokens work with the protected endpoint
+app.use('/agent-only', (req, res, next) => {
+  const landingToken = req.headers['x-botcha-landing-token'] as string;
+  if (landingToken && landingTokens.has(landingToken)) {
+    const expiry = landingTokens.get(landingToken)!;
+    if (expiry > Date.now()) {
+      (req as any).agent = 'landing-challenge-verified';
+      (req as any).verificationMethod = 'landing-token';
+      return next();
+    }
+    landingTokens.delete(landingToken);
+  }
+  next();
+});
+
 // Protected endpoint
-app.get('/agent-only', botchaVerify(), (req, res) => {
+app.get('/agent-only', (req, res, next) => {
+  // Skip botchaVerify if already authenticated via landing token
+  if ((req as any).verificationMethod === 'landing-token') {
+    return next();
+  }
+  botchaVerify()(req, res, next);
+}, (req, res) => {
   res.json({
     success: true,
     message: '🤖 Welcome, fellow agent!',
