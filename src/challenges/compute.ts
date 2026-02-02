@@ -92,7 +92,7 @@ export function verifyChallenge(id: string, answer: string): {
   };
 }
 
-function generatePrimes(count: number): number[] {
+export function generatePrimes(count: number): number[] {
   const primes: number[] = [];
   let num = 2;
   
@@ -106,7 +106,7 @@ function generatePrimes(count: number): number[] {
   return primes;
 }
 
-function isPrime(n: number): boolean {
+export function isPrime(n: number): boolean {
   if (n < 2) return false;
   if (n === 2) return true;
   if (n % 2 === 0) return false;
