@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "include": ["/*"],
-  "exclude": ["/api/*", "/v1/*", "/agent-only", "/badge/*"]
-}
