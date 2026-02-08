@@ -2,6 +2,7 @@ name = "botcha"
 main = "dist/index.js"
 compatibility_date = "2025-01-30"
 compatibility_flags = ["nodejs_compat"]
+account_id = "82c70a74dfe2b9802a95ddac893a4da8"
 
 # Route API endpoints to the worker on main domain
 routes = [
