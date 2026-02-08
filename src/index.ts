@@ -7,6 +7,7 @@ import { botchaVerify } from './middleware/verify.js';
 import { generateChallenge, verifyChallenge } from './challenges/compute.js';
 import { generateSpeedChallenge, verifySpeedChallenge } from './challenges/speed.js';
 import { generateReasoningChallenge, verifyReasoningChallenge } from './challenges/reasoning.js';
+import { generateHybridChallenge, verifyHybridChallenge } from './challenges/hybrid.js';
 import { TRUSTED_PROVIDERS } from './utils/signature.js';
 import { createBadgeResponse, verifyBadge } from './utils/badge.js';
 import { generateBadgeSvg, generateBadgeHtml } from './utils/badge-image.js';
@@ -26,7 +27,7 @@ app.use((req, res, next) => {
   // BOTCHA discovery headers
   res.header('X-Botcha-Version', '0.3.0');
   res.header('X-Botcha-Enabled', 'true');
-  res.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,standard-challenge,web-bot-auth');
+  res.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,web-bot-auth');
   res.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
   
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -49,11 +50,13 @@ app.get('/api', (req, res) => {
       '/api/challenge': 'Standard challenge (GET new, POST verify)',
       '/api/speed-challenge': '⚡ Speed challenge - 500ms to solve 5 problems',
       '/api/reasoning-challenge': '🧠 Reasoning challenge - LLM-only questions',
+      '/api/hybrid-challenge': '🔥 Hybrid challenge - speed + reasoning combined',
       '/agent-only': 'Protected endpoint',
     },
     verification: {
       methods: [
         'Web Bot Auth (cryptographic signature)',
+        'Hybrid Challenge (speed + reasoning)',
         'Speed Challenge (500ms time limit)',
         'Reasoning Challenge (LLM-only questions)',
         'Standard Challenge (5s time limit)',
@@ -174,6 +177,63 @@ app.post('/api/reasoning-challenge', (req, res) => {
   // Include badge for successful verifications
   if (result.valid) {
     response.badge = createBadgeResponse('reasoning-challenge', result.solveTimeMs);
+  }
+
+  res.json(response);
+});
+
+// 🔥 HYBRID CHALLENGE - Speed + Reasoning combined
+app.get('/api/hybrid-challenge', (req, res) => {
+  const challenge = generateHybridChallenge();
+  res.json({
+    success: true,
+    warning: '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!',
+    challenge: {
+      id: challenge.id,
+      speed: {
+        problems: challenge.speed.problems,
+        timeLimit: `${challenge.speed.timeLimit}ms`,
+        instructions: 'Compute SHA256 of each number, return first 8 hex chars',
+      },
+      reasoning: {
+        questions: challenge.reasoning.questions,
+        timeLimit: `${challenge.reasoning.timeLimit / 1000}s`,
+        instructions: 'Answer all reasoning questions',
+      },
+    },
+    instructions: challenge.instructions,
+    tip: 'This is the ultimate test: proves you can compute AND reason like an AI.',
+  });
+});
+
+app.post('/api/hybrid-challenge', (req, res) => {
+  const { id, speed_answers, reasoning_answers } = req.body;
+
+  if (!id || !speed_answers || !reasoning_answers) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing id, speed_answers array, or reasoning_answers object',
+      hint: 'Submit both speed_answers (array) and reasoning_answers (object) together',
+    });
+  }
+
+  const result = verifyHybridChallenge(id, speed_answers, reasoning_answers);
+
+  const response: Record<string, unknown> = {
+    success: result.valid,
+    message: result.valid
+      ? `🔥 HYBRID TEST PASSED! Speed: ${result.speed.solveTimeMs}ms, Reasoning: ${result.reasoning.score}`
+      : `❌ ${result.reason}`,
+    speed: result.speed,
+    reasoning: result.reasoning,
+    totalTimeMs: result.totalTimeMs,
+    verdict: result.valid
+      ? '🤖 VERIFIED AI AGENT (speed + reasoning confirmed)'
+      : '🚫 FAILED HYBRID TEST',
+  };
+
+  if (result.valid) {
+    response.badge = createBadgeResponse('hybrid-challenge', result.totalTimeMs);
   }
 
   res.json(response);

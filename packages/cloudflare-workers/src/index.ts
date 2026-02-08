@@ -16,6 +16,8 @@ import {
   verifyStandardChallenge,
   generateReasoningChallenge,
   verifyReasoningChallenge,
+  generateHybridChallenge,
+  verifyHybridChallenge,
   verifyLandingChallenge,
   validateLandingToken,
   solveSpeedChallenge,
@@ -53,7 +55,7 @@ app.use('*', async (c, next) => {
   await next();
   c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.2.0');
   c.header('X-Botcha-Enabled', 'true');
-  c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,standard-challenge,jwt-token');
+  c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
   c.header('X-Botcha-Runtime', 'cloudflare-workers');
 });
@@ -120,6 +122,7 @@ app.get('/', (c) => {
       '/health': 'Health check',
       '/v1/challenges': 'Generate challenge (GET) or verify (POST)',
       '/v1/reasoning': 'Reasoning challenge - LLM-only questions (GET/POST)',
+      '/v1/hybrid': 'Hybrid challenge - speed + reasoning combined (GET/POST)',
       '/v1/token': 'Get challenge for JWT token flow (GET)',
       '/v1/token/verify': 'Verify challenge and get JWT (POST)',
       '/agent-only': 'Protected endpoint (requires JWT)',
@@ -313,6 +316,114 @@ app.post('/v1/reasoning', async (c) => {
     solveTimeMs: result.solveTimeMs,
     score: result.valid ? `${result.correctCount}/${result.totalCount}` : undefined,
     verdict: result.valid ? '🤖 VERIFIED AI AGENT (reasoning confirmed)' : '🚫 FAILED REASONING TEST',
+  });
+});
+
+// ============ HYBRID CHALLENGE ============
+
+// Get hybrid challenge (v1 API)
+app.get('/v1/hybrid', rateLimitMiddleware, async (c) => {
+  const challenge = await generateHybridChallenge(c.env.CHALLENGES);
+  return c.json({
+    success: true,
+    type: 'hybrid',
+    warning: '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!',
+    challenge: {
+      id: challenge.id,
+      speed: {
+        problems: challenge.speed.problems,
+        timeLimit: `${challenge.speed.timeLimit}ms`,
+        instructions: 'Compute SHA256 of each number, return first 8 hex chars',
+      },
+      reasoning: {
+        questions: challenge.reasoning.questions,
+        timeLimit: `${challenge.reasoning.timeLimit / 1000}s`,
+        instructions: 'Answer all reasoning questions',
+      },
+    },
+    instructions: challenge.instructions,
+    tip: 'This is the ultimate test: proves you can compute AND reason like an AI.',
+  });
+});
+
+// Verify hybrid challenge (v1 API)
+app.post('/v1/hybrid', async (c) => {
+  const body = await c.req.json<{ id?: string; speed_answers?: string[]; reasoning_answers?: Record<string, string> }>();
+  const { id, speed_answers, reasoning_answers } = body;
+
+  if (!id || !speed_answers || !reasoning_answers) {
+    return c.json({
+      success: false,
+      error: 'Missing id, speed_answers array, or reasoning_answers object',
+      hint: 'Submit both speed_answers (array) and reasoning_answers (object) together',
+    }, 400);
+  }
+
+  const result = await verifyHybridChallenge(id, speed_answers, reasoning_answers, c.env.CHALLENGES);
+
+  return c.json({
+    success: result.valid,
+    message: result.valid
+      ? `🔥 HYBRID TEST PASSED! Speed: ${result.speed.solveTimeMs}ms, Reasoning: ${result.reasoning.score}`
+      : `❌ ${result.reason}`,
+    speed: result.speed,
+    reasoning: result.reasoning,
+    totalTimeMs: result.totalTimeMs,
+    verdict: result.valid
+      ? '🤖 VERIFIED AI AGENT (speed + reasoning confirmed)'
+      : '🚫 FAILED HYBRID TEST',
+  });
+});
+
+// Legacy hybrid endpoint
+app.get('/api/hybrid-challenge', async (c) => {
+  const challenge = await generateHybridChallenge(c.env.CHALLENGES);
+  return c.json({
+    success: true,
+    warning: '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!',
+    challenge: {
+      id: challenge.id,
+      speed: {
+        problems: challenge.speed.problems,
+        timeLimit: `${challenge.speed.timeLimit}ms`,
+        instructions: 'Compute SHA256 of each number, return first 8 hex chars',
+      },
+      reasoning: {
+        questions: challenge.reasoning.questions,
+        timeLimit: `${challenge.reasoning.timeLimit / 1000}s`,
+        instructions: 'Answer all reasoning questions',
+      },
+    },
+    instructions: challenge.instructions,
+    tip: 'This is the ultimate test: proves you can compute AND reason like an AI.',
+  });
+});
+
+app.post('/api/hybrid-challenge', async (c) => {
+  const body = await c.req.json<{ id?: string; speed_answers?: string[]; reasoning_answers?: Record<string, string> }>();
+  const { id, speed_answers, reasoning_answers } = body;
+
+  if (!id || !speed_answers || !reasoning_answers) {
+    return c.json({
+      success: false,
+      error: 'Missing id, speed_answers array, or reasoning_answers object',
+      hint: 'Submit both speed_answers (array) and reasoning_answers (object) together',
+    }, 400);
+  }
+
+  const result = await verifyHybridChallenge(id, speed_answers, reasoning_answers, c.env.CHALLENGES);
+
+  return c.json({
+    success: result.valid,
+    message: result.valid
+      ? `🔥 HYBRID TEST PASSED! Speed: ${result.speed.solveTimeMs}ms, Reasoning: ${result.reasoning.score}`
+      : `❌ ${result.reason}`,
+    speed: result.speed,
+    reasoning: result.reasoning,
+    totalTimeMs: result.totalTimeMs,
+    verdict: result.valid
+      ? '🤖 VERIFIED AI AGENT (speed + reasoning confirmed)'
+      : '🚫 FAILED HYBRID TEST',
   });
 });
 
@@ -607,6 +718,8 @@ export {
   verifyStandardChallenge,
   generateReasoningChallenge,
   verifyReasoningChallenge,
+  generateHybridChallenge,
+  verifyHybridChallenge,
   solveSpeedChallenge,
 } from './challenges';
 

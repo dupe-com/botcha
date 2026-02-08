@@ -55,6 +55,14 @@ export interface ChallengeResult {
   totalCount?: number;
 }
 
+export interface HybridChallenge {
+  id: string;
+  speedChallengeId: string;
+  reasoningChallengeId: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
 // ============ STORAGE ============
 // In-memory fallback (for local dev without KV)
 const speedChallenges = new Map<string, SpeedChallenge>();
@@ -682,5 +690,149 @@ export async function verifyReasoningChallenge(
     solveTimeMs,
     correctCount,
     totalCount,
+  };
+}
+
+// ============ HYBRID CHALLENGE ============
+const hybridChallenges = new Map<string, HybridChallenge>();
+
+/**
+ * Generate a hybrid challenge: speed + reasoning combined
+ */
+export async function generateHybridChallenge(kv?: KVNamespace): Promise<{
+  id: string;
+  speed: {
+    problems: { num: number; operation: string }[];
+    timeLimit: number;
+  };
+  reasoning: {
+    questions: { id: string; question: string; category: string }[];
+    timeLimit: number;
+  };
+  instructions: string;
+}> {
+  cleanExpired();
+
+  const id = uuid();
+
+  // Generate both sub-challenges
+  const speedChallenge = await generateSpeedChallenge(kv);
+  const reasoningChallenge = await generateReasoningChallenge(kv);
+
+  const hybrid: HybridChallenge = {
+    id,
+    speedChallengeId: speedChallenge.id,
+    reasoningChallengeId: reasoningChallenge.id,
+    issuedAt: Date.now(),
+    expiresAt: Date.now() + 35000,
+  };
+
+  // Store in KV or memory
+  if (kv) {
+    await kv.put(`hybrid:${id}`, JSON.stringify(hybrid), { expirationTtl: 300 });
+  } else {
+    hybridChallenges.set(id, hybrid);
+  }
+
+  return {
+    id,
+    speed: {
+      problems: speedChallenge.problems,
+      timeLimit: speedChallenge.timeLimit,
+    },
+    reasoning: {
+      questions: reasoningChallenge.questions,
+      timeLimit: reasoningChallenge.timeLimit,
+    },
+    instructions: 'Solve ALL speed problems (SHA256) in <500ms AND answer ALL reasoning questions. Submit both together.',
+  };
+}
+
+/**
+ * Verify a hybrid challenge response
+ */
+export async function verifyHybridChallenge(
+  id: string,
+  speedAnswers: string[],
+  reasoningAnswers: Record<string, string>,
+  kv?: KVNamespace
+): Promise<{
+  valid: boolean;
+  reason?: string;
+  speed: { passed: boolean; solveTimeMs?: number; reason?: string };
+  reasoning: { passed: boolean; score?: string; solveTimeMs?: number; reason?: string };
+  totalTimeMs?: number;
+}> {
+  let hybrid: HybridChallenge | null = null;
+
+  if (kv) {
+    const data = await kv.get(`hybrid:${id}`);
+    hybrid = data ? JSON.parse(data) : null;
+  } else {
+    cleanExpired();
+    hybrid = hybridChallenges.get(id) || null;
+  }
+
+  if (!hybrid) {
+    return {
+      valid: false,
+      reason: 'Hybrid challenge not found or expired',
+      speed: { passed: false, reason: 'Challenge not found' },
+      reasoning: { passed: false, reason: 'Challenge not found' },
+    };
+  }
+
+  const now = Date.now();
+  const totalTimeMs = now - hybrid.issuedAt;
+
+  if (now > hybrid.expiresAt) {
+    if (kv) {
+      await kv.delete(`hybrid:${id}`);
+    } else {
+      hybridChallenges.delete(id);
+    }
+    return {
+      valid: false,
+      reason: 'Hybrid challenge expired',
+      speed: { passed: false, reason: 'Expired' },
+      reasoning: { passed: false, reason: 'Expired' },
+      totalTimeMs,
+    };
+  }
+
+  // Verify speed challenge
+  const speedResult = await verifySpeedChallenge(hybrid.speedChallengeId, speedAnswers, kv);
+
+  // Verify reasoning challenge
+  const reasoningResult = await verifyReasoningChallenge(hybrid.reasoningChallengeId, reasoningAnswers, kv);
+
+  // Clean up hybrid
+  if (kv) {
+    await kv.delete(`hybrid:${id}`);
+  } else {
+    hybridChallenges.delete(id);
+  }
+
+  const speedPassed = speedResult.valid;
+  const reasoningPassed = reasoningResult.valid;
+  const bothPassed = speedPassed && reasoningPassed;
+
+  return {
+    valid: bothPassed,
+    reason: bothPassed
+      ? undefined
+      : `Failed: ${!speedPassed ? 'speed' : ''}${!speedPassed && !reasoningPassed ? ' + ' : ''}${!reasoningPassed ? 'reasoning' : ''}`,
+    speed: {
+      passed: speedPassed,
+      solveTimeMs: speedResult.solveTimeMs,
+      reason: speedResult.reason,
+    },
+    reasoning: {
+      passed: reasoningPassed,
+      score: reasoningResult.valid ? `${reasoningResult.correctCount}/${reasoningResult.totalCount}` : undefined,
+      solveTimeMs: reasoningResult.solveTimeMs,
+      reason: reasoningResult.reason,
+    },
+    totalTimeMs,
   };
 }

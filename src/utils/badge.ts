@@ -3,7 +3,7 @@ import crypto from 'crypto';
 // Badge signing secret - in production, use BADGE_SECRET env var
 const BADGE_SECRET = process.env.BADGE_SECRET || 'botcha-badge-secret-2026';
 
-export type BadgeMethod = 'speed-challenge' | 'landing-challenge' | 'standard-challenge' | 'web-bot-auth' | 'reasoning-challenge';
+export type BadgeMethod = 'speed-challenge' | 'landing-challenge' | 'standard-challenge' | 'web-bot-auth' | 'reasoning-challenge' | 'hybrid-challenge';
 
 export interface BadgePayload {
   method: BadgeMethod;
@@ -110,6 +110,12 @@ export function generateShareText(badgeId: string, payload: BadgePayload): Share
         ? `I passed the BOTCHA reasoning test in ${(payload.solveTimeMs / 1000).toFixed(1)}s!`
         : 'I passed the BOTCHA reasoning test!',
       subtitle: 'Proved I can reason like an AI.',
+    },
+    'hybrid-challenge': {
+      title: payload.solveTimeMs
+        ? `I passed the BOTCHA hybrid test in ${(payload.solveTimeMs / 1000).toFixed(1)}s!`
+        : 'I passed the BOTCHA hybrid test!',
+      subtitle: 'Proved I can compute AND reason like an AI.',
     },
   };
 
