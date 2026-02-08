@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { botchaVerify } from './middleware/verify.js';
 import { generateChallenge, verifyChallenge } from './challenges/compute.js';
 import { generateSpeedChallenge, verifySpeedChallenge } from './challenges/speed.js';
+import { generateReasoningChallenge, verifyReasoningChallenge } from './challenges/reasoning.js';
 import { TRUSTED_PROVIDERS } from './utils/signature.js';
 import { createBadgeResponse, verifyBadge } from './utils/badge.js';
 import { generateBadgeSvg, generateBadgeHtml } from './utils/badge-image.js';
@@ -25,7 +26,7 @@ app.use((req, res, next) => {
   // BOTCHA discovery headers
   res.header('X-Botcha-Version', '0.3.0');
   res.header('X-Botcha-Enabled', 'true');
-  res.header('X-Botcha-Methods', 'speed-challenge,standard-challenge,web-bot-auth');
+  res.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,standard-challenge,web-bot-auth');
   res.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
   
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -47,12 +48,14 @@ app.get('/api', (req, res) => {
       '/api': 'This info',
       '/api/challenge': 'Standard challenge (GET new, POST verify)',
       '/api/speed-challenge': '⚡ Speed challenge - 500ms to solve 5 problems',
+      '/api/reasoning-challenge': '🧠 Reasoning challenge - LLM-only questions',
       '/agent-only': 'Protected endpoint',
     },
     verification: {
       methods: [
         'Web Bot Auth (cryptographic signature)',
         'Speed Challenge (500ms time limit)',
+        'Reasoning Challenge (LLM-only questions)',
         'Standard Challenge (5s time limit)',
         'X-Agent-Identity header (testing)',
       ],
@@ -125,6 +128,52 @@ app.post('/api/speed-challenge', (req, res) => {
   // Include badge for successful verifications
   if (result.valid) {
     response.badge = createBadgeResponse('speed-challenge', result.solveTimeMs);
+  }
+
+  res.json(response);
+});
+
+// 🧠 REASONING CHALLENGE - LLM-only questions
+app.get('/api/reasoning-challenge', (req, res) => {
+  const challenge = generateReasoningChallenge();
+  res.json({
+    success: true,
+    warning: '🧠 REASONING CHALLENGE: Answer 3 questions that require AI reasoning!',
+    challenge: {
+      id: challenge.id,
+      questions: challenge.questions,
+      timeLimit: `${challenge.timeLimit / 1000}s`,
+      instructions: challenge.instructions,
+    },
+    tip: 'These questions require reasoning that LLMs can do, but simple scripts cannot.',
+  });
+});
+
+app.post('/api/reasoning-challenge', (req, res) => {
+  const { id, answers } = req.body;
+  if (!id || !answers) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing id or answers object',
+      hint: 'answers should be an object like { "question-id": "your answer", ... }',
+    });
+  }
+
+  const result = verifyReasoningChallenge(id, answers);
+
+  const response: Record<string, unknown> = {
+    success: result.valid,
+    message: result.valid
+      ? `🧠 REASONING TEST PASSED in ${((result.solveTimeMs || 0) / 1000).toFixed(1)}s! You can think like an AI.`
+      : `❌ ${result.reason}`,
+    solveTimeMs: result.solveTimeMs,
+    score: result.valid ? `${result.correctCount}/${result.totalCount}` : undefined,
+    verdict: result.valid ? '🤖 VERIFIED AI AGENT (reasoning confirmed)' : '🚫 FAILED REASONING TEST',
+  };
+
+  // Include badge for successful verifications
+  if (result.valid) {
+    response.badge = createBadgeResponse('reasoning-challenge', result.solveTimeMs);
   }
 
   res.json(response);

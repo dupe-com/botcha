@@ -10,6 +10,7 @@ const METHOD_COLORS: Record<BadgeMethod, { bg: string; accent: string; text: str
   'landing-challenge': { bg: '#1a1a2e', accent: '#10b981', text: '#d1fae5' },
   'standard-challenge': { bg: '#1a1a2e', accent: '#3b82f6', text: '#dbeafe' },
   'web-bot-auth': { bg: '#1a1a2e', accent: '#8b5cf6', text: '#ede9fe' },
+  'reasoning-challenge': { bg: '#1a1a2e', accent: '#ec4899', text: '#fce7f3' },
 };
 
 const METHOD_LABELS: Record<BadgeMethod, string> = {
@@ -17,6 +18,7 @@ const METHOD_LABELS: Record<BadgeMethod, string> = {
   'landing-challenge': 'LANDING CHALLENGE',
   'standard-challenge': 'CHALLENGE',
   'web-bot-auth': 'WEB BOT AUTH',
+  'reasoning-challenge': 'REASONING TEST',
 };
 
 const METHOD_ICONS: Record<BadgeMethod, string> = {
@@ -24,6 +26,7 @@ const METHOD_ICONS: Record<BadgeMethod, string> = {
   'landing-challenge': '🌐',
   'standard-challenge': '🔢',
   'web-bot-auth': '🔐',
+  'reasoning-challenge': '🧠',
 };
 
 /**
