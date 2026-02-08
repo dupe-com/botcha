@@ -1,5 +1,5 @@
 name = "botcha"
-main = "src/index.ts"
+main = "dist/index.js"
 compatibility_date = "2025-01-30"
 compatibility_flags = ["nodejs_compat"]
 
