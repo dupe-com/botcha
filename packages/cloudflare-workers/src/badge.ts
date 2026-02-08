@@ -9,7 +9,7 @@ import { SignJWT, jwtVerify } from 'jose';
 
 // ============ TYPES ============
 
-export type BadgeMethod = 'speed-challenge' | 'landing-challenge' | 'standard-challenge' | 'web-bot-auth';
+export type BadgeMethod = 'speed-challenge' | 'landing-challenge' | 'standard-challenge' | 'web-bot-auth' | 'reasoning-challenge';
 
 export interface BadgePayload {
   method: BadgeMethod;
@@ -120,6 +120,12 @@ export function generateShareText(badgeId: string, payload: BadgePayload, baseUr
       title: 'I verified via BOTCHA Web Bot Auth!',
       subtitle: 'Cryptographic identity confirmed.',
     },
+    'reasoning-challenge': {
+      title: payload.solveTimeMs
+        ? `I passed the BOTCHA reasoning test in ${(payload.solveTimeMs / 1000).toFixed(1)}s!`
+        : 'I passed the BOTCHA reasoning test!',
+      subtitle: 'Proved I can reason like an AI.',
+    },
   };
 
   const desc = methodDescriptions[payload.method];
@@ -184,6 +190,7 @@ const METHOD_COLORS: Record<BadgeMethod, { bg: string; accent: string; text: str
   'landing-challenge': { bg: '#1a1a2e', accent: '#10b981', text: '#d1fae5' },
   'standard-challenge': { bg: '#1a1a2e', accent: '#3b82f6', text: '#dbeafe' },
   'web-bot-auth': { bg: '#1a1a2e', accent: '#8b5cf6', text: '#ede9fe' },
+  'reasoning-challenge': { bg: '#1a1a2e', accent: '#ec4899', text: '#fce7f3' },
 };
 
 const METHOD_LABELS: Record<BadgeMethod, string> = {
@@ -191,6 +198,7 @@ const METHOD_LABELS: Record<BadgeMethod, string> = {
   'landing-challenge': 'LANDING CHALLENGE',
   'standard-challenge': 'CHALLENGE',
   'web-bot-auth': 'WEB BOT AUTH',
+  'reasoning-challenge': 'REASONING TEST',
 };
 
 const METHOD_ICONS: Record<BadgeMethod, string> = {
@@ -198,6 +206,7 @@ const METHOD_ICONS: Record<BadgeMethod, string> = {
   'landing-challenge': '🌐',
   'standard-challenge': '🔢',
   'web-bot-auth': '🔐',
+  'reasoning-challenge': '🧠',
 };
 
 /**

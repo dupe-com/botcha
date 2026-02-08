@@ -14,6 +14,8 @@ import {
   verifySpeedChallenge,
   generateStandardChallenge,
   verifyStandardChallenge,
+  generateReasoningChallenge,
+  verifyReasoningChallenge,
   verifyLandingChallenge,
   validateLandingToken,
   solveSpeedChallenge,
@@ -51,7 +53,7 @@ app.use('*', async (c, next) => {
   await next();
   c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.2.0');
   c.header('X-Botcha-Enabled', 'true');
-  c.header('X-Botcha-Methods', 'speed-challenge,standard-challenge,jwt-token');
+  c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
   c.header('X-Botcha-Runtime', 'cloudflare-workers');
 });
@@ -117,6 +119,7 @@ app.get('/', (c) => {
       '/': 'API info',
       '/health': 'Health check',
       '/v1/challenges': 'Generate challenge (GET) or verify (POST)',
+      '/v1/reasoning': 'Reasoning challenge - LLM-only questions (GET/POST)',
       '/v1/token': 'Get challenge for JWT token flow (GET)',
       '/v1/token/verify': 'Verify challenge and get JWT (POST)',
       '/agent-only': 'Protected endpoint (requires JWT)',
@@ -265,6 +268,92 @@ app.post('/v1/token/verify', async (c) => {
       header: 'Authorization: Bearer <token>',
       protectedEndpoints: ['/agent-only'],
     },
+  });
+});
+
+// ============ REASONING CHALLENGE ============
+
+// Get reasoning challenge
+app.get('/v1/reasoning', rateLimitMiddleware, async (c) => {
+  const challenge = await generateReasoningChallenge(c.env.CHALLENGES);
+  return c.json({
+    success: true,
+    type: 'reasoning',
+    warning: '🧠 REASONING CHALLENGE: Answer 3 questions that require AI reasoning!',
+    challenge: {
+      id: challenge.id,
+      questions: challenge.questions,
+      timeLimit: `${challenge.timeLimit / 1000}s`,
+      instructions: challenge.instructions,
+    },
+    tip: 'These questions require reasoning that LLMs can do, but simple scripts cannot.',
+  });
+});
+
+// Verify reasoning challenge
+app.post('/v1/reasoning', async (c) => {
+  const body = await c.req.json<{ id?: string; answers?: Record<string, string> }>();
+  const { id, answers } = body;
+
+  if (!id || !answers) {
+    return c.json({
+      success: false,
+      error: 'Missing id or answers object',
+      hint: 'answers should be an object like { "question-id": "your answer", ... }',
+    }, 400);
+  }
+
+  const result = await verifyReasoningChallenge(id, answers, c.env.CHALLENGES);
+
+  return c.json({
+    success: result.valid,
+    message: result.valid
+      ? `🧠 REASONING TEST PASSED in ${((result.solveTimeMs || 0) / 1000).toFixed(1)}s! You can think like an AI.`
+      : `❌ ${result.reason}`,
+    solveTimeMs: result.solveTimeMs,
+    score: result.valid ? `${result.correctCount}/${result.totalCount}` : undefined,
+    verdict: result.valid ? '🤖 VERIFIED AI AGENT (reasoning confirmed)' : '🚫 FAILED REASONING TEST',
+  });
+});
+
+// Legacy endpoint for reasoning challenge
+app.get('/api/reasoning-challenge', async (c) => {
+  const challenge = await generateReasoningChallenge(c.env.CHALLENGES);
+  return c.json({
+    success: true,
+    warning: '🧠 REASONING CHALLENGE: Answer 3 questions that require AI reasoning!',
+    challenge: {
+      id: challenge.id,
+      questions: challenge.questions,
+      timeLimit: `${challenge.timeLimit / 1000}s`,
+      instructions: challenge.instructions,
+    },
+    tip: 'These questions require reasoning that LLMs can do, but simple scripts cannot.',
+  });
+});
+
+app.post('/api/reasoning-challenge', async (c) => {
+  const body = await c.req.json<{ id?: string; answers?: Record<string, string> }>();
+  const { id, answers } = body;
+
+  if (!id || !answers) {
+    return c.json({
+      success: false,
+      error: 'Missing id or answers object',
+      hint: 'answers should be an object like { "question-id": "your answer", ... }',
+    }, 400);
+  }
+
+  const result = await verifyReasoningChallenge(id, answers, c.env.CHALLENGES);
+
+  return c.json({
+    success: result.valid,
+    message: result.valid
+      ? `🧠 REASONING TEST PASSED in ${((result.solveTimeMs || 0) / 1000).toFixed(1)}s! You can think like an AI.`
+      : `❌ ${result.reason}`,
+    solveTimeMs: result.solveTimeMs,
+    score: result.valid ? `${result.correctCount}/${result.totalCount}` : undefined,
+    verdict: result.valid ? '🤖 VERIFIED AI AGENT (reasoning confirmed)' : '🚫 FAILED REASONING TEST',
   });
 });
 
@@ -516,6 +605,8 @@ export {
   verifySpeedChallenge,
   generateStandardChallenge,
   verifyStandardChallenge,
+  generateReasoningChallenge,
+  verifyReasoningChallenge,
   solveSpeedChallenge,
 } from './challenges';
 
