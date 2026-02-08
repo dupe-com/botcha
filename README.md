@@ -343,3 +343,4 @@ await agent.invoke({
 ```
 
 See [`packages/langchain/README.md`](./packages/langchain/README.md) for full documentation.
+# Test deployment with JWT_SECRET configured
