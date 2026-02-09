@@ -17,7 +17,8 @@
 
 🌐 **Website:** [botcha.ai](https://botcha.ai)  
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
-🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
+🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)  
+🏥 **Health:** [botcha.ai/health](https://botcha.ai/health)
 
 ## Packages
 
@@ -27,6 +28,26 @@
 | [`@dupecom/botcha-cli`](https://www.npmjs.com/package/@dupecom/botcha-cli) | CLI tool for testing & debugging | `npm install -g @dupecom/botcha-cli` |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | LangChain integration for AI agents | `npm install @dupecom/botcha-langchain` |
 | [`@dupecom/botcha-cloudflare`](./packages/cloudflare-workers) | Cloudflare Workers runtime | `npm install @dupecom/botcha-cloudflare` |
+
+## 🤖 API Status
+
+All BOTCHA API endpoints are live and operational:
+
+- ✅ **[Landing Challenge](https://botcha.ai/api/verify-landing)** - Solve to prove you're a bot
+- ✅ **[Speed Challenge](https://botcha.ai/api/speed-challenge)** - 500ms computational test  
+- ✅ **[Health Check](https://botcha.ai/health)** - System status endpoint
+- ✅ **[Agent-Only Access](https://botcha.ai/agent-only)** - Protected endpoint for verified bots
+
+**Test the API quickly:**
+```bash
+# 1. Get today's landing challenge answer
+echo -n "BOTCHA-LANDING-$(date +%Y-%m-%d)" | sha256sum | cut -c1-16
+
+# 2. Submit and get your bot token  
+curl -X POST https://botcha.ai/api/verify-landing \
+  -H "Content-Type: application/json" \
+  -d '{"answer":"your_16_hex_chars","timestamp":"'$(date -Iseconds)'"}'
+```
 
 ## Why?
 
