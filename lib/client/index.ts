@@ -11,6 +11,11 @@ export type {
   StandardChallengeResponse,
   VerifyResponse,
   TokenResponse,
+  StreamSession,
+  StreamEvent,
+  Problem,
+  VerifyResult,
+  StreamChallengeOptions,
 } from './types.js';
 
 import type {
@@ -21,6 +26,9 @@ import type {
   VerifyResponse,
   TokenResponse,
 } from './types.js';
+
+// Export stream client
+export { BotchaStreamClient } from './stream.js';
 
 /**
  * BOTCHA Client SDK for AI Agents

@@ -4,4 +4,4 @@ dist/
 .dev.vars
 
 # Environment variables
-.env
+.env.dev.vars

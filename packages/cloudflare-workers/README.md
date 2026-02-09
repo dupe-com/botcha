@@ -96,7 +96,22 @@ Rate limit headers:
 | `/v1/challenges/:id/verify` | POST | Verify challenge (no JWT) |
 | `/v1/token` | GET | Get challenge for JWT flow |
 | `/v1/token/verify` | POST | Verify challenge → get JWT token |
+| `/v1/challenge/stream` | GET | SSE streaming challenge (AI-native) |
+| `/v1/challenge/stream/:session` | POST | SSE action handler (go, solve) |
 | `/agent-only` | GET | Protected endpoint (requires JWT) |
+
+### SSE Streaming (AI-Native)
+
+For AI agents that prefer conversational flows, BOTCHA offers Server-Sent Events streaming:
+
+**Flow:**
+1. `GET /v1/challenge/stream` - Opens SSE connection, receive welcome/instructions/ready events
+2. `POST /v1/challenge/stream/:session` with `{action:"go"}` - Start challenge timer (fair timing!)
+3. Receive `challenge` event with problems
+4. `POST /v1/challenge/stream/:session` with `{action:"solve", answers:[...]}` - Submit solution
+5. Receive `result` event with JWT token
+
+**Benefits:** Timer starts when you say "GO" (not on connection), natural back-and-forth handshake.
 
 ### Legacy API (v0 - backward compatible)
 

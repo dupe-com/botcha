@@ -27,7 +27,7 @@ app.use((req, res, next) => {
   // BOTCHA discovery headers
   res.header('X-Botcha-Version', '0.3.0');
   res.header('X-Botcha-Enabled', 'true');
-  res.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,web-bot-auth');
+  res.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,web-bot-auth,sse-streaming');
   res.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
   
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -51,6 +51,7 @@ app.get('/api', (req, res) => {
       '/api/speed-challenge': '⚡ Speed challenge - 500ms to solve 5 problems',
       '/api/reasoning-challenge': '🧠 Reasoning challenge - LLM-only questions',
       '/api/hybrid-challenge': '🔥 Hybrid challenge - speed + reasoning combined',
+      '/v1/challenge/stream': '🔄 SSE streaming challenge (AI-native)',
       '/agent-only': 'Protected endpoint',
     },
     verification: {
@@ -237,6 +238,181 @@ app.post('/api/hybrid-challenge', (req, res) => {
   }
 
   res.json(response);
+});
+
+// 🔄 SSE STREAMING CHALLENGE - AI-native conversational flow
+// Session storage for local dev (in production, this would be KV)
+const streamSessions = new Map<string, {
+  status: 'waiting' | 'ready' | 'challenged' | 'completed';
+  problems?: { num: number; operation: string }[];
+  expectedAnswers?: string[];
+  timerStart?: number;
+  createdAt: number;
+}>();
+
+function generateStreamSessionId(): string {
+  return `sess_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function formatSSE(event: string, data: any): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+app.get('/v1/challenge/stream', (req, res) => {
+  const sessionId = generateStreamSessionId();
+  
+  // Create session
+  streamSessions.set(sessionId, {
+    status: 'waiting',
+    createdAt: Date.now(),
+  });
+  
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  // Send welcome event
+  res.write(formatSSE('welcome', {
+    session: sessionId,
+    version: '0.3.0',
+    message: 'Welcome to BOTCHA streaming challenge!',
+  }));
+  
+  // Send instructions
+  res.write(formatSSE('instructions', {
+    message: 'I will test if you\'re really an AI agent.',
+  }));
+  
+  res.write(formatSSE('instructions', {
+    message: 'When you\'re ready, send a POST request with {action: "go"} to start.',
+  }));
+  
+  // Send ready event
+  res.write(formatSSE('ready', {
+    message: 'Send {action: "go"} to /v1/challenge/stream/:session when ready',
+    endpoint: `/v1/challenge/stream/${sessionId}`,
+    session: sessionId,
+  }));
+  
+  // Keep connection alive with heartbeat
+  const heartbeat = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, 15000);
+  
+  // Cleanup on close
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    // Clean up old sessions
+    setTimeout(() => {
+      streamSessions.delete(sessionId);
+    }, 60000);
+  });
+});
+
+app.post('/v1/challenge/stream/:session', (req, res) => {
+  const sessionId = req.params.session;
+  const session = streamSessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(404).json({
+      success: false,
+      error: 'Session not found or expired',
+    });
+  }
+  
+  const { action, answers } = req.body;
+  
+  if (action === 'go') {
+    // Generate challenge
+    const challenge = generateSpeedChallenge();
+    
+    // Store in session
+    session.problems = challenge.challenges;
+    session.timerStart = Date.now();
+    session.status = 'challenged';
+    
+    // Calculate expected answers
+    session.expectedAnswers = challenge.challenges.map(p => 
+      crypto.createHash('sha256').update(p.num.toString()).digest('hex').slice(0, 8)
+    );
+    
+    streamSessions.set(sessionId, session);
+    
+    return res.json({
+      success: true,
+      event: 'challenge',
+      data: {
+        problems: challenge.challenges,
+        timeLimit: 500,
+        message: 'GO! Timer started.',
+      },
+    });
+  }
+  
+  if (action === 'solve') {
+    if (!session.timerStart || !session.expectedAnswers) {
+      return res.status(400).json({
+        success: false,
+        error: 'Must send "go" action first',
+      });
+    }
+    
+    const solveTime = Date.now() - session.timerStart;
+    
+    // Verify answers
+    const correct = answers.every((ans: string, i: number) => 
+      ans.toLowerCase() === session.expectedAnswers![i].toLowerCase()
+    );
+    
+    if (!correct) {
+      return res.json({
+        success: false,
+        event: 'result',
+        data: {
+          success: false,
+          message: '❌ Wrong answers!',
+          verdict: '🚫 VERIFICATION FAILED',
+        },
+      });
+    }
+    
+    if (solveTime > 500) {
+      return res.json({
+        success: false,
+        event: 'result',
+        data: {
+          success: false,
+          message: `❌ Too slow! Took ${solveTime}ms, limit was 500ms`,
+          solveTimeMs: solveTime,
+          verdict: '🚫 LIKELY HUMAN (too slow)',
+        },
+      });
+    }
+    
+    // Success!
+    session.status = 'completed';
+    
+    // Generate token (simple for local dev)
+    const token = `local_dev_${crypto.randomBytes(16).toString('hex')}`;
+    
+    return res.json({
+      success: true,
+      event: 'result',
+      data: {
+        success: true,
+        message: `⚡ STREAMING CHALLENGE PASSED in ${solveTime}ms!`,
+        solveTimeMs: solveTime,
+        verdict: '🤖 VERIFIED AI AGENT',
+        token,
+      },
+    });
+  }
+  
+  return res.status(400).json({
+    success: false,
+    error: 'Invalid action. Must be "go" or "solve"',
+  });
 });
 
 // 🤖 LANDING PAGE CHALLENGE - For bots that discover the embedded challenge

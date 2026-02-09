@@ -26,6 +26,7 @@ import {
 import { generateToken, verifyToken, extractBearerToken } from './auth';
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
+import streamRoutes from './routes/stream';
 
 // ============ TYPES ============
 type Bindings = {
@@ -49,6 +50,9 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // ============ MIDDLEWARE ============
 app.use('*', cors());
+
+// ============ MOUNT ROUTES ============
+app.route('/', streamRoutes);
 
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
@@ -127,6 +131,8 @@ app.get('/', (c) => {
       '/v1/reasoning': 'Reasoning-only challenge - LLM questions (GET/POST)',
       '/v1/token': 'Get challenge for JWT token flow (GET)',
       '/v1/token/verify': 'Verify challenge and get JWT (POST)',
+      '/v1/challenge/stream': 'SSE streaming challenge (interactive flow)',
+      '/v1/challenge/stream/:session': 'SSE session actions (POST: go/solve)',
       '/agent-only': 'Protected endpoint (requires JWT)',
       '/badge/:id': 'Badge verification page (HTML)',
       '/badge/:id/image': 'Badge image (SVG)',

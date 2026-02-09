@@ -56,3 +56,40 @@ export interface TokenResponse {
   };
   nextStep?: string;
 }
+
+/**
+ * Stream-related types for BotchaStreamClient
+ */
+
+export interface StreamSession {
+  session: string;
+  url: string;
+}
+
+export interface StreamEvent {
+  event: 'ready' | 'instruction' | 'challenge' | 'result' | 'error';
+  data: any;
+}
+
+export interface Problem {
+  num: number;
+  operation?: string;
+}
+
+export interface VerifyResult {
+  success: boolean;
+  token?: string;
+  message?: string;
+  solveTimeMs?: number;
+}
+
+export interface StreamChallengeOptions {
+  /** Callback for instruction messages */
+  onInstruction?: (message: string) => void;
+  /** Callback to solve challenges - return answers array */
+  onChallenge?: (problems: Problem[]) => Promise<string[]> | string[];
+  /** Callback for final verification result */
+  onResult?: (result: VerifyResult) => void;
+  /** Timeout for the full verification flow in milliseconds (default: 30000) */
+  timeout?: number;
+}

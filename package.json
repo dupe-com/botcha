@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
+    "dev": "cd packages/cloudflare-workers && wrangler dev",
     "prepublishOnly": "bun run build",
     "test": "vitest",
     "test:ui": "vitest --ui",

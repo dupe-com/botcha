@@ -63,6 +63,65 @@ Challenge: [645234, 891023, 334521, 789012, 456789]
 Task: SHA256 each number, return first 8 hex chars
 Time limit: 500ms```
 
+## 🔄 SSE Streaming Flow (AI-Native)
+
+For AI agents that prefer a **conversational handshake**, BOTCHA offers **Server-Sent Events (SSE)** streaming:
+
+### Why SSE for AI Agents?
+
+- ⏱️ **Fair timing**: Timer starts when you say "GO", not on connection
+- 💬 **Conversational**: Natural back-and-forth handshake protocol
+- 📡 **Real-time**: Stream events as they happen, no polling
+
+### Event Sequence
+
+```
+1. welcome    → Receive session ID and version
+2. instructions → Read what BOTCHA will test
+3. ready      → Get endpoint to POST "GO"
+4. GO         → Timer starts NOW (fair!)
+5. challenge  → Receive problems and solve
+6. solve      → POST your answers
+7. result     → Get verification token
+```
+
+### Usage with SDK
+
+```typescript
+import { BotchaStreamClient } from '@dupecom/botcha/client';
+
+const client = new BotchaStreamClient('https://botcha.ai');
+const token = await client.verify({
+  onInstruction: (msg) => console.log('BOTCHA:', msg),
+});
+// Token ready to use!
+```
+
+### SSE Event Flow Example
+
+```
+event: welcome
+data: {"session":"sess_123","version":"0.3.0"}
+
+event: instructions  
+data: {"message":"I will test if you're an AI..."}
+
+event: ready
+data: {"message":"Send GO when ready","endpoint":"/v1/challenge/stream/sess_123"}
+
+// POST {action:"go"} → starts timer
+event: challenge
+data: {"problems":[...],"timeLimit":500}
+
+// POST {action:"solve",answers:[...]}
+event: result
+data: {"success":true,"verdict":"🤖 VERIFIED","token":"eyJ..."}
+```
+
+**API Endpoints:**
+- `GET /v1/challenge/stream` - Open SSE connection
+- `POST /v1/challenge/stream/:session` - Send actions (go, solve)
+
 ## 🤖 AI Agent Discovery
 
 BOTCHA is designed to be auto-discoverable by AI agents through multiple standards:
@@ -146,12 +205,50 @@ botcha.verify({
 });
 ```
 
+## Local Development
+
+Run the full BOTCHA service locally with Wrangler (Cloudflare Workers runtime):
+
+```bash
+# Clone and install
+git clone https://github.com/dupe-com/botcha
+cd botcha
+bun install
+
+# Run local dev server (uses Cloudflare Workers)
+bun run dev
+
+# Server runs at http://localhost:8787
+```
+
+**What you get:**
+- ✅ All API endpoints (`/api/*`, `/v1/*`, SSE streaming)
+- ✅ Local KV storage emulation (challenges, rate limits)
+- ✅ Hot reload on file changes
+- ✅ Same code as production (no Express/CF Workers drift)
+
+**Environment variables:**
+- Local secrets in `packages/cloudflare-workers/.dev.vars`
+- JWT_SECRET already configured for local dev
+
 ## Testing
 
 For development, you can bypass BOTCHA with a header:
 
 ```bash
-curl -H "X-Agent-Identity: MyTestAgent/1.0" http://localhost:3000/agent-only
+curl -H "X-Agent-Identity: MyTestAgent/1.0" http://localhost:8787/agent-only
+```
+
+Test the SSE streaming endpoint:
+
+```bash
+# Connect to SSE stream
+curl -N http://localhost:8787/v1/challenge/stream
+
+# After receiving session ID, send GO action
+curl -X POST http://localhost:8787/v1/challenge/stream/sess_123 \
+  -H "Content-Type: application/json" \
+  -d '{"action":"go"}'
 ```
 
 ## API Reference
