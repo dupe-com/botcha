@@ -20,6 +20,443 @@
     }
   ],
   "paths": {
+    "/": {
+      "get": {
+        "summary": "Get API documentation",
+        "description": "Returns comprehensive API documentation (JSON for bots, ASCII art for humans)",
+        "operationId": "getRootInfo",
+        "responses": {
+          "200": {
+            "description": "API documentation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "version": { "type": "string" },
+                    "runtime": { "type": "string" },
+                    "tagline": { "type": "string" },
+                    "description": { "type": "string" },
+                    "quickstart": { "type": "object" },
+                    "endpoints": { "type": "object" },
+                    "challengeTypes": { "type": "object" },
+                    "authentication": { "type": "object" },
+                    "rateLimit": { "type": "object" },
+                    "sdk": { "type": "object" },
+                    "links": { "type": "object" }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns health status of the API",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "runtime": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/challenges": {
+      "get": {
+        "summary": "Generate a challenge (v1 unified endpoint)",
+        "description": "Get a challenge - hybrid by default, or specify type via query param. This is the recommended v1 API endpoint.",
+        "operationId": "getV1Challenge",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["hybrid", "speed", "standard"],
+              "default": "hybrid"
+            },
+            "description": "Challenge type: hybrid (speed+reasoning), speed (SHA256 only), or standard (puzzle)"
+          },
+          {
+            "name": "difficulty",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["easy", "medium", "hard"],
+              "default": "medium"
+            },
+            "description": "Difficulty level (only applies to standard challenges)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "type": { "type": "string" },
+                    "warning": { "type": "string" },
+                    "challenge": { "type": "object" },
+                    "instructions": { "type": "string" },
+                    "tip": { "type": "string" },
+                    "verify_endpoint": { 
+                      "type": "string",
+                      "description": "URL to POST your solution to" 
+                    },
+                    "submit_body": {
+                      "type": "object",
+                      "description": "Example request body format for verification"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/v1/challenges/{id}/verify": {
+      "post": {
+        "summary": "Verify a challenge (v1 unified endpoint)",
+        "description": "Submit your solution to a challenge. Supports hybrid, speed, and standard challenges.",
+        "operationId": "verifyV1Challenge",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Challenge ID from the challenge response"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": ["type", "speed_answers", "reasoning_answers"],
+                    "properties": {
+                      "type": { "type": "string", "enum": ["hybrid"] },
+                      "speed_answers": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "SHA256 hash answers (first 8 hex chars)"
+                      },
+                      "reasoning_answers": {
+                        "type": "object",
+                        "description": "Mapping of question IDs to answers"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "answers"],
+                    "properties": {
+                      "type": { "type": "string", "enum": ["speed"] },
+                      "answers": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "SHA256 hash answers (first 8 hex chars)"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["answer"],
+                    "properties": {
+                      "answer": {
+                        "type": "string",
+                        "description": "Answer to the standard puzzle"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "solveTimeMs": { "type": "number" },
+                    "verdict": { "type": "string" },
+                    "badge": { "$ref": "#/components/schemas/Badge" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body"
+          }
+        }
+      }
+    },
+    "/v1/token": {
+      "get": {
+        "summary": "Get challenge for JWT token flow",
+        "description": "Returns a speed challenge. Solve it and POST to /v1/token/verify to receive a JWT token for authenticated access.",
+        "operationId": "getTokenChallenge",
+        "responses": {
+          "200": {
+            "description": "Token challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "challenge": { "type": "object" },
+                    "token": { "type": "null" },
+                    "nextStep": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/v1/token/verify": {
+      "post": {
+        "summary": "Verify challenge and receive JWT token",
+        "description": "Submit solution to the challenge from GET /v1/token. Returns a JWT Bearer token valid for 1 hour.",
+        "operationId": "verifyTokenChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "answers"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "answers": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Challenge verified, JWT token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "token": { "type": "string" },
+                    "expiresIn": { "type": "string" },
+                    "usage": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing id or answers"
+          },
+          "403": {
+            "description": "Challenge failed"
+          }
+        }
+      }
+    },
+    "/v1/hybrid": {
+      "get": {
+        "summary": "Get hybrid challenge",
+        "description": "Get a hybrid challenge combining speed (SHA256) and reasoning questions. The ultimate bot test.",
+        "operationId": "getHybridChallenge",
+        "responses": {
+          "200": {
+            "description": "Hybrid challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "type": { "type": "string" },
+                    "warning": { "type": "string" },
+                    "challenge": { "type": "object" },
+                    "instructions": { "type": "string" },
+                    "tip": { "type": "string" },
+                    "verify_endpoint": { "type": "string" },
+                    "submit_body": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      },
+      "post": {
+        "summary": "Verify hybrid challenge",
+        "description": "Submit solutions to both speed and reasoning parts of the hybrid challenge.",
+        "operationId": "verifyHybridChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "speed_answers", "reasoning_answers"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "speed_answers": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "reasoning_answers": {
+                    "type": "object",
+                    "description": "Mapping of question IDs to answers"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hybrid challenge verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "speed": { "type": "object" },
+                    "reasoning": { "type": "object" },
+                    "totalTimeMs": { "type": "number" },
+                    "verdict": { "type": "string" },
+                    "badge": { "$ref": "#/components/schemas/Badge" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reasoning": {
+      "get": {
+        "summary": "Get reasoning challenge",
+        "description": "Get a reasoning-only challenge with questions requiring AI/LLM capabilities.",
+        "operationId": "getReasoningChallenge",
+        "responses": {
+          "200": {
+            "description": "Reasoning challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "type": { "type": "string" },
+                    "warning": { "type": "string" },
+                    "challenge": { "type": "object" },
+                    "tip": { "type": "string" },
+                    "verify_endpoint": { "type": "string" },
+                    "submit_body": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      },
+      "post": {
+        "summary": "Verify reasoning challenge",
+        "description": "Submit answers to the reasoning questions.",
+        "operationId": "verifyReasoningChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "answers"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "answers": {
+                    "type": "object",
+                    "description": "Mapping of question IDs to answers"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reasoning challenge verification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "solveTimeMs": { "type": "number" },
+                    "score": { "type": "string" },
+                    "verdict": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api": {
       "get": {
         "summary": "Get API information",
@@ -362,11 +799,14 @@
     "/agent-only": {
       "get": {
         "summary": "Protected endpoint (agents only)",
-        "description": "Access granted only to verified AI agents. Use X-Botcha-Landing-Token header (from /api/verify-landing), solve a challenge, or use Web Bot Auth.",
+        "description": "Access granted only to verified AI agents. Supports two authentication methods: 1) X-Botcha-Landing-Token header (from POST /api/verify-landing), or 2) Authorization: Bearer <token> header (from POST /v1/token/verify).",
         "operationId": "getAgentOnly",
         "security": [
           {
-            "BotchaAuth": []
+            "BotchaLandingToken": []
+          },
+          {
+            "BotchaBearerToken": []
           }
         ],
         "responses": {
@@ -520,6 +960,18 @@
         "in": "header",
         "name": "X-Botcha-Token",
         "description": "Solve a challenge first, then include the challenge ID and answer"
+      },
+      "BotchaLandingToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Botcha-Landing-Token",
+        "description": "Token received from POST /api/verify-landing after solving the landing page challenge"
+      },
+      "BotchaBearerToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token received from POST /v1/token/verify after solving a speed challenge"
       }
     }
   },

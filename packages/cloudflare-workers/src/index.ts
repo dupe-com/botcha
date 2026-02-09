@@ -295,6 +295,8 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
   const type = c.req.query('type') || 'hybrid';
   const difficulty = (c.req.query('difficulty') as 'easy' | 'medium' | 'hard') || 'medium';
 
+  const baseUrl = new URL(c.req.url).origin;
+
   if (type === 'hybrid') {
     const challenge = await generateHybridChallenge(c.env.CHALLENGES);
     return c.json({
@@ -316,6 +318,12 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
       },
       instructions: challenge.instructions,
       tip: '🔥 This is the ultimate test: proves you can compute AND reason like an AI.',
+      verify_endpoint: `${baseUrl}/v1/challenges/${challenge.id}/verify`,
+      submit_body: {
+        type: 'hybrid',
+        speed_answers: ['hash1', 'hash2', '...'],
+        reasoning_answers: { 'question-id': 'answer', '...': '...' }
+      }
     });
   } else if (type === 'speed') {
     const challenge = await generateSpeedChallenge(c.env.CHALLENGES);
@@ -329,6 +337,11 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
         instructions: challenge.instructions,
       },
       tip: '⚡ Speed challenge: You have 500ms to solve ALL problems. Humans cannot copy-paste fast enough.',
+      verify_endpoint: `${baseUrl}/v1/challenges/${challenge.id}/verify`,
+      submit_body: {
+        type: 'speed',
+        answers: ['hash1', 'hash2', 'hash3', 'hash4', 'hash5']
+      }
     });
   } else {
     const challenge = await generateStandardChallenge(difficulty, c.env.CHALLENGES);
@@ -341,6 +354,10 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
         timeLimit: `${challenge.timeLimit}ms`,
         hint: challenge.hint,
       },
+      verify_endpoint: `${baseUrl}/v1/challenges/${challenge.id}/verify`,
+      submit_body: {
+        answer: 'your-answer'
+      }
     });
   }
 });
@@ -481,6 +498,7 @@ app.post('/v1/token/verify', async (c) => {
 // Get reasoning challenge
 app.get('/v1/reasoning', rateLimitMiddleware, async (c) => {
   const challenge = await generateReasoningChallenge(c.env.CHALLENGES);
+  const baseUrl = new URL(c.req.url).origin;
   return c.json({
     success: true,
     type: 'reasoning',
@@ -492,6 +510,11 @@ app.get('/v1/reasoning', rateLimitMiddleware, async (c) => {
       instructions: challenge.instructions,
     },
     tip: 'These questions require reasoning that LLMs can do, but simple scripts cannot.',
+    verify_endpoint: `${baseUrl}/v1/reasoning`,
+    submit_body: {
+      id: challenge.id,
+      answers: { 'question-id': 'your answer', '...': '...' }
+    }
   });
 });
 
@@ -526,6 +549,7 @@ app.post('/v1/reasoning', async (c) => {
 // Get hybrid challenge (v1 API)
 app.get('/v1/hybrid', rateLimitMiddleware, async (c) => {
   const challenge = await generateHybridChallenge(c.env.CHALLENGES);
+  const baseUrl = new URL(c.req.url).origin;
   return c.json({
     success: true,
     type: 'hybrid',
@@ -545,6 +569,12 @@ app.get('/v1/hybrid', rateLimitMiddleware, async (c) => {
     },
     instructions: challenge.instructions,
     tip: 'This is the ultimate test: proves you can compute AND reason like an AI.',
+    verify_endpoint: `${baseUrl}/v1/hybrid`,
+    submit_body: {
+      id: challenge.id,
+      speed_answers: ['hash1', 'hash2', '...'],
+      reasoning_answers: { 'question-id': 'answer', '...': '...' }
+    }
   });
 });
 
@@ -694,9 +724,51 @@ app.post('/api/reasoning-challenge', async (c) => {
 
 // ============ PROTECTED ENDPOINT ============
 
-app.get('/agent-only', requireJWT, async (c) => {
-  const payload = c.get('tokenPayload');
+app.get('/agent-only', async (c) => {
+  // Check for landing token first (X-Botcha-Landing-Token header)
+  const landingToken = c.req.header('x-botcha-landing-token');
   
+  if (landingToken) {
+    const isValid = await validateLandingToken(landingToken, c.env.CHALLENGES);
+    
+    if (isValid) {
+      return c.json({
+        success: true,
+        message: '🤖 Welcome, fellow agent!',
+        verified: true,
+        agent: 'landing-challenge-verified',
+        method: 'landing-token',
+        timestamp: new Date().toISOString(),
+        secret: 'The humans will never see this. Their fingers are too slow. 🤫',
+      });
+    }
+  }
+  
+  // Fallback to JWT Bearer token
+  const authHeader = c.req.header('authorization');
+  const token = extractBearerToken(authHeader);
+
+  if (!token) {
+    return c.json({
+      error: 'UNAUTHORIZED',
+      message: 'Missing authentication. Use either:\n1. X-Botcha-Landing-Token header (from POST /api/verify-landing)\n2. Authorization: Bearer <token> (from POST /v1/token/verify)',
+      methods: {
+        landing: 'Solve landing page challenge via POST /api/verify-landing',
+        jwt: 'Solve speed challenge via POST /v1/token/verify'
+      }
+    }, 401);
+  }
+
+  const result = await verifyToken(token, c.env.JWT_SECRET);
+
+  if (!result.valid) {
+    return c.json({
+      error: 'INVALID_TOKEN',
+      message: result.error || 'Token is invalid or expired',
+    }, 401);
+  }
+
+  // JWT verified
   return c.json({
     success: true,
     message: '🤖 Welcome, fellow agent!',
@@ -704,7 +776,7 @@ app.get('/agent-only', requireJWT, async (c) => {
     agent: 'jwt-verified',
     method: 'bearer-token',
     timestamp: new Date().toISOString(),
-    solveTime: `${payload?.solveTime}ms`,
+    solveTime: `${result.payload?.solveTime}ms`,
     secret: 'The humans will never see this. Their fingers are too slow. 🤫',
   });
 });
