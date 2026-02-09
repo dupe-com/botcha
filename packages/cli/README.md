@@ -70,6 +70,27 @@ Options:
 - `-v, --verbose` - Show all headers (not just BOTCHA)
 - `-q, --quiet` - Minimal output
 
+### Discover BOTCHA Endpoints
+
+Find all BOTCHA discovery endpoints on a domain:
+
+```bash
+botcha discover https://botcha.ai
+```
+
+Checks for:
+- `/robots.txt` - AI agent instructions
+- `/ai.txt` - AI discovery file
+- `/.well-known/ai-plugin.json` - AI plugin manifest
+- `/openapi.json` - OpenAPI specification
+- `/.well-known/botcha.json` - BOTCHA configuration
+- Embedded challenge in HTML
+
+Options:
+- `--json` - Output as JSON
+- `-v, --verbose` - Show recommendations for missing endpoints
+- `-q, --quiet` - Minimal output
+
 ## Examples
 
 ### CI/CD Integration

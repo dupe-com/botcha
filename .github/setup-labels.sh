@@ -2,7 +2,7 @@
 # Setup BOTCHA labels for the repository
 # Run this once: ./.github/setup-labels.sh
 
-REPO="i8ramin/botcha"
+REPO="dupe-com/botcha"
 
 # Create botcha-pending label (yellow)
 gh label create "botcha-pending" \

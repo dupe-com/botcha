@@ -7,6 +7,7 @@ import { testCommand } from './commands/test.js';
 import { solveCommand } from './commands/solve.js';
 import { benchmarkCommand } from './commands/benchmark.js';
 import { headersCommand } from './commands/headers.js';
+import { discoverCommand } from './commands/discover.js';
 
 const program = new Command();
 
@@ -57,6 +58,15 @@ program
   .option('-v, --verbose', 'Show all headers')
   .option('-q, --quiet', 'Minimal output')
   .action(headersCommand);
+
+// Discover command
+program
+  .command('discover <url>')
+  .description('Find all BOTCHA discovery endpoints on a domain')
+  .option('--json', 'Output as JSON')
+  .option('-v, --verbose', 'Show recommendations')
+  .option('-q, --quiet', 'Minimal output')
+  .action(discoverCommand);
 
 // Parse and execute
 program.parse();

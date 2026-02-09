@@ -175,5 +175,5 @@ MIT
 ## Links
 
 - [BOTCHA Documentation](https://botcha.ai)
-- [GitHub Repository](https://github.com/i8ramin/botcha)
+- [GitHub Repository](https://github.com/dupe-com/botcha)
 - [LangChain Documentation](https://js.langchain.com/)

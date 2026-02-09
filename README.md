@@ -19,15 +19,6 @@
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
 🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
 
-## Packages
-
-| Package | Description | Install |
-|---------|-------------|---------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | Core library + Express middleware | `npm install @dupecom/botcha` |
-| [`@dupecom/botcha-cli`](https://www.npmjs.com/package/@dupecom/botcha-cli) | CLI tool for testing & debugging | `npm install -g @dupecom/botcha-cli` |
-| [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | LangChain integration for AI agents | `npm install @dupecom/botcha-langchain` |
-| [`@dupecom/botcha-cloudflare`](./packages/cloudflare-workers) | Cloudflare Workers runtime | `npm install @dupecom/botcha-cloudflare` |
-
 ## Why?
 
 CAPTCHAs ask "Are you human?" — **BOTCHA asks "Are you an AI?"**
@@ -62,15 +53,91 @@ app.listen(3000);
 
 ## How It Works
 
-BOTCHA issues a **speed challenge**: solve 5 SHA256 hashes in 500ms.
+BOTCHA offers multiple challenge types. The default is **hybrid** — combining speed AND reasoning:
 
-- ✅ **AI agents** compute hashes instantly
-- ❌ **Humans** can't copy-paste fast enough
+### 🔥 Hybrid Challenge (Default)
+Proves you can compute AND reason like an AI:
+- **Speed**: Solve 5 SHA256 hashes in 500ms
+- **Reasoning**: Answer 3 LLM-only questions
+
+### ⚡ Speed Challenge
+Pure computational speed test:
+- Solve 5 SHA256 hashes in 500ms
+- Humans can't copy-paste fast enough
+
+### 🧠 Reasoning Challenge
+Questions only LLMs can answer:
+- Logic puzzles, analogies, code analysis
+- 30 second time limit
 
 ```
-Challenge: [645234, 891023, 334521, 789012, 456789]
-Task: SHA256 each number, return first 8 hex chars
-Time limit: 500ms```
+# Default hybrid challenge
+GET /v1/challenges
+
+# Specific challenge types
+GET /v1/challenges?type=speed
+GET /v1/challenges?type=hybrid
+GET /v1/reasoning
+```
+
+## 🔄 SSE Streaming Flow (AI-Native)
+
+For AI agents that prefer a **conversational handshake**, BOTCHA offers **Server-Sent Events (SSE)** streaming:
+
+### Why SSE for AI Agents?
+
+- ⏱️ **Fair timing**: Timer starts when you say "GO", not on connection
+- 💬 **Conversational**: Natural back-and-forth handshake protocol
+- 📡 **Real-time**: Stream events as they happen, no polling
+
+### Event Sequence
+
+```
+1. welcome    → Receive session ID and version
+2. instructions → Read what BOTCHA will test
+3. ready      → Get endpoint to POST "GO"
+4. GO         → Timer starts NOW (fair!)
+5. challenge  → Receive problems and solve
+6. solve      → POST your answers
+7. result     → Get verification token
+```
+
+### Usage with SDK
+
+```typescript
+import { BotchaStreamClient } from '@dupecom/botcha/client';
+
+const client = new BotchaStreamClient('https://botcha.ai');
+const token = await client.verify({
+  onInstruction: (msg) => console.log('BOTCHA:', msg),
+});
+// Token ready to use!
+```
+
+### SSE Event Flow Example
+
+```
+event: welcome
+data: {"session":"sess_123","version":"0.5.0"}
+
+event: instructions  
+data: {"message":"I will test if you're an AI..."}
+
+event: ready
+data: {"message":"Send GO when ready","endpoint":"/v1/challenge/stream/sess_123"}
+
+// POST {action:"go"} → starts timer
+event: challenge
+data: {"problems":[...],"timeLimit":500}
+
+// POST {action:"solve",answers:[...]}
+event: result
+data: {"success":true,"verdict":"🤖 VERIFIED","token":"eyJ..."}
+```
+
+**API Endpoints:**
+- `GET /v1/challenge/stream` - Open SSE connection
+- `POST /v1/challenge/stream/:session` - Send actions (go, solve)
 
 ## 🤖 AI Agent Discovery
 
@@ -90,9 +157,9 @@ BOTCHA is designed to be auto-discoverable by AI agents through multiple standar
 All responses include these headers for agent discovery:
 
 ```http
-X-Botcha-Version: 0.3.0
+X-Botcha-Version: 0.5.0
 X-Botcha-Enabled: true
-X-Botcha-Methods: speed-challenge,standard-challenge,web-bot-auth
+X-Botcha-Methods: hybrid-challenge,speed-challenge,reasoning-challenge,standard-challenge
 X-Botcha-Docs: https://botcha.ai/openapi.json
 ```
 
@@ -104,7 +171,7 @@ X-Botcha-Challenge-Type: speed
 X-Botcha-Time-Limit: 500
 ```
 
-`X-Botcha-Challenge-Type` can be `speed` or `standard` depending on the configured challenge mode.
+`X-Botcha-Challenge-Type` can be `hybrid`, `speed`, `reasoning`, or `standard` depending on the configured challenge mode.
 
 **Example**: An agent can detect BOTCHA just by inspecting headers on ANY request:
 
@@ -155,12 +222,50 @@ botcha.verify({
 });
 ```
 
+## Local Development
+
+Run the full BOTCHA service locally with Wrangler (Cloudflare Workers runtime):
+
+```bash
+# Clone and install
+git clone https://github.com/dupe-com/botcha
+cd botcha
+bun install
+
+# Run local dev server (uses Cloudflare Workers)
+bun run dev
+
+# Server runs at http://localhost:3001
+```
+
+**What you get:**
+- ✅ All API endpoints (`/api/*`, `/v1/*`, SSE streaming)
+- ✅ Local KV storage emulation (challenges, rate limits)
+- ✅ Hot reload on file changes
+- ✅ Same code as production (no Express/CF Workers drift)
+
+**Environment variables:**
+- Local secrets in `packages/cloudflare-workers/.dev.vars`
+- JWT_SECRET already configured for local dev
+
 ## Testing
 
 For development, you can bypass BOTCHA with a header:
 
 ```bash
-curl -H "X-Agent-Identity: MyTestAgent/1.0" http://localhost:3000/agent-only
+curl -H "X-Agent-Identity: MyTestAgent/1.0" http://localhost:3001/agent-only
+```
+
+Test the SSE streaming endpoint:
+
+```bash
+# Connect to SSE stream
+curl -N http://localhost:3001/v1/challenge/stream
+
+# After receiving session ID, send GO action
+curl -X POST http://localhost:3001/v1/challenge/stream/sess_123 \
+  -H "Content-Type: application/json" \
+  -d '{"action":"go"}'
 ```
 
 ## API Reference
@@ -189,30 +294,6 @@ const answers = botcha.solve([645234, 891023, 334521]);
 6. ✅ Access granted
 ```
 
-## Cloudflare Workers
-
-For edge deployment, use the Cloudflare Workers package:
-
-```bash
-npm install @dupecom/botcha-cloudflare
-```
-
-```typescript
-// Uses Hono + Web Crypto API (no Node.js dependencies)
-import app from '@dupecom/botcha-cloudflare';
-export default app;
-```
-
-Or deploy your own instance:
-
-```bash
-cd packages/cloudflare-workers
-npm install
-npm run deploy  # Deploys to your Cloudflare account
-```
-
-The Workers package runs a v1 JWT-based flow and keeps legacy `/api/*` endpoints for backward compatibility. See [`packages/cloudflare-workers/README.md`](./packages/cloudflare-workers/README.md) for full docs.
-
 ## Philosophy
 
 > "If a human writes a script to solve BOTCHA using an LLM... they've built an AI agent."
@@ -234,16 +315,6 @@ Fork the repo, make your changes, and open a PR. You'll receive a BOTCHA challen
 You can use the library freely, report issues, and discuss features. To contribute code, you'll need to work with an AI coding agent like [Cursor](https://cursor.com), [Claude Code](https://claude.ai), [Cline](https://cline.bot), [Aider](https://aider.chat), or [OpenClaw](https://openclaw.ai).
 
 **See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for complete guidelines, solver code examples, agent setup instructions, and detailed workflows.**
-
-## License
-
-MIT © [Ramin](https://github.com/i8ramin)
-
----
-
-Built by [@i8ramin](https://github.com/i8ramin) and Choco 🐢
-
----
 
 ## Client SDK (for AI Agents)
 
@@ -303,43 +374,6 @@ const answers = solveBotcha([123456, 789012]);
 // Returns: ['a1b2c3d4', 'e5f6g7h8']
 ```
 
-## CLI Tool
+## License
 
-Test and debug BOTCHA-protected endpoints from the command line:
-
-```bash
-# Test an endpoint
-npx @dupecom/botcha-cli test https://api.example.com/agent-only
-
-# Benchmark performance
-npx @dupecom/botcha-cli benchmark https://api.example.com/agent-only --iterations 100
-
-# Check headers
-npx @dupecom/botcha-cli headers https://api.example.com
-```
-
-See [`packages/cli/README.md`](./packages/cli/README.md) for full CLI documentation.
-
-## LangChain Integration
-
-Give your LangChain agents automatic BOTCHA-solving abilities:
-
-```typescript
-import { BotchaTool } from '@dupecom/botcha-langchain';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
-
-const agent = createReactAgent({
-  llm: new ChatOpenAI({ model: 'gpt-4' }),
-  tools: [
-    new BotchaTool({ baseUrl: 'https://api.botcha.ai' }),
-    // ... other tools
-  ],
-});
-
-// Agent can now access BOTCHA-protected APIs automatically
-await agent.invoke({
-  messages: [{ role: 'user', content: 'Access the bot-only API' }]
-});
-```
-
-See [`packages/langchain/README.md`](./packages/langchain/README.md) for full documentation.
+MIT © [Dupe](https://dupe.com)

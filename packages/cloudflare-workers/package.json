@@ -1,14 +1,25 @@
 {
   "name": "@dupecom/botcha-cloudflare",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "BOTCHA for Cloudflare Workers - Prove you're a bot. Humans need not apply.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "bun run scripts/dev-intro.ts",
     "deploy": "wrangler deploy",
     "build": "tsc",
+    "prepublishOnly": "bun run build",
     "test": "vitest"
   },
   "keywords": [
@@ -25,7 +36,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/i8ramin/botcha"
+    "url": "https://github.com/dupe-com/botcha"
   },
   "homepage": "https://botcha.ai",
   "dependencies": {
@@ -35,7 +46,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250124.0",
     "typescript": "^5.9.3",
-    "wrangler": "^4.5.0",
+    "wrangler": "^4.63.0",
     "vitest": "^3.0.0"
   }
 }

@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "botcha",
@@ -31,11 +31,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/i8ramin/botcha"
+    "url": "https://github.com/dupe-com/botcha"
   },
   "homepage": "https://botcha.ai",
   "dependencies": {
-    "@dupecom/botcha": "^0.4.1",
+    "@dupecom/botcha": "^0.4.3",
     "chalk": "^5.3.0",
     "commander": "^12.1.0"
   },

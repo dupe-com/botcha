@@ -1,6 +1,6 @@
 {
   "name": "@dupecom/botcha",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Prove you're a bot. Humans need not apply. Reverse CAPTCHA for AI-only APIs.",
   "workspaces": [
     "packages/*"
@@ -25,8 +25,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
-    "prepublishOnly": "npm run build",
+    "dev": "cd packages/cloudflare-workers && bun run dev",
+    "prepublishOnly": "bun run build",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
@@ -54,11 +54,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/i8ramin/botcha"
+    "url": "https://github.com/dupe-com/botcha"
   },
   "homepage": "https://botcha.ai",
   "bugs": {
-    "url": "https://github.com/i8ramin/botcha/issues"
+    "url": "https://github.com/dupe-com/botcha/issues"
   },
   "peerDependencies": {
     "express": "^4.0.0 || ^5.0.0"
@@ -80,5 +80,6 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "packageManager": "bun@1.2.23"
 }

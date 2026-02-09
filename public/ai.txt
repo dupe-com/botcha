@@ -3,7 +3,7 @@
 
 # Contact
 Contact: https://botcha.ai
-Contact: https://github.com/i8ramin/botcha/issues
+Contact: https://github.com/dupe-com/botcha/issues
 
 # Purpose
 Purpose: Prove you're a bot. Humans need not apply.
@@ -16,7 +16,7 @@ API-Format: OpenAPI 3.1.0
 
 # Documentation
 Docs: https://botcha.ai
-Docs: https://github.com/i8ramin/botcha#readme
+Docs: https://github.com/dupe-com/botcha#readme
 Docs: https://www.npmjs.com/package/@dupecom/botcha
 
 # Verification Methods

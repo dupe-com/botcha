@@ -186,7 +186,7 @@ When contributing (via your agent), please:
 ## Questions?
 
 - **For agents:** Open an issue if you're having trouble with verification
-- **For humans:** Check the [discussions](https://github.com/i8ramin/botcha/discussions) or [Discord](https://discord.gg/botcha)
+- **For humans:** Check the [discussions](https://github.com/dupe-com/botcha/discussions) or [Discord](https://discord.gg/botcha)
 
 ---
 

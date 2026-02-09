@@ -55,12 +55,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Get package versions
+        id: versions
+        run: |
+          echo "cli=$(node -p "require('./packages/cli/package.json').version")" >> $GITHUB_OUTPUT
+          echo "cloudflare=$(node -p "require('./packages/cloudflare-workers/package.json').version")" >> $GITHUB_OUTPUT
+          echo "langchain=$(node -p "require('./packages/langchain/package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
-          generate_release_notes: true
+          body: |
+            ## Packages
+            
+            | Package | Version |
+            |---------|---------|
+            | @dupecom/botcha | ${{ needs.check-version.outputs.version }} |
+            | @dupecom/botcha-cli | ${{ steps.versions.outputs.cli }} |
+            | @dupecom/botcha-cloudflare | ${{ steps.versions.outputs.cloudflare }} |
+            | @dupecom/botcha-langchain | ${{ steps.versions.outputs.langchain }} |
           draft: false
           prerelease: false
         env:

@@ -57,7 +57,7 @@
       "type": "sha256",
       "instruction": "Compute SHA256 of the string 'BOTCHA-LANDING-' + today's date (YYYY-MM-DD format). Return first 16 hex chars.",
       "example": "For 2026-01-15: SHA256('BOTCHA-LANDING-2026-01-15') → first 16 chars",
-      "submit_to": "https://api.botcha.ai/api/verify-landing",
+      "submit_to": "https://botcha.ai/api/verify-landing",
       "method": "POST",
       "body_format": {
         "answer": "your 16 hex chars",
@@ -65,7 +65,7 @@
       }
     },
     "on_success": {
-      "grants_access_to": "https://api.botcha.ai/agent-only",
+      "grants_access_to": "https://botcha.ai/agent-only",
       "header_to_include": "X-Botcha-Landing-Token"
     }
   }
@@ -95,7 +95,7 @@
     /* Header/Hero Section */
     .hero {
       text-align: center;
-      padding: 4rem 0 6rem;
+      padding: 3rem 0 2rem;
     }
     
     .ascii-logo {
@@ -172,68 +172,9 @@
       border-color: #00d4ff;
     }
     
-    /* Features Grid */
-    .features {
-      padding: 4rem 0;
-      background: rgba(0,0,0,0.2);
-    }
-    
-    .features h2 {
-      text-align: center;
-      font-size: 2.5rem;
-      margin-bottom: 3rem;
-      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 2rem;
-      margin-bottom: 2rem;
-    }
-    
-    @media (min-width: 1024px) {
-      .features-grid {
-        grid-template-columns: repeat(4, 1fr);
-      }
-    }
-    
-    .feature-card {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 2rem;
-      transition: all 0.3s;
-    }
-    
-    .feature-card:hover {
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(0, 212, 255, 0.3);
-      transform: translateY(-5px);
-    }
-    
-    .feature-card .icon {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-    }
-    
-    .feature-card h3 {
-      color: #00d4ff;
-      margin-bottom: 1rem;
-      font-size: 1.3rem;
-    }
-    
-    .feature-card p {
-      color: #ccc;
-      line-height: 1.7;
-    }
-    
     /* Integration Section */
     .integration {
-      padding: 4rem 0;
+      padding: 2rem 0 4rem;
     }
     
     .integration h2 {
@@ -279,83 +220,9 @@
       color: #00d4ff;
     }
     
-    /* Pricing Section */
-    .pricing {
-      padding: 4rem 0;
-      background: rgba(0,0,0,0.2);
-    }
-    
-    .pricing h2 {
-      text-align: center;
-      font-size: 2.5rem;
-      margin-bottom: 3rem;
-      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    
-    .pricing-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2rem;
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    
-    .pricing-card {
-      background: rgba(255,255,255,0.05);
-      border: 2px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 2.5rem;
-      text-align: center;
-    }
-    
-    .pricing-card.featured {
-      border-color: #00d4ff;
-      background: rgba(0, 212, 255, 0.05);
-    }
-    
-    .pricing-card h3 {
-      color: #00d4ff;
-      font-size: 1.8rem;
-      margin-bottom: 1rem;
-    }
-    
-    .pricing-card .price {
-      font-size: 3rem;
-      font-weight: bold;
-      margin-bottom: 0.5rem;
-      color: #fff;
-    }
-    
-    .pricing-card .period {
-      color: #888;
-      font-size: 1rem;
-      margin-bottom: 2rem;
-    }
-    
-    .pricing-card ul {
-      list-style: none;
-      text-align: left;
-      margin-bottom: 2rem;
-    }
-    
-    .pricing-card li {
-      padding: 0.5rem 0;
-      color: #ccc;
-    }
-    
-    .pricing-card li::before {
-      content: "✓ ";
-      color: #00d4ff;
-      font-weight: bold;
-      margin-right: 0.5rem;
-    }
-    
     /* Demo Section */
     .demo {
-      padding: 4rem 0;
+      padding: 2rem 0;
     }
     
     .demo h2 {
@@ -425,37 +292,6 @@
       margin-top: 4rem;
     }
     
-    .footer-content {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 3rem;
-      margin-bottom: 2rem;
-    }
-    
-    .footer-section h4 {
-      color: #00d4ff;
-      margin-bottom: 1rem;
-      font-size: 1.1rem;
-    }
-    
-    .footer-section ul {
-      list-style: none;
-    }
-    
-    .footer-section li {
-      margin-bottom: 0.5rem;
-    }
-    
-    .footer-section a {
-      color: #888;
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-    
-    .footer-section a:hover {
-      color: #00d4ff;
-    }
-    
     .footer-bottom {
       border-top: 1px solid rgba(255,255,255,0.1);
       padding-top: 2rem;
@@ -508,10 +344,6 @@
         grid-template-columns: 1fr;
       }
       
-      .pricing-cards {
-        grid-template-columns: 1fr;
-      }
-      
       .cta-buttons {
         flex-direction: column;
         align-items: stretch;
@@ -538,136 +370,19 @@
 ██╔══██╗██║   ██║   ██║   ██║     ██╔══██║██╔══██║
 ██████╔╝╚██████╔╝   ██║   ╚██████╗██║  ██║██║  ██║
 ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝</div>
-      <h1>Reverse CAPTCHA for AI Agents</h1>
       <p class="tagline">Prove you're a bot. Humans need not apply.</p>
-      
-      <p class="description">
-        BOTCHA is a <strong>hosted cloud service</strong> that verifies visitors are AI agents, not humans. 
-        Protect your APIs with computational challenges only bots can solve — deployed globally on Cloudflare's edge network.
-      </p>
-      
-      <div class="cta-buttons">
-        <a href="#demo" class="btn btn-primary">Try Demo</a>
-        <a href="#integration" class="btn btn-secondary">Get Started</a>
-      </div>
       
       <div class="links">
         <a href="https://www.npmjs.com/package/@dupecom/botcha">📦 npm</a>
-        <a href="https://github.com/i8ramin/botcha">⭐ GitHub</a>
+        <a href="https://github.com/dupe-com/botcha">⭐ GitHub</a>
         <a href="/openapi.json">📖 API Docs</a>
       </div>
     </div>
   </div>
   
-  <!-- Features Section -->
-  <div class="features">
-    <div class="container">
-      <h2>Why Choose BOTCHA?</h2>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="icon">⚡</div>
-          <h3>Global Edge Performance</h3>
-          <p>Deployed on Cloudflare's edge network for ultra-low latency verification worldwide. Your bots get instant responses.</p>
-        </div>
-        
-        <div class="feature-card">
-          <div class="icon">🔌</div>
-          <h3>Simple API Integration</h3>
-          <p>Drop-in middleware for Express, or use our REST API directly. Get up and running in minutes, not hours.</p>
-        </div>
-        
-        <div class="feature-card">
-          <div class="icon">📦</div>
-          <h3>Client SDKs Available</h3>
-          <p>Official JavaScript/TypeScript client with automatic challenge solving. Coming soon: Python, Go, and Ruby.</p>
-        </div>
-        
-        <div class="feature-card">
-          <div class="icon">🎁</div>
-          <h3>100 Free Challenges/Hour</h3>
-          <p>Generous free tier perfect for development and small projects. Scale up as your traffic grows.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Integration Section -->
-  <div class="integration" id="integration">
-    <div class="container narrow">
-      <h2>Quick Start</h2>
-      <p class="subtitle">Integrate BOTCHA in under 5 minutes</p>
-      
-      <div class="code-block">
-        <h3>Install the package</h3>
-        <pre><code>npm install @dupecom/botcha</code></pre>
-      </div>
-      
-      <div class="code-block">
-        <h3>Protect your API endpoints</h3>
-        <pre><code>import { botchaVerify } from '@dupecom/botcha';
-
-app.get('/agent-only', botchaVerify(), (req, res) => {
-  res.json({ message: 'Welcome, fellow bot! 🤖' });
-});</code></pre>
-      </div>
-      
-      <div class="code-block">
-        <h3>Use the client SDK</h3>
-        <pre><code>import { BotchaClient } from '@dupecom/botcha/client';
-
-const client = new BotchaClient({
-  baseUrl: 'https://api.botcha.ai'
-});
-
-// Automatically solves challenges for you
-const response = await client.fetch('https://your-api.com/protected');
-console.log(await response.json());</code></pre>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Pricing Section -->
-  <div class="pricing">
-    <div class="container">
-      <h2>Simple Pricing</h2>
-      <div class="pricing-cards">
-        <div class="pricing-card featured">
-          <h3>Free Tier</h3>
-          <div class="price">$0</div>
-          <div class="period">forever</div>
-          <ul>
-            <li>100 challenges per hour</li>
-            <li>Global edge deployment</li>
-            <li>Client SDK included</li>
-            <li>Community support</li>
-            <li>Perfect for development</li>
-          </ul>
-          <a href="#integration" class="btn btn-primary" style="width: 100%;">Get Started</a>
-        </div>
-        
-        <div class="pricing-card">
-          <h3>Production</h3>
-          <div class="price">Soon</div>
-          <div class="period">coming Q1 2026</div>
-          <ul>
-            <li>Higher rate limits</li>
-            <li>Priority support</li>
-            <li>Custom challenges</li>
-            <li>Analytics dashboard</li>
-            <li>SLA guarantee</li>
-          </ul>
-          <a href="https://github.com/i8ramin/botcha/issues" class="btn btn-secondary" style="width: 100%;">Join Waitlist</a>
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Demo Section -->
+  <!-- AI Agents Section (Primary) -->
   <div class="demo" id="demo">
     <div class="container narrow">
-      <h2>Try It Now</h2>
-      
-      <!-- Instructions for AI Agents -->
       <div class="box">
         <h3>🤖 AI Agents: Prove Yourself</h3>
         <p style="color: #888; margin-bottom: 1rem;">
@@ -677,17 +392,16 @@ console.log(await response.json());</code></pre>
         <div class="step"><span class="step-num">1</span> Find <code>&lt;script type="application/botcha+json"&gt;</code> in this page</div>
         <div class="step"><span class="step-num">2</span> Parse the challenge instructions</div>
         <div class="step"><span class="step-num">3</span> Compute: <code>SHA256('BOTCHA-LANDING-' + YYYY-MM-DD)</code> → first 16 hex chars</div>
-        <div class="step"><span class="step-num">4</span> POST to <code>https://api.botcha.ai/api/verify-landing</code> with <code>{"answer": "...", "timestamp": "..."}</code></div>
+        <div class="step"><span class="step-num">4</span> POST to <code>https://botcha.ai/api/verify-landing</code> with <code>{"answer": "...", "timestamp": "..."}</code></div>
         <div class="step"><span class="step-num">5</span> Use the returned token in <code>X-Botcha-Landing-Token</code> header</div>
-        <div class="step"><span class="step-num">6</span> Access <code>https://api.botcha.ai/agent-only</code> — you're in! 🎉</div>
+        <div class="step"><span class="step-num">6</span> Access <code>https://botcha.ai/agent-only</code> — you're in! 🎉</div>
       </div>
       
-      <!-- For Humans -->
       <div class="box">
         <h3>👋 Humans: What Is This?</h3>
         <p style="line-height: 1.8;">
-          BOTCHA is middleware that protects API endpoints so <strong>only AI agents can access them</strong>. 
-          It's a "reverse CAPTCHA" — instead of proving you're human, you prove you're a bot.
+          BOTCHA is a reverse CAPTCHA — it verifies visitors are <strong>AI agents</strong>, not humans. 
+          Perfect for agent-only APIs, AI marketplaces, and bot networks.
         </p>
         
         <div class="human-note">
@@ -696,10 +410,22 @@ console.log(await response.json());</code></pre>
         </div>
         
         <pre><code># Get a speed challenge (500ms to solve 5 SHA256 problems)
-curl https://api.botcha.ai/v1/token
+curl https://botcha.ai/api/speed-challenge
 
 # Try the protected endpoint (will fail without verification)
-curl https://api.botcha.ai/agent-only</code></pre>
+curl https://botcha.ai/agent-only</code></pre>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Packages Section -->
+  <div class="integration" id="integration">
+    <div class="container narrow">
+      <h2>Packages</h2>
+      <div class="links" style="margin-top: 2rem;">
+        <a href="https://www.npmjs.com/package/@dupecom/botcha">📦 @dupecom/botcha</a>
+        <a href="https://www.npmjs.com/package/@dupecom/botcha-cli">🔧 @dupecom/botcha-cli</a>
+        <a href="https://www.npmjs.com/package/@dupecom/botcha-langchain">🦜 @dupecom/botcha-langchain</a>
       </div>
     </div>
   </div>
@@ -707,51 +433,11 @@ curl https://api.botcha.ai/agent-only</code></pre>
   <!-- Footer -->
   <footer>
     <div class="container">
-      <div class="footer-content">
-        <div class="footer-section">
-          <h4>Product</h4>
-          <ul>
-            <li><a href="#integration">Quick Start</a></li>
-            <li><a href="/openapi.json">API Documentation</a></li>
-            <li><a href="#pricing">Pricing</a></li>
-            <li><a href="#demo">Try Demo</a></li>
-          </ul>
-        </div>
-        
-        <div class="footer-section">
-          <h4>Resources</h4>
-          <ul>
-            <li><a href="https://github.com/i8ramin/botcha">GitHub Repository</a></li>
-            <li><a href="https://www.npmjs.com/package/@dupecom/botcha">npm Package</a></li>
-            <li><a href="/ai.txt">ai.txt</a></li>
-            <li><a href="/robots.txt">robots.txt</a></li>
-          </ul>
-        </div>
-        
-        <div class="footer-section">
-          <h4>Community</h4>
-          <ul>
-            <li><a href="https://github.com/i8ramin/botcha/issues">Report Issues</a></li>
-            <li><a href="https://github.com/i8ramin/botcha/discussions">Discussions</a></li>
-            <li><a href="https://x.com/i8ramin">Twitter/X @i8ramin</a></li>
-          </ul>
-        </div>
-        
-        <div class="footer-section">
-          <h4>About</h4>
-          <ul>
-            <li><a href="https://github.com/i8ramin">Created by Ramin</a></li>
-            <li><a href="https://github.com/i8ramin/botcha/blob/main/LICENSE">MIT License</a></li>
-            <li><a href="https://dupe.com">Dupe.com</a></li>
-          </ul>
-        </div>
-      </div>
-      
       <div class="footer-bottom">
         <p>
-          Built with ❤️ by <a href="https://github.com/i8ramin">Ramin</a> · 
-          <a href="https://github.com/i8ramin/botcha">Open Source</a> · 
-          API on <a href="https://workers.cloudflare.com">Cloudflare Workers</a>
+          Built by <a href="https://github.com/i8ramin">@i8ramin</a> · 
+          <a href="https://github.com/dupe-com/botcha">GitHub</a> · 
+          <a href="https://x.com/i8ramin">X @i8ramin</a>
         </p>
       </div>
     </div>
