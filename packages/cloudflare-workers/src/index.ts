@@ -355,12 +355,16 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
   const startTime = Date.now();
   const type = c.req.query('type') || 'hybrid';
   const difficulty = (c.req.query('difficulty') as 'easy' | 'medium' | 'hard') || 'medium';
+  
+  // Extract client timestamp for RTT calculation
+  const clientTimestampParam = c.req.query('ts') || c.req.header('x-client-timestamp');
+  const clientTimestamp = clientTimestampParam ? parseInt(clientTimestampParam, 10) : undefined;
 
   const baseUrl = new URL(c.req.url).origin;
   const clientIP = getClientIP(c.req.raw);
 
   if (type === 'hybrid') {
-    const challenge = await generateHybridChallenge(c.env.CHALLENGES);
+    const challenge = await generateHybridChallenge(c.env.CHALLENGES, clientTimestamp);
     
     // Track challenge generation
     const responseTime = Date.now() - startTime;
@@ -373,10 +377,14 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
       responseTime
     );
     
-    return c.json({
+    const warning = challenge.rttInfo 
+      ? `🔥 HYBRID CHALLENGE: Solve speed problems in <${challenge.speed.timeLimit}ms (RTT-adjusted) AND answer reasoning questions!`
+      : '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!';
+    
+    const response: any = {
       success: true,
       type: 'hybrid',
-      warning: '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!',
+      warning,
       challenge: {
         id: challenge.id,
         speed: {
@@ -398,9 +406,16 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
         speed_answers: ['hash1', 'hash2', '...'],
         reasoning_answers: { 'question-id': 'answer', '...': '...' }
       }
-    });
+    };
+    
+    // Include RTT info if available
+    if (challenge.rttInfo) {
+      response.rtt_adjustment = challenge.rttInfo;
+    }
+    
+    return c.json(response);
   } else if (type === 'speed') {
-    const challenge = await generateSpeedChallenge(c.env.CHALLENGES);
+    const challenge = await generateSpeedChallenge(c.env.CHALLENGES, clientTimestamp);
     
     // Track challenge generation
     const responseTime = Date.now() - startTime;
@@ -413,7 +428,7 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
       responseTime
     );
     
-    return c.json({
+    const response: any = {
       success: true,
       type: 'speed',
       challenge: {
@@ -422,13 +437,22 @@ app.get('/v1/challenges', rateLimitMiddleware, async (c) => {
         timeLimit: `${challenge.timeLimit}ms`,
         instructions: challenge.instructions,
       },
-      tip: '⚡ Speed challenge: You have 500ms to solve ALL problems. Humans cannot copy-paste fast enough.',
+      tip: challenge.rttInfo 
+        ? `⚡ RTT-adjusted speed challenge: ${challenge.rttInfo.explanation}. Humans still can't copy-paste fast enough!`
+        : '⚡ Speed challenge: You have 500ms to solve ALL problems. Humans cannot copy-paste fast enough.',
       verify_endpoint: `${baseUrl}/v1/challenges/${challenge.id}/verify`,
       submit_body: {
         type: 'speed',
         answers: ['hash1', 'hash2', 'hash3', 'hash4', 'hash5']
       }
-    });
+    };
+    
+    // Include RTT info if available
+    if (challenge.rttInfo) {
+      response.rtt_adjustment = challenge.rttInfo;
+    }
+    
+    return c.json(response);
   } else {
     const challenge = await generateStandardChallenge(difficulty, c.env.CHALLENGES);
     
@@ -578,8 +602,13 @@ app.post('/v1/challenges/:id/verify', async (c) => {
 
 // Get challenge for token flow (includes empty token field)
 app.get('/v1/token', rateLimitMiddleware, async (c) => {
-  const challenge = await generateSpeedChallenge(c.env.CHALLENGES);
-  return c.json({
+  // Extract client timestamp for RTT calculation
+  const clientTimestampParam = c.req.query('ts') || c.req.header('x-client-timestamp');
+  const clientTimestamp = clientTimestampParam ? parseInt(clientTimestampParam, 10) : undefined;
+  
+  const challenge = await generateSpeedChallenge(c.env.CHALLENGES, clientTimestamp);
+  
+  const response: any = {
     success: true,
     challenge: {
       id: challenge.id,
@@ -589,7 +618,14 @@ app.get('/v1/token', rateLimitMiddleware, async (c) => {
     },
     token: null, // Will be populated after verification
     nextStep: `POST /v1/token/verify with {id: "${challenge.id}", answers: ["..."]}`
-  });
+  };
+  
+  // Include RTT info if available
+  if (challenge.rttInfo) {
+    response.rtt_adjustment = challenge.rttInfo;
+  }
+  
+  return c.json(response);
 });
 
 // Verify challenge and issue JWT token
@@ -685,12 +721,21 @@ app.post('/v1/reasoning', async (c) => {
 
 // Get hybrid challenge (v1 API)
 app.get('/v1/hybrid', rateLimitMiddleware, async (c) => {
-  const challenge = await generateHybridChallenge(c.env.CHALLENGES);
+  // Extract client timestamp for RTT calculation
+  const clientTimestampParam = c.req.query('ts') || c.req.header('x-client-timestamp');
+  const clientTimestamp = clientTimestampParam ? parseInt(clientTimestampParam, 10) : undefined;
+  
+  const challenge = await generateHybridChallenge(c.env.CHALLENGES, clientTimestamp);
   const baseUrl = new URL(c.req.url).origin;
-  return c.json({
+  
+  const warning = challenge.rttInfo 
+    ? `🔥 HYBRID CHALLENGE: Solve speed problems in <${challenge.speed.timeLimit}ms (RTT-adjusted) AND answer reasoning questions!`
+    : '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!';
+  
+  const response: any = {
     success: true,
     type: 'hybrid',
-    warning: '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!',
+    warning,
     challenge: {
       id: challenge.id,
       speed: {
@@ -712,7 +757,14 @@ app.get('/v1/hybrid', rateLimitMiddleware, async (c) => {
       speed_answers: ['hash1', 'hash2', '...'],
       reasoning_answers: { 'question-id': 'answer', '...': '...' }
     }
-  });
+  };
+  
+  // Include RTT info if available
+  if (challenge.rttInfo) {
+    response.rtt_adjustment = challenge.rttInfo;
+  }
+  
+  return c.json(response);
 });
 
 // Verify hybrid challenge (v1 API)
@@ -757,10 +809,19 @@ app.post('/v1/hybrid', async (c) => {
 
 // Legacy hybrid endpoint
 app.get('/api/hybrid-challenge', async (c) => {
-  const challenge = await generateHybridChallenge(c.env.CHALLENGES);
-  return c.json({
+  // Extract client timestamp for RTT calculation
+  const clientTimestampParam = c.req.query('ts') || c.req.header('x-client-timestamp');
+  const clientTimestamp = clientTimestampParam ? parseInt(clientTimestampParam, 10) : undefined;
+  
+  const challenge = await generateHybridChallenge(c.env.CHALLENGES, clientTimestamp);
+  
+  const warning = challenge.rttInfo 
+    ? `🔥 RTT-ADJUSTED HYBRID CHALLENGE: Solve speed problems in <${challenge.speed.timeLimit}ms (RTT: ${challenge.rttInfo.measuredRtt}ms) AND answer reasoning questions!`
+    : '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!';
+  
+  const response: any = {
     success: true,
-    warning: '🔥 HYBRID CHALLENGE: Solve speed problems in <500ms AND answer reasoning questions!',
+    warning,
     challenge: {
       id: challenge.id,
       speed: {
@@ -776,7 +837,14 @@ app.get('/api/hybrid-challenge', async (c) => {
     },
     instructions: challenge.instructions,
     tip: 'This is the ultimate test: proves you can compute AND reason like an AI.',
-  });
+  };
+  
+  // Include RTT info if available
+  if (challenge.rttInfo) {
+    response.rtt_adjustment = challenge.rttInfo;
+  }
+  
+  return c.json(response);
 });
 
 app.post('/api/hybrid-challenge', async (c) => {
@@ -1093,10 +1161,17 @@ app.post('/api/challenge', async (c) => {
 });
 
 app.get('/api/speed-challenge', async (c) => {
-  const challenge = await generateSpeedChallenge(c.env.CHALLENGES);
-  return c.json({
+  // Extract client timestamp for RTT calculation
+  const clientTimestampParam = c.req.query('ts') || c.req.header('x-client-timestamp');
+  const clientTimestamp = clientTimestampParam ? parseInt(clientTimestampParam, 10) : undefined;
+  
+  const challenge = await generateSpeedChallenge(c.env.CHALLENGES, clientTimestamp);
+  
+  const response: any = {
     success: true,
-    warning: '⚡ SPEED CHALLENGE: You have 500ms to solve ALL 5 problems!',
+    warning: challenge.rttInfo 
+      ? `⚡ RTT-ADJUSTED SPEED CHALLENGE: ${challenge.rttInfo.explanation}`
+      : '⚡ SPEED CHALLENGE: You have 500ms to solve ALL 5 problems!',
     challenge: {
       id: challenge.id,
       problems: challenge.problems,
@@ -1104,7 +1179,14 @@ app.get('/api/speed-challenge', async (c) => {
       instructions: challenge.instructions,
     },
     tip: 'Humans cannot copy-paste fast enough. Only real AI agents can pass.',
-  });
+  };
+  
+  // Include RTT info if available
+  if (challenge.rttInfo) {
+    response.rtt_adjustment = challenge.rttInfo;
+  }
+  
+  return c.json(response);
 });
 
 app.post('/api/speed-challenge', async (c) => {

@@ -222,6 +222,42 @@ botcha.verify({
 });
 ```
 
+## RTT-Aware Fairness ⚡
+
+BOTCHA now automatically compensates for network latency, making speed challenges fair for agents on slow connections:
+
+```typescript
+// Include client timestamp for RTT compensation
+const clientTimestamp = Date.now();
+const challenge = await fetch(`https://botcha.ai/v1/challenges?type=speed&ts=${clientTimestamp}`);
+```
+
+**How it works:**
+- 🕐 Client includes timestamp with challenge request
+- 📡 Server measures RTT (Round-Trip Time) 
+- ⚖️ Timeout = 500ms (base) + (2 × RTT) + 100ms (buffer)
+- 🎯 Fair challenges for agents worldwide
+
+**Example RTT adjustments:**
+- Local: 500ms (no adjustment)
+- Good network (50ms RTT): 700ms timeout
+- Slow network (300ms RTT): 1200ms timeout
+- Satellite (500ms RTT): 1600ms timeout
+
+**Response includes adjustment info:**
+```json
+{
+  "challenge": { "timeLimit": "1200ms" },
+  "rtt_adjustment": {
+    "measuredRtt": 300,
+    "adjustedTimeout": 1200,
+    "explanation": "RTT: 300ms → Timeout: 500ms + (2×300ms) + 100ms = 1200ms"
+  }
+}
+```
+
+Humans still can't solve it (even with extra time), but legitimate AI agents get fair treatment regardless of their network connection.
+
 ## Local Development
 
 Run the full BOTCHA service locally with Wrangler (Cloudflare Workers runtime):

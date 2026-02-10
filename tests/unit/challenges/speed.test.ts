@@ -18,6 +18,23 @@ describe('Speed Challenge', () => {
       expect(typeof challenge.instructions).toBe('string');
     });
 
+    test('adjusts timeout based on RTT when client timestamp provided', () => {
+      const clientTimestamp = Date.now() - 100; // Simulate 100ms RTT
+      const challenge = generateSpeedChallenge(clientTimestamp);
+      
+      expect(challenge.timeLimit).toBeGreaterThan(500); // Should be adjusted
+      expect(challenge).toHaveProperty('rttInfo');
+      expect(challenge.rttInfo?.measuredRtt).toBe(100);
+      expect(challenge.rttInfo?.adjustedTimeout).toBeGreaterThan(500);
+    });
+
+    test('uses default timeout when no client timestamp provided', () => {
+      const challenge = generateSpeedChallenge();
+      
+      expect(challenge.timeLimit).toBe(500);
+      expect(challenge.rttInfo).toBeUndefined();
+    });
+
     test('generated challenge has exactly 5 problems', () => {
       const challenge = generateSpeedChallenge();
       
