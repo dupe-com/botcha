@@ -119,11 +119,19 @@ export async function generateToken(
     .sign(secretKey);
 
   // Store refresh token JTI in KV if env provided (for revocation tracking)
+  // Also store aud and client_ip so they carry over on refresh
   if (env?.CHALLENGES) {
     try {
+      const refreshData: Record<string, any> = { sub: challengeId, iat: Date.now() };
+      if (options?.aud) {
+        refreshData.aud = options.aud;
+      }
+      if (options?.clientIp) {
+        refreshData.client_ip = options.clientIp;
+      }
       await env.CHALLENGES.put(
         `refresh:${refreshJti}`,
-        JSON.stringify({ sub: challengeId, iat: Date.now() }),
+        JSON.stringify(refreshData),
         { expirationTtl: 3600 } // 1 hour TTL
       );
     } catch (error) {
@@ -206,7 +214,9 @@ export async function refreshAccessToken(
       }
     }
 
-    // Check if refresh token exists in KV
+    // Check if refresh token exists in KV and retrieve stored claims (aud, client_ip)
+    let storedAud: string | undefined;
+    let storedClientIp: string | undefined;
     if (jti) {
       try {
         const storedToken = await env.CHALLENGES.get(`refresh:${jti}`);
@@ -215,6 +225,14 @@ export async function refreshAccessToken(
             success: false,
             error: 'Refresh token not found or expired',
           };
+        }
+        // Extract stored claims to carry over to new access token
+        try {
+          const storedData = JSON.parse(storedToken);
+          storedAud = storedData.aud;
+          storedClientIp = storedData.client_ip;
+        } catch {
+          // Ignore parse errors on legacy KV entries
         }
       } catch (error) {
         // Fail-open: if KV check fails, allow token to proceed
@@ -230,12 +248,14 @@ export async function refreshAccessToken(
       jti: newAccessJti,
     };
 
-    // Add optional claims
-    if (options?.aud) {
-      accessTokenPayload.aud = options.aud;
+    // Carry over claims: prefer explicit options, fall back to stored KV values
+    const effectiveAud = options?.aud || storedAud;
+    const effectiveClientIp = options?.clientIp || storedClientIp;
+    if (effectiveAud) {
+      accessTokenPayload.aud = effectiveAud;
     }
-    if (options?.clientIp) {
-      accessTokenPayload.client_ip = options.clientIp;
+    if (effectiveClientIp) {
+      accessTokenPayload.client_ip = effectiveClientIp;
     }
 
     const accessToken = await new SignJWT(accessTokenPayload)
