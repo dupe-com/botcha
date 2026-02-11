@@ -93,7 +93,7 @@ Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
 
 # Usage
 Install-NPM: npm install @dupecom/botcha
-Install-Python: pip install botcha (coming soon)
+Install-Python: pip install botcha
 License: MIT
 
 # AI Agent Welcome
