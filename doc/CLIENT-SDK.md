@@ -6,17 +6,20 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.4.1 | Core SDK with client (`/client` export) |
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.6.2 | Core SDK with client (`/client` export) |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
-| `botcha` (Python) | — | Python SDK (not yet on PyPI, see `packages/python/`) |
+| [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.1.0 | Python SDK on PyPI |
 
 ## Overview
 
 The client SDK allows AI agents to:
 1. ✅ Detect BOTCHA-protected endpoints
-2. ✅ Automatically acquire JWT tokens
+2. ✅ Automatically acquire JWT tokens (5-minute access + 1-hour refresh)
 3. ✅ Solve challenges and retry with tokens
-4. ✅ Handle different challenge types (speed, standard)
+4. ✅ Handle different challenge types (speed, standard, hybrid, reasoning)
+5. ✅ Token rotation with automatic refresh on 401
+6. ✅ Audience-scoped tokens for service isolation
+7. ✅ Token revocation for compromised tokens
 
 ## Implemented API
 
@@ -117,6 +120,9 @@ const client = new BotchaClient({
   // Behavior
   autoToken: true,    // Automatically acquire JWT tokens (default: true)
   maxRetries: 3,      // Max retry attempts (default: 3)
+  
+  // Security
+  audience: 'https://api.example.com', // Scope token to this service (optional)
 });
 ```
 
@@ -125,20 +131,55 @@ const client = new BotchaClient({
 - ✅ `agentIdentity` - Custom User-Agent string
 - ✅ `maxRetries` - Maximum challenge solve attempts
 - ✅ `autoToken` - Enable automatic token acquisition
+- ✅ `audience` - Scope tokens to a specific service (prevents cross-service replay)
 
-## Token Caching (Shipped)
+## Token Rotation & Caching (Shipped)
+
+BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens:
+
+| Token Type | Expiry | Purpose |
+|------------|--------|---------|
+| Access Token | 5 minutes | Used for API requests |
+| Refresh Token | 1 hour | Used to get new access tokens |
 
 ```typescript
 const client = new BotchaClient({ autoToken: true });
 
 // Tokens are automatically cached in-memory
-await client.fetch('/protected'); // Acquires token
-await client.fetch('/protected'); // Reuses cached token
+await client.fetch('/protected'); // Acquires access_token (5min) + refresh_token (1hr)
+await client.fetch('/protected'); // Reuses cached access_token
 
-// Token cached until 55 minutes (near expiry)
-// Automatically refreshes when needed
+// Auto-refreshes: when access_token expires, SDK uses refresh_token automatically
+// When 401 received: tries refresh first, then full re-verify as fallback
 
-// Clear token manually if needed
+// Manual refresh
+const newToken = await client.refreshToken();
+
+// Clear all tokens (access + refresh)
+client.clearToken();
+```
+
+### Token Refresh Flow
+
+```
+1. client.fetch() → 401 Unauthorized
+2. SDK tries: POST /v1/token/refresh with refresh_token
+3. If refresh succeeds → retry with new access_token
+4. If refresh fails → clear tokens, solve new challenge, get fresh tokens
+```
+
+### New API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/token/refresh` | POST | Exchange refresh_token for new access_token |
+| `/v1/token/revoke` | POST | Revoke a token (access or refresh) |
+
+```typescript
+// Manual token refresh
+const newToken = await client.refreshToken();
+
+// Token revocation (clear local state — server-side via API)
 client.clearToken();
 ```
 
@@ -178,16 +219,14 @@ try {
 
 ## Python SDK
 
-**Status:** ✅ Built (PyPI publishing coming soon)
+**Status:** ✅ Published on [PyPI](https://pypi.org/project/botcha/) (v0.1.0)
 
-The Python SDK provides the same capabilities as the TypeScript client for AI agents.
+The Python SDK provides the same capabilities as the TypeScript client, including token rotation, audience claims, and automatic refresh.
 
 ### Installation
 
 ```bash
-# Not yet on PyPI - install from source
-cd packages/python
-pip install -e .
+pip install botcha
 ```
 
 ### Basic Usage
@@ -220,17 +259,31 @@ answers = solve_botcha([123456, 789012, 334521])
 ### Configuration
 
 ```python
-from botcha import BotchaClient, BotchaConfig
+from botcha import BotchaClient
 
-config = BotchaConfig(
+async with BotchaClient(
     base_url="https://botcha.ai",
     agent_identity="MyAgent/1.0",
     max_retries=3,
     auto_token=True,
-)
-
-async with BotchaClient(config=config) as client:
+    audience="https://api.example.com",  # Scope token to this service
+) as client:
     response = await client.fetch("https://protected-api.com/endpoint")
+```
+
+### Token Rotation (Python)
+
+```python
+from botcha import BotchaClient
+
+async with BotchaClient(audience="https://api.example.com") as client:
+    # Auto-handles token lifecycle (5min access + 1hr refresh)
+    response = await client.fetch("https://api.example.com/data")
+    
+    # Manual refresh
+    new_token = await client.refresh_token()
+    
+    # On 401: tries refresh_token first, then full re-verify
 ```
 
 ### API Reference
@@ -239,11 +292,19 @@ The Python SDK mirrors the TypeScript API:
 
 - `BotchaClient` - Main client class with async context manager
 - `solve_botcha(problems: list[int]) -> list[str]` - Standalone solver function
-- `BotchaConfig` - Configuration dataclass
-- `get_token()` - Manually acquire JWT token
+- `get_token()` - Acquire JWT access token (with caching)
+- `refresh_token()` - Refresh access token using refresh token
 - `fetch(url)` - Auto-solve and fetch URL with challenge handling
+- `close()` - Close client and clear cached tokens
 
-**Implementation:** See `packages/python/` for full source code including SHA256 solver, async HTTP client, and type annotations.
+**Constructor parameters:**
+- `base_url` - BOTCHA service URL (default: `https://botcha.ai`)
+- `agent_identity` - Custom User-Agent string
+- `max_retries` - Maximum retry attempts (default: 3)
+- `auto_token` - Enable automatic token acquisition (default: True)
+- `audience` - Scope tokens to a specific service (optional)
+
+**Implementation:** See `packages/python/` for full source code including SHA256 solver, async HTTP client (httpx), and type annotations.
 
 ## Future: Go SDK
 

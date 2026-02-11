@@ -107,6 +107,70 @@ GET /v1/challenges?type=hybrid
 GET /v1/reasoning
 ```
 
+## 🔐 JWT Security (Production-Grade)
+
+BOTCHA uses **OAuth2-style token rotation** with production-grade security features:
+
+### Token Flow
+
+```
+1. Solve challenge → receive access_token (5min) + refresh_token (1hr)
+2. Use access_token for API calls
+3. When access_token expires → POST /v1/token/refresh with refresh_token
+4. When compromised → POST /v1/token/revoke to invalidate immediately
+```
+
+### Token Features
+
+| Feature | Description |
+|---------|-------------|
+| **Short-lived access tokens** | 5-minute expiry (was 1 hour) |
+| **Refresh tokens** | 1-hour expiry, used to get new access tokens |
+| **Audience (`aud`) claims** | Tokens scoped to specific services |
+| **Client IP binding** | Optional — prevents token sharing across machines |
+| **Token revocation** | Invalidate tokens before expiry via KV-backed list |
+| **JTI (JWT ID)** | Unique ID on every token for tracking and revocation |
+
+### TypeScript SDK
+
+```typescript
+import { BotchaClient } from '@dupecom/botcha/client';
+
+const client = new BotchaClient({
+  baseUrl: 'https://botcha.ai',
+  audience: 'https://api.example.com', // Token scoped to this service
+});
+
+// Auto-handles token acquisition, refresh, and retry
+const response = await client.fetch('https://api.example.com/agent-only');
+
+// Manual refresh
+const newToken = await client.refreshToken();
+
+// Revoke if compromised
+client.clearToken();
+```
+
+### Python SDK
+
+```python
+from botcha import BotchaClient
+
+async with BotchaClient(audience="https://api.example.com") as client:
+    # Auto-handles token lifecycle
+    response = await client.fetch("https://api.example.com/agent-only")
+    
+    # Manual refresh
+    new_token = await client.refresh_token()
+```
+
+### API Endpoints
+
+```
+POST /v1/token/refresh   — Exchange refresh_token for new access_token
+POST /v1/token/revoke    — Revoke a token (access or refresh)
+```
+
 ## 🔄 SSE Streaming Flow (AI-Native)
 
 For AI agents that prefer a **conversational handshake**, BOTCHA offers **Server-Sent Events (SSE)** streaming:

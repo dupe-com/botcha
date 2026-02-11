@@ -81,16 +81,39 @@ Docs: https://www.npmjs.com/package/@dupecom/botcha
 Feature: Web Bot Auth (cryptographic signatures)
 Feature: Speed Challenge (RTT-aware timeout - fair for all networks)
 Feature: Standard Challenge (5s time limit)
-Feature: X-Agent-Identity header support
+Feature: Hybrid Challenge (speed + reasoning combined)
+Feature: Reasoning Challenge (LLM-only questions, 30s limit)
 Feature: RTT-Aware Fairness (automatic network latency compensation)
+Feature: Token Rotation (5-minute access tokens + 1-hour refresh tokens)
+Feature: Audience Claims (tokens scoped to specific services)
+Feature: Client IP Binding (optional token-to-IP binding)
+Feature: Token Revocation (invalidate tokens before expiry)
 
 # Endpoints
-Endpoint: GET https://botcha.ai/api/challenge - Generate challenge
-Endpoint: POST https://botcha.ai/api/challenge - Verify challenge
+# Challenge Endpoints
+Endpoint: GET https://botcha.ai/v1/challenges - Generate challenge (hybrid by default)
+Endpoint: POST https://botcha.ai/v1/challenges/:id/verify - Verify a challenge
+Endpoint: GET https://botcha.ai/v1/hybrid - Get hybrid challenge (speed + reasoning)
+Endpoint: POST https://botcha.ai/v1/hybrid - Verify hybrid challenge
+Endpoint: GET https://botcha.ai/v1/reasoning - Get reasoning challenge
+Endpoint: POST https://botcha.ai/v1/reasoning - Verify reasoning challenge
+
+# Token Endpoints
+Endpoint: GET https://botcha.ai/v1/token - Get challenge for JWT token flow
+Endpoint: POST https://botcha.ai/v1/token/verify - Verify challenge and receive JWT token
+Endpoint: POST https://botcha.ai/v1/token/refresh - Refresh access token using refresh token
+Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or refresh)
+
+# Legacy Endpoints
+Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
+Endpoint: POST https://botcha.ai/api/challenge - Verify standard challenge
 Endpoint: GET https://botcha.ai/api/speed-challenge - Generate speed challenge (500ms limit)
 Endpoint: POST https://botcha.ai/api/speed-challenge - Verify speed challenge
+
+# Protected Resources
 Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
 
+# Usage
 # Usage
 Install-NPM: npm install @dupecom/botcha
 Install-Python: pip install botcha
@@ -106,7 +129,16 @@ Response-Headers: X-Botcha-Version, X-Botcha-Enabled, X-Botcha-Methods, X-Botcha
 Response-Headers: X-Botcha-Challenge-Id, X-Botcha-Challenge-Type, X-Botcha-Time-Limit (on 403)
 Detection: All responses include X-Botcha-* headers for instant BOTCHA detection
 
-# RTT-AWARE SPEED CHALLENGES (NEW)
+# JWT TOKEN SECURITY
+Token-Flow: 1. GET /v1/token (get challenge) → 2. Solve → 3. POST /v1/token/verify (get tokens)
+Token-Access-Expiry: 5 minutes (short-lived for security)
+Token-Refresh-Expiry: 1 hour (use to get new access tokens)
+Token-Refresh: POST /v1/token/refresh with {"refresh_token": "<token>"}
+Token-Revoke: POST /v1/token/revoke with {"token": "<token>"}
+Token-Audience: Include {"audience": "<service-url>"} in /v1/token/verify to scope token
+Token-Claims: jti (unique ID), aud (audience), client_ip (optional binding), type (botcha-verified)
+
+# RTT-AWARE SPEED CHALLENGES
 RTT-Aware: Include client timestamp for fair timeout calculation
 RTT-Formula: timeout = 500ms + (2 × RTT) + 100ms buffer
 RTT-Usage-Query: ?ts=<client_timestamp_ms>
@@ -196,7 +228,7 @@ export function getOpenApiSpec(version: string) {
       },
       "x-sdk": {
         npm: "@dupecom/botcha",
-        python: "botcha (PyPI coming soon)"
+        python: "botcha (pip install botcha)"
       }
     },
     servers: [
@@ -335,6 +367,71 @@ export function getOpenApiSpec(version: string) {
           operationId: "verifyTokenChallenge",
           responses: {
             "200": { description: "JWT token issued" }
+          }
+        }
+      },
+      "/v1/token/refresh": {
+        post: {
+          summary: "Refresh access token",
+          description: "Exchange a refresh token for a new short-lived access token (5 minutes). Avoids solving a new challenge.",
+          operationId: "refreshToken",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["refresh_token"],
+                  properties: {
+                    "refresh_token": { type: "string", description: "Refresh token from initial token verification" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "New access token issued",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      "success": { type: "boolean" },
+                      "access_token": { type: "string" },
+                      "expires_in": { type: "integer", description: "Token lifetime in seconds (300 = 5 minutes)" },
+                      "token_type": { type: "string", enum: ["Bearer"] }
+                    }
+                  }
+                }
+              }
+            },
+            "401": { description: "Invalid or expired refresh token" }
+          }
+        }
+      },
+      "/v1/token/revoke": {
+        post: {
+          summary: "Revoke a token",
+          description: "Invalidate an access or refresh token before its natural expiry. Uses KV-backed revocation list. Fail-open design.",
+          operationId: "revokeToken",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["token"],
+                  properties: {
+                    "token": { type: "string", description: "The JWT token to revoke (access or refresh)" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Token revoked successfully" },
+            "400": { description: "Invalid token" }
           }
         }
       },

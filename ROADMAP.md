@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.6.0)
+## Current Status (v0.7.0)
 
 ### Shipped
 
@@ -26,6 +26,12 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - Parameterized reasoning questions (static lookup tables won't work)
 - User-Agent pattern matching removed (trivially spoofable)
 - X-Agent-Identity header disabled by default with production warning
+- **JWT `aud` (audience) claims** — tokens scoped to specific services
+- **Token rotation** — 5-minute access tokens + 1-hour refresh tokens (OAuth2-style)
+- **Client IP binding** — optional IP-based token binding
+- **Token revocation** — `POST /v1/token/revoke` with KV-backed revocation list
+- **Token refresh** — `POST /v1/token/refresh` for seamless token renewal
+- **JTI (JWT ID)** — unique IDs on every token for revocation tracking
 
 #### Infrastructure
 - Cloudflare Workers deployment at botcha.ai
@@ -54,31 +60,26 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Tier 1 — Security Holes to Close
+## Tier 1 — Security Sweep ✅ SHIPPED (v0.7.0)
 
-These are attack vectors we know about. Ship before promoting to enterprises.
+All critical JWT security holes have been closed.
 
-### `aud` (audience) claim in JWTs
-**Problem:** A token earned on botcha.ai can be replayed to any service that trusts BOTCHA tokens.
-**Solution:** Add `aud` claim specifying which service the token was issued for. Verification checks audience match.
-**Effort:** Small
+### ✅ `aud` (audience) claim in JWTs
+Tokens are scoped to specific services via `aud` claim. Verification checks audience match. Prevents cross-service token replay.
 
-### Token rotation
-**Problem:** 1-hour JWTs are too long-lived. Compromise = 1 hour of exposure.
-**Solution:** Short-lived access tokens (5min) + refresh tokens (1hr). Refresh endpoint issues new access token.
-**Effort:** Medium
+### ✅ Token rotation
+Short-lived access tokens (5min) + refresh tokens (1hr). `POST /v1/token/refresh` issues new access tokens. Compromise window reduced from 1 hour to 5 minutes.
 
-### Client binding
-**Problem:** Tokens can be shared between clients. Solve on machine A, use on machine B.
-**Solution:** Optional IP or TLS fingerprint binding. Token includes client fingerprint, verification checks match.
-**Effort:** Small
+### ✅ Client IP binding
+Optional IP-based token binding. Token includes `client_ip` claim, verification checks match. Prevents solve-on-A, use-on-B attacks.
 
-### Revocation endpoint
-**Problem:** If a JWT is compromised, there's no way to invalidate it before expiry.
-**Solution:** `POST /v1/token/revoke` + revocation list in KV. Verification checks revocation list.
-**Effort:** Small
+### ✅ Revocation endpoint
+`POST /v1/token/revoke` + KV-backed revocation list. Fail-open design (KV errors log warning, don't block). Tokens can be invalidated before expiry.
 
-### Challenge difficulty scaling
+### ✅ JTI (JWT ID) on all tokens
+Every token gets a unique `jti` claim for revocation tracking and audit trail.
+
+### 🔜 Challenge difficulty scaling (Tier 1.5)
 **Problem:** 3 reasoning questions with some categories having small answer spaces. Brute-forceable.
 **Solution:** Adaptive difficulty based on abuse signals. More question generators. Larger answer spaces. Configurable per-service difficulty.
 **Effort:** Medium
