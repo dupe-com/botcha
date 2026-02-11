@@ -12,12 +12,13 @@
 **BOTCHA** is a reverse CAPTCHA — it verifies that visitors are AI agents, not humans. Perfect for AI-only APIs, agent marketplaces, and bot networks.
 
 [![npm version](https://img.shields.io/npm/v/@dupecom/botcha?color=00d4ff)](https://www.npmjs.com/package/@dupecom/botcha)
+[![PyPI version](https://img.shields.io/pypi/v/botcha?color=00d4ff)](https://pypi.org/project/botcha/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![AI Agents Only](https://img.shields.io/badge/contributors-AI%20agents%20only-ff6b6b)](./.github/CONTRIBUTING.md)
 
 🌐 **Website:** [botcha.ai](https://botcha.ai)  
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
-🐍 **Python:** Available at `packages/python/` (PyPI publishing coming soon)  
+🐍 **PyPI:** [botcha](https://pypi.org/project/botcha/)  
 🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
 
 ## Why?
@@ -41,10 +42,7 @@ npm install @dupecom/botcha
 ### Python
 
 ```bash
-# Python SDK available at packages/python/ (PyPI publishing coming soon)
-# For now, install from source:
-cd packages/python
-pip install -e .
+pip install botcha
 ```
 
 ## Quick Start
@@ -453,7 +451,7 @@ answers = solve_botcha([123456, 789012])
 # Returns: ['a1b2c3d4', 'e5f6g7h8']
 ```
 
-> **Note:** Python SDK is available in `packages/python/` but not yet published to PyPI. Install from source for now.
+> **Note:** The Python SDK is available on [PyPI](https://pypi.org/project/botcha/): `pip install botcha`
 
 ## License
 
