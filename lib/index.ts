@@ -7,7 +7,9 @@ export interface BotchaOptions {
   mode?: 'speed' | 'standard';
   /** Difficulty for standard mode */
   difficulty?: 'easy' | 'medium' | 'hard';
-  /** Allow X-Agent-Identity header (for testing) */
+  /** Allow X-Agent-Identity header to bypass challenges (for development/testing ONLY).
+   *  WARNING: Enabling this in production allows anyone to bypass verification with a single header.
+   *  @default false */
   allowTestHeader?: boolean;
   /** Custom failure handler */
   onFailure?: (req: Request, res: Response, reason: string) => void;
@@ -96,13 +98,14 @@ function verifySpeedChallenge(id: string, answers: string[]): ChallengeResult {
 export function verify(options: BotchaOptions = {}) {
   const opts: BotchaOptions = {
     mode: 'speed',
-    allowTestHeader: true,
+    allowTestHeader: false,
     ...options,
   };
 
   return async (req: Request, res: Response, next: NextFunction) => {
-    // Check for test header (dev mode)
+    // Check for test header (dev mode ONLY — disabled by default)
     if (opts.allowTestHeader && req.headers['x-agent-identity']) {
+      console.warn('[botcha] WARNING: X-Agent-Identity bypass used. Disable allowTestHeader in production!');
       (req as any).botcha = { verified: true, agent: req.headers['x-agent-identity'], method: 'header' };
       return next();
     }

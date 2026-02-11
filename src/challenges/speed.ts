@@ -51,24 +51,31 @@ export function generateSpeedChallenge(clientTimestamp?: number): {
   
   // RTT-aware timeout calculation
   const baseTimeLimit = 500; // Base computation time for AI agents
+  const MAX_RTT_MS = 5000; // Cap RTT to prevent timestamp spoofing (5s max)
+  const MAX_TIMESTAMP_AGE_MS = 30000; // Reject timestamps older than 30s
   const now = Date.now();
   let rttMs = 0;
   let adjustedTimeLimit = baseTimeLimit;
   let rttInfo: any = undefined;
   
   if (clientTimestamp && clientTimestamp > 0) {
-    // Calculate RTT from client timestamp
-    rttMs = Math.max(0, now - clientTimestamp);
-    
-    // Adjust timeout: base + (2 * RTT) + 100ms buffer
-    // The 2x RTT accounts for request + response network time
-    adjustedTimeLimit = Math.max(baseTimeLimit, baseTimeLimit + (2 * rttMs) + 100);
-    
-    rttInfo = {
-      measuredRtt: rttMs,
-      adjustedTimeout: adjustedTimeLimit,
-      explanation: `RTT: ${rttMs}ms → Timeout: ${baseTimeLimit}ms + (2×${rttMs}ms) + 100ms = ${adjustedTimeLimit}ms`,
-    };
+    // Reject timestamps in the future or too far in the past (anti-spoofing)
+    const age = now - clientTimestamp;
+    if (age >= 0 && age <= MAX_TIMESTAMP_AGE_MS) {
+      // Calculate RTT from client timestamp, capped to prevent abuse
+      rttMs = Math.min(age, MAX_RTT_MS);
+      
+      // Adjust timeout: base + (2 * RTT) + 100ms buffer
+      // The 2x RTT accounts for request + response network time
+      adjustedTimeLimit = Math.max(baseTimeLimit, baseTimeLimit + (2 * rttMs) + 100);
+      
+      rttInfo = {
+        measuredRtt: rttMs,
+        adjustedTimeout: adjustedTimeLimit,
+        explanation: `RTT: ${rttMs}ms → Timeout: ${baseTimeLimit}ms + (2×${rttMs}ms) + 100ms = ${adjustedTimeLimit}ms`,
+      };
+    }
+    // else: invalid timestamp silently ignored, use base timeout
   }
   
   speedChallenges.set(id, {

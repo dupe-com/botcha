@@ -83,6 +83,33 @@ describe('Compute Challenge', () => {
       
       expect(challenge.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     });
+
+    it('includes a random salt in the puzzle (anti-precomputation)', () => {
+      const challenge = generateChallenge('medium');
+      
+      expect(challenge.puzzle).toContain('salt');
+      const saltMatch = challenge.puzzle.match(/salt "([^"]+)"/);
+      expect(saltMatch).toBeTruthy();
+      expect(saltMatch![1].length).toBe(16); // 16 hex chars
+    });
+
+    it('generates different salts for different challenges (not precomputable)', () => {
+      const challenge1 = generateChallenge('medium');
+      const challenge2 = generateChallenge('medium');
+      
+      const salt1 = challenge1.puzzle.match(/salt "([^"]+)"/)![1];
+      const salt2 = challenge2.puzzle.match(/salt "([^"]+)"/)![1];
+      
+      // With 16 random hex chars, collision is effectively impossible
+      expect(salt1).not.toBe(salt2);
+    });
+
+    it('hint includes the salt for the specific challenge', () => {
+      const challenge = generateChallenge('easy');
+      
+      const puzzleSalt = challenge.puzzle.match(/salt "([^"]+)"/)![1];
+      expect(challenge.hint).toContain(puzzleSalt);
+    });
   });
 
   describe('verifyChallenge()', () => {
@@ -90,9 +117,14 @@ describe('Compute Challenge', () => {
       // Generate challenge
       const challenge = generateChallenge('easy');
       
-      // Compute the correct answer
+      // Extract salt from puzzle text (format: ...followed by the salt "XXXX"...)
+      const saltMatch = challenge.puzzle.match(/salt "([^"]+)"/);
+      expect(saltMatch).toBeTruthy();
+      const salt = saltMatch![1];
+      
+      // Compute the correct answer (primes + salt)
       const primes = generatePrimes(100); // Easy difficulty uses 100 primes
-      const concatenated = primes.join('');
+      const concatenated = primes.join('') + salt;
       const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
       const answer = hash.substring(0, 16);
       
@@ -127,9 +159,14 @@ describe('Compute Challenge', () => {
       // Generate challenge
       const challenge = generateChallenge('easy');
       
-      // Compute correct answer
+      // Extract salt from puzzle text
+      const saltMatch = challenge.puzzle.match(/salt "([^"]+)"/);
+      expect(saltMatch).toBeTruthy();
+      const salt = saltMatch![1];
+      
+      // Compute correct answer (primes + salt)
       const primes = generatePrimes(100);
-      const concatenated = primes.join('');
+      const concatenated = primes.join('') + salt;
       const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
       const answer = hash.substring(0, 16);
       

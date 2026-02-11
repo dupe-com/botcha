@@ -172,24 +172,31 @@ export async function generateSpeedChallenge(
   
   // RTT-aware timeout calculation
   const baseTimeLimit = 500; // Base computation time for AI agents
+  const MAX_RTT_MS = 5000; // Cap RTT to prevent timestamp spoofing (5s max)
+  const MAX_TIMESTAMP_AGE_MS = 30000; // Reject timestamps older than 30s
   const now = Date.now();
   let rttMs = 0;
   let adjustedTimeLimit = baseTimeLimit;
   let rttInfo: any = undefined;
   
   if (clientTimestamp && clientTimestamp > 0) {
-    // Calculate RTT from client timestamp
-    rttMs = Math.max(0, now - clientTimestamp);
-    
-    // Adjust timeout: base + (2 * RTT) + 100ms buffer
-    // The 2x RTT accounts for request + response network time
-    adjustedTimeLimit = Math.max(baseTimeLimit, baseTimeLimit + (2 * rttMs) + 100);
-    
-    rttInfo = {
-      measuredRtt: rttMs,
-      adjustedTimeout: adjustedTimeLimit,
-      explanation: `RTT: ${rttMs}ms → Timeout: ${baseTimeLimit}ms + (2×${rttMs}ms) + 100ms = ${adjustedTimeLimit}ms`,
-    };
+    // Reject timestamps in the future or too far in the past (anti-spoofing)
+    const age = now - clientTimestamp;
+    if (age >= 0 && age <= MAX_TIMESTAMP_AGE_MS) {
+      // Calculate RTT from client timestamp, capped to prevent abuse
+      rttMs = Math.min(age, MAX_RTT_MS);
+      
+      // Adjust timeout: base + (2 * RTT) + 100ms buffer
+      // The 2x RTT accounts for request + response network time
+      adjustedTimeLimit = Math.max(baseTimeLimit, baseTimeLimit + (2 * rttMs) + 100);
+      
+      rttInfo = {
+        measuredRtt: rttMs,
+        adjustedTimeout: adjustedTimeLimit,
+        explanation: `RTT: ${rttMs}ms → Timeout: ${baseTimeLimit}ms + (2×${rttMs}ms) + 100ms = ${adjustedTimeLimit}ms`,
+      };
+    }
+    // else: invalid timestamp silently ignored, use base timeout
   }
   
   const challenge: SpeedChallenge = {
@@ -308,14 +315,17 @@ export async function generateStandardChallenge(
   const id = uuid();
   const config = DIFFICULTY_CONFIG[difficulty];
   
+  // Random salt makes each challenge unique — precomputed lookup tables won't work
+  const salt = uuid().replace(/-/g, '').substring(0, 16);
+  
   const primes = generatePrimes(config.primes);
-  const concatenated = primes.join('');
+  const concatenated = primes.join('') + salt;
   const hash = await sha256(concatenated);
   const answer = hash.substring(0, 16);
   
   const challenge: StandardChallenge = {
     id,
-    puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators). Return the first 16 hex characters.`,
+    puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators) followed by the salt "${salt}". Return the first 16 hex characters.`,
     expectedAnswer: answer,
     expiresAt: Date.now() + config.timeLimit + 1000,
     difficulty,
@@ -326,9 +336,9 @@ export async function generateStandardChallenge(
   
   return {
     id,
-    puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators). Return the first 16 hex characters.`,
+    puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators) followed by the salt "${salt}". Return the first 16 hex characters.`,
     timeLimit: config.timeLimit,
-    hint: `Example: First 5 primes = "235711" → SHA256 → first 16 chars`,
+    hint: `Example: First 5 primes + salt = "235711${salt}" → SHA256 → first 16 chars`,
   };
 }
 
@@ -385,22 +395,24 @@ export async function verifyLandingChallenge(
 }> {
   cleanExpired();
   
-  // Verify timestamp is recent (within 5 minutes)
+  // Verify timestamp is recent (within 2 minutes — tighter window for security)
   const submittedTime = new Date(timestamp).getTime();
   const now = Date.now();
-  if (Math.abs(now - submittedTime) > 5 * 60 * 1000) {
-    return { valid: false, error: 'Timestamp too old or in future' };
+  if (Number.isNaN(submittedTime) || Math.abs(now - submittedTime) > 2 * 60 * 1000) {
+    return { valid: false, error: 'Timestamp expired or invalid. Request a fresh challenge.' };
   }
   
-  // Calculate expected answer for today
+  // Per-request nonce: include the timestamp in the hash input so answers are unique per request
+  // This prevents answer sharing — each timestamp produces a different expected answer
   const today = new Date().toISOString().split('T')[0];
-  const expectedHash = (await sha256(`BOTCHA-LANDING-${today}`)).substring(0, 16);
+  const expectedHash = (await sha256(`BOTCHA-LANDING-${today}-${timestamp}`)).substring(0, 16);
   
   if (answer.toLowerCase() !== expectedHash.toLowerCase()) {
     return { 
       valid: false, 
       error: 'Incorrect answer',
-      hint: `Expected SHA256('BOTCHA-LANDING-${today}') first 16 chars`
+      // Don't leak the formula — only give a generic hint
+      hint: 'Parse the challenge from <script type="application/botcha+json"> on the landing page and compute the answer.',
     };
   }
   
@@ -454,141 +466,230 @@ export async function solveSpeedChallenge(problems: number[]): Promise<string[]>
 // In-memory storage for reasoning challenges
 const reasoningChallenges = new Map<string, ReasoningChallenge>();
 
-// Question bank - LLMs can answer these, simple scripts cannot
-const QUESTION_BANK: ReasoningQuestion[] = [
-  // Analogies
-  {
-    id: 'analogy-1',
-    question: 'Complete the analogy: Book is to library as car is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['garage', 'parking lot', 'dealership', 'parking garage', 'lot'],
-  },
-  {
-    id: 'analogy-2',
-    question: 'Complete the analogy: Painter is to brush as writer is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['pen', 'pencil', 'keyboard', 'typewriter', 'quill'],
-  },
-  {
-    id: 'analogy-3',
-    question: 'Complete the analogy: Fish is to water as bird is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['air', 'sky', 'atmosphere'],
-  },
-  {
-    id: 'analogy-4',
-    question: 'Complete the analogy: Eye is to see as ear is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['hear', 'listen', 'hearing', 'listening'],
-  },
-  // Wordplay
-  {
-    id: 'wordplay-1',
+// ============ PARAMETERIZED QUESTION GENERATORS ============
+// These generate unique questions each time, so a static lookup table won't work.
+
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+type QuestionGenerator = () => ReasoningQuestion;
+
+// --- Math generators (randomized numbers each time) ---
+function genMathAdd(): ReasoningQuestion {
+  const a = randInt(100, 999);
+  const b = randInt(100, 999);
+  return {
+    id: `math-add-${uuid().substring(0, 8)}`,
+    question: `What is ${a} + ${b}?`,
+    category: 'math',
+    acceptedAnswers: [(a + b).toString()],
+  };
+}
+
+function genMathMultiply(): ReasoningQuestion {
+  const a = randInt(12, 99);
+  const b = randInt(12, 99);
+  return {
+    id: `math-mul-${uuid().substring(0, 8)}`,
+    question: `What is ${a} × ${b}?`,
+    category: 'math',
+    acceptedAnswers: [(a * b).toString()],
+  };
+}
+
+function genMathModulo(): ReasoningQuestion {
+  const a = randInt(50, 999);
+  const b = randInt(3, 19);
+  return {
+    id: `math-mod-${uuid().substring(0, 8)}`,
+    question: `What is ${a} % ${b} (modulo)?`,
+    category: 'math',
+    acceptedAnswers: [(a % b).toString()],
+  };
+}
+
+function genMathSheep(): ReasoningQuestion {
+  const total = randInt(15, 50);
+  const remaining = randInt(3, total - 2);
+  return {
+    id: `math-sheep-${uuid().substring(0, 8)}`,
+    question: `A farmer has ${total} sheep. All but ${remaining} run away. How many sheep does he have left? Answer with just the number.`,
+    category: 'math',
+    acceptedAnswers: [remaining.toString()],
+  };
+}
+
+function genMathDoubling(): ReasoningQuestion {
+  const days = randInt(20, 60);
+  return {
+    id: `math-double-${uuid().substring(0, 8)}`,
+    question: `A patch of lily pads doubles in size every day. If it takes ${days} days to cover the entire lake, how many days to cover half? Answer with just the number.`,
+    category: 'math',
+    acceptedAnswers: [(days - 1).toString()],
+  };
+}
+
+function genMathMachines(): ReasoningQuestion {
+  const n = pickRandom([5, 7, 8, 10, 12]);
+  const m = randInt(50, 200);
+  return {
+    id: `math-machines-${uuid().substring(0, 8)}`,
+    question: `If it takes ${n} machines ${n} minutes to make ${n} widgets, how many minutes would it take ${m} machines to make ${m} widgets? Answer with just the number.`,
+    category: 'math',
+    acceptedAnswers: [n.toString()],
+  };
+}
+
+// --- Code generators (randomized values) ---
+function genCodeModulo(): ReasoningQuestion {
+  const a = randInt(20, 200);
+  const b = randInt(3, 15);
+  return {
+    id: `code-mod-${uuid().substring(0, 8)}`,
+    question: `In most programming languages, what does ${a} % ${b} evaluate to?`,
+    category: 'code',
+    acceptedAnswers: [(a % b).toString()],
+  };
+}
+
+function genCodeBitwise(): ReasoningQuestion {
+  const a = randInt(1, 15);
+  const b = randInt(1, 15);
+  const op = pickRandom(['&', '|', '^'] as const);
+  const opName = op === '&' ? 'AND' : op === '|' ? 'OR' : 'XOR';
+  let answer: number;
+  if (op === '&') answer = a & b;
+  else if (op === '|') answer = a | b;
+  else answer = a ^ b;
+  return {
+    id: `code-bit-${uuid().substring(0, 8)}`,
+    question: `What is ${a} ${op} ${b} (bitwise ${opName})? Answer with just the number.`,
+    category: 'code',
+    acceptedAnswers: [answer.toString()],
+  };
+}
+
+function genCodeStringLen(): ReasoningQuestion {
+  const words = ['hello', 'world', 'banana', 'algorithm', 'quantum', 'symphony', 'cryptography', 'paradigm', 'ephemeral', 'serendipity'];
+  const word = pickRandom(words);
+  return {
+    id: `code-strlen-${uuid().substring(0, 8)}`,
+    question: `What is the length of the string "${word}"? Answer with just the number.`,
+    category: 'code',
+    acceptedAnswers: [word.length.toString()],
+  };
+}
+
+// --- Logic generators (randomized names/items) ---
+function genLogicSyllogism(): ReasoningQuestion {
+  const groups = [
+    ['Bloops', 'Razzies', 'Lazzies'],
+    ['Florps', 'Zinkies', 'Mopples'],
+    ['Grunts', 'Tazzles', 'Wibbles'],
+    ['Plonks', 'Snazzles', 'Krinkles'],
+    ['Dweems', 'Fozzits', 'Glimmers'],
+  ];
+  const [a, b, c] = pickRandom(groups);
+  return {
+    id: `logic-syl-${uuid().substring(0, 8)}`,
+    question: `If all ${a} are ${b} and all ${b} are ${c}, are all ${a} definitely ${c}? Answer yes or no.`,
+    category: 'logic',
+    acceptedAnswers: ['yes'],
+  };
+}
+
+function genLogicNegation(): ReasoningQuestion {
+  const total = randInt(20, 100);
+  const keep = randInt(3, total - 5);
+  return {
+    id: `logic-neg-${uuid().substring(0, 8)}`,
+    question: `There are ${total} marbles in a bag. You remove all but ${keep}. How many marbles are left in the bag? Answer with just the number.`,
+    category: 'logic',
+    acceptedAnswers: [keep.toString()],
+  };
+}
+
+function genLogicSequence(): ReasoningQuestion {
+  const start = randInt(2, 20);
+  const step = randInt(2, 8);
+  const seq = [start, start + step, start + 2 * step, start + 3 * step];
+  return {
+    id: `logic-seq-${uuid().substring(0, 8)}`,
+    question: `What comes next in the sequence: ${seq.join(', ')}, ___? Answer with just the number.`,
+    category: 'logic',
+    acceptedAnswers: [(start + 4 * step).toString()],
+  };
+}
+
+// --- Wordplay / static (with randomized IDs so lookup by ID fails) ---
+const WORDPLAY_GENERATORS: QuestionGenerator[] = [
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What single word connects: apple, Newton, gravity?',
     category: 'wordplay',
     acceptedAnswers: ['tree', 'fall', 'falling'],
-  },
-  {
-    id: 'wordplay-2',
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What single word connects: key, piano, computer?',
     category: 'wordplay',
     acceptedAnswers: ['keyboard', 'board', 'keys'],
-  },
-  {
-    id: 'wordplay-3',
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What single word connects: river, money, blood?',
     category: 'wordplay',
     acceptedAnswers: ['bank', 'flow', 'stream'],
-  },
-  {
-    id: 'wordplay-4',
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What word can precede: light, house, shine?',
     category: 'wordplay',
     acceptedAnswers: ['sun', 'moon'],
-  },
-  // Logic
-  {
-    id: 'logic-1',
-    question: 'If all Bloops are Razzies and all Razzies are Lazzies, are all Bloops definitely Lazzies? Answer yes or no.',
-    category: 'logic',
-    acceptedAnswers: ['yes'],
-  },
-  {
-    id: 'logic-2',
-    question: 'If some Widgets are Gadgets, and all Gadgets are blue, can some Widgets be blue? Answer yes or no.',
-    category: 'logic',
-    acceptedAnswers: ['yes'],
-  },
-  {
-    id: 'logic-3',
-    question: 'I have a bee in my hand. What do I have in my eye? (Think about the saying)',
-    category: 'logic',
-    acceptedAnswers: ['beauty', 'beholder'],
-  },
-  {
-    id: 'logic-4',
-    question: 'A farmer has 17 sheep. All but 9 run away. How many sheep does he have left?',
-    category: 'logic',
-    acceptedAnswers: ['9', 'nine'],
-  },
-  // Math
-  {
-    id: 'math-1',
-    question: 'A bat and ball cost $1.10 total. The bat costs $1.00 more than the ball. How much does the ball cost in cents?',
-    category: 'math',
-    acceptedAnswers: ['5', '5 cents', 'five', 'five cents', '0.05', '$0.05'],
-  },
-  {
-    id: 'math-2',
-    question: 'If it takes 5 machines 5 minutes to make 5 widgets, how many minutes would it take 100 machines to make 100 widgets?',
-    category: 'math',
-    acceptedAnswers: ['5', 'five', '5 minutes', 'five minutes'],
-  },
-  {
-    id: 'math-3',
-    question: 'In a lake, there is a patch of lily pads. Every day, the patch doubles in size. If it takes 48 days for the patch to cover the entire lake, how many days would it take for the patch to cover half of the lake?',
-    category: 'math',
-    acceptedAnswers: ['47', 'forty-seven', 'forty seven', '47 days'],
-  },
-  // Code
-  {
-    id: 'code-1',
-    question: 'What is wrong with this code: if (x = 5) { doSomething(); }',
-    category: 'code',
-    acceptedAnswers: ['assignment', 'single equals', '= instead of ==', 'should be ==', 'should be ===', 'equality', 'comparison'],
-  },
-  {
-    id: 'code-2',
-    question: 'In most programming languages, what does the modulo operator % return for 17 % 5?',
-    category: 'code',
-    acceptedAnswers: ['2', 'two'],
-  },
-  {
-    id: 'code-3',
-    question: 'What data structure uses LIFO (Last In, First Out)?',
-    category: 'code',
-    acceptedAnswers: ['stack', 'a stack'],
-  },
-  // Common sense
-  {
-    id: 'sense-1',
-    question: 'If you are running a race and you pass the person in second place, what place are you in now?',
-    category: 'common-sense',
-    acceptedAnswers: ['second', '2nd', '2', 'two'],
-  },
-  {
-    id: 'sense-2',
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What gets wetter the more it dries?',
     category: 'common-sense',
     acceptedAnswers: ['towel', 'a towel', 'cloth', 'rag'],
-  },
-  {
-    id: 'sense-3',
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What can you catch but not throw?',
     category: 'common-sense',
     acceptedAnswers: ['cold', 'a cold', 'breath', 'your breath', 'feelings', 'disease'],
-  },
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Fish is to water as bird is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['air', 'sky', 'atmosphere'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Eye is to see as ear is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['hear', 'listen', 'hearing', 'listening'],
+  }),
 ];
+
+// All generators, weighted toward parameterized (harder to game)
+const QUESTION_GENERATORS: QuestionGenerator[] = [
+  genMathAdd, genMathMultiply, genMathModulo, genMathSheep, genMathDoubling, genMathMachines,
+  genCodeModulo, genCodeBitwise, genCodeStringLen,
+  genLogicSyllogism, genLogicNegation, genLogicSequence,
+  ...WORDPLAY_GENERATORS,
+];
+
+// Generate fresh question bank (unique every call)
+function generateQuestionBank(): ReasoningQuestion[] {
+  return QUESTION_GENERATORS.map(gen => gen());
+}
 
 /**
  * Generate a reasoning challenge: 3 random questions requiring LLM capabilities
@@ -604,7 +705,8 @@ export async function generateReasoningChallenge(kv?: KVNamespace): Promise<{
   const id = uuid();
 
   // Pick 3 random questions from different categories
-  const shuffled = [...QUESTION_BANK].sort(() => Math.random() - 0.5);
+  const freshBank = generateQuestionBank();
+  const shuffled = freshBank.sort(() => Math.random() - 0.5);
   const selectedCategories = new Set<string>();
   const selectedQuestions: ReasoningQuestion[] = [];
 

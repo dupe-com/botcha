@@ -36,15 +36,18 @@ export function generateChallenge(difficulty: 'easy' | 'medium' | 'hard' = 'medi
     hard: { primes: 1000, timeLimit: 3000 },
   }[difficulty];
   
-  // Generate first N primes, concatenate, hash
+  // Random salt makes each challenge unique — precomputed lookup tables won't work
+  const salt = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+  
+  // Generate first N primes, concatenate with salt, hash
   const primes = generatePrimes(config.primes);
-  const concatenated = primes.join('');
+  const concatenated = primes.join('') + salt;
   const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
   const answer = hash.substring(0, 16); // First 16 chars
   
   const challenge: Challenge = {
     id,
-    puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators). Return the first 16 hex characters.`,
+    puzzle: `Compute SHA256 of the first ${config.primes} prime numbers concatenated (no separators) followed by the salt "${salt}". Return the first 16 hex characters.`,
     expectedAnswer: answer,
     expiresAt: Date.now() + config.timeLimit + 1000, // Small grace period
     difficulty,
@@ -56,7 +59,7 @@ export function generateChallenge(difficulty: 'easy' | 'medium' | 'hard' = 'medi
     id,
     puzzle: challenge.puzzle,
     timeLimit: config.timeLimit,
-    hint: `Example: First 5 primes = "235711" → SHA256 → first 16 chars`,
+    hint: `Example: First 5 primes + salt = "235711${salt}" → SHA256 → first 16 chars`,
   };
 }
 

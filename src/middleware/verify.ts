@@ -153,33 +153,15 @@ async function verifyAgent(req: Request, opts: BotchaOptions): Promise<Verificat
     return { verified: false, hint: result.reason };
   }
 
-  // Method 3: X-Agent-Identity header (simple, for dev/testing)
-  const agentIdentity = req.headers['x-agent-identity'] as string;
-  if (agentIdentity) {
-    return { verified: true, method: 'header', agent: agentIdentity };
-  }
+  // Method 3: X-Agent-Identity header (dev/testing ONLY — should NOT be enabled in production)
+  // NOTE: This is intentionally NOT enabled by default in the standalone verify middleware.
+  // Use the Express middleware (lib/index.ts) with allowTestHeader: true for dev mode.
 
-  // Method 4: Known agent User-Agent patterns
-  const userAgent = req.headers['user-agent'] || '';
-  const agentPatterns = [
-    /OpenClaw\/[\d.]+/i,
-    /Claude-Agent\/[\d.]+/i,
-    /GPT-Agent\/[\d.]+/i,
-    /LangChain\/[\d.]+/i,
-    /AutoGPT\/[\d.]+/i,
-  ];
-  
-  for (const pattern of agentPatterns) {
-    const match = userAgent.match(pattern);
-    if (match) {
-      return { verified: true, method: 'header', agent: match[0] };
-    }
-  }
-
-  // No verification succeeded
+  // No verification succeeded — User-Agent patterns are NOT sufficient for verification.
+  // A User-Agent header can be trivially spoofed by any HTTP client.
   return {
     verified: false,
-    hint: 'Provide Signature-Agent header (Web Bot Auth), solve a challenge, or include X-Agent-Identity',
+    hint: 'Provide Signature-Agent header (Web Bot Auth) or solve a challenge (X-Botcha-Challenge-Id + X-Botcha-Solution)',
   };
 }
 

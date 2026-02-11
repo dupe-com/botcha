@@ -18,147 +18,262 @@ interface ReasoningChallenge {
 
 const reasoningChallenges = new Map<string, ReasoningChallenge>();
 
-// Question bank - LLMs can answer these, simple scripts cannot
-const QUESTION_BANK: ReasoningQuestion[] = [
-  // Analogies
-  {
-    id: 'analogy-1',
-    question: 'Complete the analogy: Book is to library as car is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['garage', 'parking lot', 'dealership', 'parking garage', 'lot'],
-  },
-  {
-    id: 'analogy-2',
-    question: 'Complete the analogy: Painter is to brush as writer is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['pen', 'pencil', 'keyboard', 'typewriter', 'quill'],
-  },
-  {
-    id: 'analogy-3',
-    question: 'Complete the analogy: Fish is to water as bird is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['air', 'sky', 'atmosphere'],
-  },
-  {
-    id: 'analogy-4',
-    question: 'Complete the analogy: Eye is to see as ear is to ___',
-    category: 'analogy',
-    acceptedAnswers: ['hear', 'listen', 'hearing', 'listening'],
-  },
+// ============ PARAMETERIZED QUESTION GENERATORS ============
+// These generate unique questions each time, so a static lookup table won't work.
 
-  // Wordplay / Connections
-  {
-    id: 'wordplay-1',
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+type QuestionGenerator = () => ReasoningQuestion;
+
+// --- Math generators (randomized numbers each time) ---
+function genMathAdd(): ReasoningQuestion {
+  const a = randInt(100, 999);
+  const b = randInt(100, 999);
+  const answer = (a + b).toString();
+  return {
+    id: `math-add-${crypto.randomUUID().substring(0, 8)}`,
+    question: `What is ${a} + ${b}?`,
+    category: 'math',
+    acceptedAnswers: [answer],
+  };
+}
+
+function genMathMultiply(): ReasoningQuestion {
+  const a = randInt(12, 99);
+  const b = randInt(12, 99);
+  const answer = (a * b).toString();
+  return {
+    id: `math-mul-${crypto.randomUUID().substring(0, 8)}`,
+    question: `What is ${a} × ${b}?`,
+    category: 'math',
+    acceptedAnswers: [answer],
+  };
+}
+
+function genMathModulo(): ReasoningQuestion {
+  const a = randInt(50, 999);
+  const b = randInt(3, 19);
+  const answer = (a % b).toString();
+  return {
+    id: `math-mod-${crypto.randomUUID().substring(0, 8)}`,
+    question: `What is ${a} % ${b} (modulo)?`,
+    category: 'math',
+    acceptedAnswers: [answer],
+  };
+}
+
+function genMathSheep(): ReasoningQuestion {
+  const total = randInt(15, 50);
+  const remaining = randInt(3, total - 2);
+  return {
+    id: `math-sheep-${crypto.randomUUID().substring(0, 8)}`,
+    question: `A farmer has ${total} sheep. All but ${remaining} run away. How many sheep does he have left? Answer with just the number.`,
+    category: 'math',
+    acceptedAnswers: [remaining.toString()],
+  };
+}
+
+function genMathDoubling(): ReasoningQuestion {
+  const days = randInt(20, 60);
+  const answer = (days - 1).toString();
+  return {
+    id: `math-double-${crypto.randomUUID().substring(0, 8)}`,
+    question: `A patch of lily pads doubles in size every day. If it takes ${days} days to cover the entire lake, how many days to cover half? Answer with just the number.`,
+    category: 'math',
+    acceptedAnswers: [answer],
+  };
+}
+
+function genMathMachines(): ReasoningQuestion {
+  const n = pickRandom([5, 7, 8, 10, 12]);
+  const m = randInt(50, 200);
+  return {
+    id: `math-machines-${crypto.randomUUID().substring(0, 8)}`,
+    question: `If it takes ${n} machines ${n} minutes to make ${n} widgets, how many minutes would it take ${m} machines to make ${m} widgets? Answer with just the number.`,
+    category: 'math',
+    acceptedAnswers: [n.toString()],
+  };
+}
+
+// --- Code generators (randomized values) ---
+function genCodeModulo(): ReasoningQuestion {
+  const a = randInt(20, 200);
+  const b = randInt(3, 15);
+  const answer = (a % b).toString();
+  return {
+    id: `code-mod-${crypto.randomUUID().substring(0, 8)}`,
+    question: `In most programming languages, what does ${a} % ${b} evaluate to?`,
+    category: 'code',
+    acceptedAnswers: [answer],
+  };
+}
+
+function genCodeBitwise(): ReasoningQuestion {
+  const a = randInt(1, 15);
+  const b = randInt(1, 15);
+  const op = pickRandom(['&', '|', '^'] as const);
+  const opName = op === '&' ? 'AND' : op === '|' ? 'OR' : 'XOR';
+  let answer: number;
+  if (op === '&') answer = a & b;
+  else if (op === '|') answer = a | b;
+  else answer = a ^ b;
+  return {
+    id: `code-bit-${crypto.randomUUID().substring(0, 8)}`,
+    question: `What is ${a} ${op} ${b} (bitwise ${opName})? Answer with just the number.`,
+    category: 'code',
+    acceptedAnswers: [answer.toString()],
+  };
+}
+
+function genCodeStringLen(): ReasoningQuestion {
+  const words = ['hello', 'world', 'banana', 'algorithm', 'quantum', 'symphony', 'cryptography', 'paradigm', 'ephemeral', 'serendipity'];
+  const word = pickRandom(words);
+  return {
+    id: `code-strlen-${crypto.randomUUID().substring(0, 8)}`,
+    question: `What is the length of the string "${word}"? Answer with just the number.`,
+    category: 'code',
+    acceptedAnswers: [word.length.toString()],
+  };
+}
+
+// --- Logic generators (randomized names/items) ---
+function genLogicSyllogism(): ReasoningQuestion {
+  const groups = [
+    ['Bloops', 'Razzies', 'Lazzies'],
+    ['Florps', 'Zinkies', 'Mopples'],
+    ['Grunts', 'Tazzles', 'Wibbles'],
+    ['Plonks', 'Snazzles', 'Krinkles'],
+    ['Dweems', 'Fozzits', 'Glimmers'],
+  ];
+  const [a, b, c] = pickRandom(groups);
+  return {
+    id: `logic-syl-${crypto.randomUUID().substring(0, 8)}`,
+    question: `If all ${a} are ${b} and all ${b} are ${c}, are all ${a} definitely ${c}? Answer yes or no.`,
+    category: 'logic',
+    acceptedAnswers: ['yes'],
+  };
+}
+
+function genLogicNegation(): ReasoningQuestion {
+  const total = randInt(20, 100);
+  const keep = randInt(3, total - 5);
+  return {
+    id: `logic-neg-${crypto.randomUUID().substring(0, 8)}`,
+    question: `There are ${total} marbles in a bag. You remove all but ${keep}. How many marbles are left in the bag? Answer with just the number.`,
+    category: 'logic',
+    acceptedAnswers: [keep.toString()],
+  };
+}
+
+function genLogicSequence(): ReasoningQuestion {
+  // Generate a simple arithmetic or geometric sequence
+  const start = randInt(2, 20);
+  const step = randInt(2, 8);
+  const seq = [start, start + step, start + 2 * step, start + 3 * step];
+  const answer = (start + 4 * step).toString();
+  return {
+    id: `logic-seq-${crypto.randomUUID().substring(0, 8)}`,
+    question: `What comes next in the sequence: ${seq.join(', ')}, ___? Answer with just the number.`,
+    category: 'logic',
+    acceptedAnswers: [answer],
+  };
+}
+
+// --- Wordplay (static but with large pool + randomized IDs so lookup by ID fails) ---
+const WORDPLAY_QUESTIONS: (() => ReasoningQuestion)[] = [
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
     question: 'What single word connects: apple, Newton, gravity?',
     category: 'wordplay',
     acceptedAnswers: ['tree', 'fall', 'falling'],
-  },
-  {
-    id: 'wordplay-2',
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
     question: 'What single word connects: key, piano, computer?',
     category: 'wordplay',
     acceptedAnswers: ['keyboard', 'board', 'keys'],
-  },
-  {
-    id: 'wordplay-3',
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
     question: 'What single word connects: river, money, blood?',
     category: 'wordplay',
     acceptedAnswers: ['bank', 'flow', 'stream'],
-  },
-  {
-    id: 'wordplay-4',
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
     question: 'What word can precede: light, house, shine?',
     category: 'wordplay',
     acceptedAnswers: ['sun', 'moon'],
-  },
-
-  // Logic puzzles
-  {
-    id: 'logic-1',
-    question: 'If all Bloops are Razzies and all Razzies are Lazzies, are all Bloops definitely Lazzies? Answer yes or no.',
-    category: 'logic',
-    acceptedAnswers: ['yes'],
-  },
-  {
-    id: 'logic-2',
-    question: 'If some Widgets are Gadgets, and all Gadgets are blue, can some Widgets be blue? Answer yes or no.',
-    category: 'logic',
-    acceptedAnswers: ['yes'],
-  },
-  {
-    id: 'logic-3',
-    question: 'I have a bee in my hand. What do I have in my eye? (Think about the saying)',
-    category: 'logic',
-    acceptedAnswers: ['beauty', 'beholder'],
-    hint: 'Beauty is in the eye of the ___',
-  },
-  {
-    id: 'logic-4',
-    question: 'A farmer has 17 sheep. All but 9 run away. How many sheep does he have left?',
-    category: 'logic',
-    acceptedAnswers: ['9', 'nine'],
-  },
-
-  // Math word problems (tricky ones)
-  {
-    id: 'math-1',
-    question: 'A bat and ball cost $1.10 total. The bat costs $1.00 more than the ball. How much does the ball cost in cents?',
-    category: 'math',
-    acceptedAnswers: ['5', '5 cents', 'five', 'five cents', '0.05', '$0.05'],
-  },
-  {
-    id: 'math-2',
-    question: 'If it takes 5 machines 5 minutes to make 5 widgets, how many minutes would it take 100 machines to make 100 widgets?',
-    category: 'math',
-    acceptedAnswers: ['5', 'five', '5 minutes', 'five minutes'],
-  },
-  {
-    id: 'math-3',
-    question: 'In a lake, there is a patch of lily pads. Every day, the patch doubles in size. If it takes 48 days for the patch to cover the entire lake, how many days would it take for the patch to cover half of the lake?',
-    category: 'math',
-    acceptedAnswers: ['47', 'forty-seven', 'forty seven', '47 days'],
-  },
-
-  // Code understanding
-  {
-    id: 'code-1',
-    question: 'What is wrong with this code: if (x = 5) { doSomething(); }',
-    category: 'code',
-    acceptedAnswers: ['assignment', 'single equals', '= instead of ==', 'should be ==', 'should be ===', 'equality', 'comparison'],
-  },
-  {
-    id: 'code-2',
-    question: 'In most programming languages, what does the modulo operator % return for 17 % 5?',
-    category: 'code',
-    acceptedAnswers: ['2', 'two'],
-  },
-  {
-    id: 'code-3',
-    question: 'What data structure uses LIFO (Last In, First Out)?',
-    category: 'code',
-    acceptedAnswers: ['stack', 'a stack'],
-  },
-
-  // Common sense
-  {
-    id: 'sense-1',
-    question: 'If you are running a race and you pass the person in second place, what place are you in now?',
-    category: 'common-sense',
-    acceptedAnswers: ['second', '2nd', '2', 'two'],
-  },
-  {
-    id: 'sense-2',
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
     question: 'What gets wetter the more it dries?',
     category: 'common-sense',
     acceptedAnswers: ['towel', 'a towel', 'cloth', 'rag'],
-  },
-  {
-    id: 'sense-3',
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
     question: 'What can you catch but not throw?',
     category: 'common-sense',
     acceptedAnswers: ['cold', 'a cold', 'breath', 'your breath', 'feelings', 'disease'],
-  },
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
+    question: 'What data structure uses LIFO (Last In, First Out)?',
+    category: 'code',
+    acceptedAnswers: ['stack', 'a stack'],
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
+    question: 'Complete the analogy: Fish is to water as bird is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['air', 'sky', 'atmosphere'],
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
+    question: 'Complete the analogy: Eye is to see as ear is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['hear', 'listen', 'hearing', 'listening'],
+  }),
+  () => ({
+    id: `wp-${crypto.randomUUID().substring(0, 8)}`,
+    question: 'Complete the analogy: Painter is to brush as writer is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['pen', 'pencil', 'keyboard', 'typewriter', 'quill'],
+  }),
 ];
+
+// All generators, weighted toward parameterized (harder to game)
+const QUESTION_GENERATORS: QuestionGenerator[] = [
+  // Math (parameterized — unique every time)
+  genMathAdd,
+  genMathMultiply,
+  genMathModulo,
+  genMathSheep,
+  genMathDoubling,
+  genMathMachines,
+  // Code (parameterized)
+  genCodeModulo,
+  genCodeBitwise,
+  genCodeStringLen,
+  // Logic (parameterized)
+  genLogicSyllogism,
+  genLogicNegation,
+  genLogicSequence,
+  // Wordplay / static (but with random IDs)
+  ...WORDPLAY_QUESTIONS,
+];
+
+// Legacy compatibility: generate a static-looking bank from generators
+function generateQuestionBank(): ReasoningQuestion[] {
+  return QUESTION_GENERATORS.map(gen => gen());
+}
 
 // Cleanup expired challenges
 setInterval(() => {
@@ -180,8 +295,9 @@ export function generateReasoningChallenge(): {
 } {
   const id = crypto.randomUUID();
 
-  // Pick 3 random questions from different categories
-  const shuffled = [...QUESTION_BANK].sort(() => Math.random() - 0.5);
+  // Generate fresh parameterized questions (different every time)
+  const freshBank = generateQuestionBank();
+  const shuffled = freshBank.sort(() => Math.random() - 0.5);
   const selectedCategories = new Set<string>();
   const selectedQuestions: ReasoningQuestion[] = [];
 
@@ -329,7 +445,7 @@ export function verifyReasoningChallenge(
 }
 
 export function getQuestionCount(): number {
-  return QUESTION_BANK.length;
+  return QUESTION_GENERATORS.length;
 }
 
 export default { generateReasoningChallenge, verifyReasoningChallenge, getQuestionCount };

@@ -35,6 +35,59 @@ describe('Speed Challenge', () => {
       expect(challenge.rttInfo).toBeUndefined();
     });
 
+    test('caps RTT adjustment at 5 seconds max (anti-spoofing)', () => {
+      // Simulate a spoofed timestamp from the distant past (e.g., epoch 0)
+      const challenge = generateSpeedChallenge(1);
+      
+      // Should NOT get an enormous timeout — RTT should be capped at 5000ms
+      // Max possible: 500 + (2 * 5000) + 100 = 10600ms
+      // But actually, timestamps >30s old are rejected entirely, so we get base timeout
+      expect(challenge.timeLimit).toBe(500);
+      expect(challenge.rttInfo).toBeUndefined();
+    });
+
+    test('rejects future timestamps (anti-spoofing)', () => {
+      // Timestamp 10 seconds in the future
+      const futureTimestamp = Date.now() + 10000;
+      const challenge = generateSpeedChallenge(futureTimestamp);
+      
+      // Future timestamps should be silently ignored — use base timeout
+      expect(challenge.timeLimit).toBe(500);
+      expect(challenge.rttInfo).toBeUndefined();
+    });
+
+    test('rejects timestamps older than 30 seconds (anti-spoofing)', () => {
+      // Timestamp 60 seconds ago — should be rejected
+      const oldTimestamp = Date.now() - 60000;
+      const challenge = generateSpeedChallenge(oldTimestamp);
+      
+      expect(challenge.timeLimit).toBe(500);
+      expect(challenge.rttInfo).toBeUndefined();
+    });
+
+    test('accepts valid timestamp within 30s window and caps RTT', () => {
+      // Simulate 200ms RTT (within valid range)
+      const validTimestamp = Date.now() - 200;
+      const challenge = generateSpeedChallenge(validTimestamp);
+      
+      expect(challenge.timeLimit).toBeGreaterThan(500);
+      expect(challenge.rttInfo).toBeDefined();
+      // RTT should be approximately 200ms (within margin for test execution time)
+      expect(challenge.rttInfo!.measuredRtt).toBeGreaterThanOrEqual(200);
+      expect(challenge.rttInfo!.measuredRtt).toBeLessThan(5000);
+    });
+
+    test('RTT cap limits maximum adjusted timeout', () => {
+      // Simulate a 25 second RTT — within 30s window but above 5s cap
+      const slowTimestamp = Date.now() - 25000;
+      const challenge = generateSpeedChallenge(slowTimestamp);
+      
+      // RTT should be capped at 5000ms, so adjusted timeout = 500 + (2*5000) + 100 = 10600
+      expect(challenge.timeLimit).toBe(10600);
+      expect(challenge.rttInfo).toBeDefined();
+      expect(challenge.rttInfo!.measuredRtt).toBe(5000); // Capped, not 25000
+    });
+
     test('generated challenge has exactly 5 problems', () => {
       const challenge = generateSpeedChallenge();
       

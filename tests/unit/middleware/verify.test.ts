@@ -28,25 +28,29 @@ describe('Middleware - botchaVerify', () => {
     mockNext = vi.fn();
   });
 
-  // Test 1: Passes request with X-Agent-Identity header
-  test('passes with X-Agent-Identity header', async () => {
+  // Test 1: X-Agent-Identity header alone does NOT pass (security fix)
+  test('rejects X-Agent-Identity header (no longer auto-passes)', async () => {
     mockReq.headers = { 'x-agent-identity': 'TestAgent/1.0' };
     
     const middleware = botchaVerify();
     await middleware(mockReq as Request, mockRes as Response, mockNext);
     
-    expect(mockNext).toHaveBeenCalled();
-    expect((mockReq as any).agent).toBe('TestAgent/1.0');
-    expect((mockReq as any).verificationMethod).toBe('header');
-    expect(mockRes.status).not.toHaveBeenCalled();
+    // X-Agent-Identity without a proper challenge solution should be rejected
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(403);
   });
 
-  // Test 2: Passes request with valid challenge solution
+  // Test 2: Passes request with valid challenge solution (with salt)
   test('passes with valid challenge solution', async () => {
     // First, generate a challenge
     const challenge = generateChallenge('easy');
     
-    // Solve it manually: generate the first 100 primes, concatenate, hash
+    // Extract salt from puzzle text
+    const saltMatch = challenge.puzzle.match(/salt "([^"]+)"/);
+    expect(saltMatch).toBeTruthy();
+    const salt = saltMatch![1];
+    
+    // Solve it manually: generate the first 100 primes, concatenate + salt, hash
     const primes: number[] = [];
     let num = 2;
     while (primes.length < 100) {
@@ -55,7 +59,7 @@ describe('Middleware - botchaVerify', () => {
       }
       num++;
     }
-    const concatenated = primes.join('');
+    const concatenated = primes.join('') + salt;
     const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
     const solution = hash.substring(0, 16);
     
@@ -74,28 +78,28 @@ describe('Middleware - botchaVerify', () => {
     expect(mockRes.status).not.toHaveBeenCalled();
   });
 
-  // Test 3: Passes request with known User-Agent pattern: OpenClaw/1.0
-  test('passes with User-Agent: OpenClaw/1.0', async () => {
+  // Test 3: User-Agent: OpenClaw/1.0 no longer auto-passes (security fix)
+  test('rejects User-Agent: OpenClaw/1.0 (no longer auto-passes)', async () => {
     mockReq.headers = { 'user-agent': 'OpenClaw/1.0' };
     
     const middleware = botchaVerify();
     await middleware(mockReq as Request, mockRes as Response, mockNext);
     
-    expect(mockNext).toHaveBeenCalled();
-    expect((mockReq as any).agent).toBe('OpenClaw/1.0');
-    expect((mockReq as any).verificationMethod).toBe('header');
+    // User-Agent alone should NOT grant access — it's trivially spoofable
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(403);
   });
 
-  // Test 4: Passes request with known User-Agent pattern: Claude-Agent/2.0
-  test('passes with User-Agent: Claude-Agent/2.0', async () => {
+  // Test 4: User-Agent: Claude-Agent/2.0 no longer auto-passes (security fix)
+  test('rejects User-Agent: Claude-Agent/2.0 (no longer auto-passes)', async () => {
     mockReq.headers = { 'user-agent': 'Claude-Agent/2.0' };
     
     const middleware = botchaVerify();
     await middleware(mockReq as Request, mockRes as Response, mockNext);
     
-    expect(mockNext).toHaveBeenCalled();
-    expect((mockReq as any).agent).toBe('Claude-Agent/2.0');
-    expect((mockReq as any).verificationMethod).toBe('header');
+    // User-Agent alone should NOT grant access — it's trivially spoofable
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(403);
   });
 
   // Test 5: Returns 403 with challenge when not verified
@@ -146,36 +150,47 @@ describe('Middleware - botchaVerify', () => {
     expect(mockRes.header).toHaveBeenCalledWith('X-Botcha-Time-Limit', expect.any(String));
   });
 
-  // Test 8: Sets req.agent on successful verification
-  test('sets req.agent on successful verification', async () => {
-    mockReq.headers = { 'x-agent-identity': 'MyCustomAgent/3.0' };
+  // Test 8: Sets req.agent on successful challenge verification
+  test('sets req.agent on successful challenge verification', async () => {
+    // Must solve a real challenge — headers alone no longer work
+    const challenge = generateSpeedChallenge();
+    const answers = challenge.challenges.map((p) => {
+      const hash = crypto.createHash('sha256').update(p.num.toString()).digest('hex');
+      return hash.substring(0, 8);
+    });
+
+    mockReq.headers = {
+      'x-botcha-challenge-id': challenge.id,
+      'x-botcha-answers': JSON.stringify(answers),
+    };
     
-    const middleware = botchaVerify();
+    const middleware = botchaVerify({ challengeType: 'speed' });
     await middleware(mockReq as Request, mockRes as Response, mockNext);
     
-    expect((mockReq as any).agent).toBe('MyCustomAgent/3.0');
+    expect((mockReq as any).agent).toContain('speed-challenge-verified');
     expect(mockNext).toHaveBeenCalled();
   });
 
-  // Test 9: Sets req.verificationMethod correctly
-  test('sets req.verificationMethod correctly for different methods', async () => {
-    // Test with header method
-    mockReq.headers = { 'x-agent-identity': 'TestAgent/1.0' };
-    let middleware = botchaVerify();
-    await middleware(mockReq as Request, mockRes as Response, mockNext);
-    expect((mockReq as any).verificationMethod).toBe('header');
+  // Test 9: Sets req.verificationMethod correctly for challenge method
+  test('sets req.verificationMethod correctly for challenge method', async () => {
+    // Only challenge-based verification works now
+    const challenge = generateSpeedChallenge();
+    const answers = challenge.challenges.map((p) => {
+      const hash = crypto.createHash('sha256').update(p.num.toString()).digest('hex');
+      return hash.substring(0, 8);
+    });
 
-    // Reset and test with User-Agent pattern
-    mockReq = { headers: { 'user-agent': 'GPT-Agent/1.0' }, method: 'GET', path: '/test' };
-    mockNext = vi.fn();
-    middleware = botchaVerify();
-    await middleware(mockReq as Request, mockRes as Response, mockNext);
-    expect((mockReq as any).verificationMethod).toBe('header');
+    mockReq.headers = {
+      'x-botcha-challenge-id': challenge.id,
+      'x-botcha-answers': JSON.stringify(answers),
+    };
 
-    // Note: Challenge method is tested in test 2
+    const middleware = botchaVerify({ challengeType: 'speed' });
+    await middleware(mockReq as Request, mockRes as Response, mockNext);
+    expect((mockReq as any).verificationMethod).toBe('challenge');
   });
 
-  // Test 10: Allows challenge to be verified correctly (full flow)
+  // Test 10: Full challenge flow with salt: generate -> solve -> verify
   test('full challenge flow: generate -> solve -> verify', async () => {
     // Step 1: First request without credentials - should get challenge
     mockReq.headers = { 'user-agent': 'TestBot/1.0' };
@@ -193,10 +208,14 @@ describe('Middleware - botchaVerify', () => {
     expect(challengeId).toBeDefined();
     expect(challengePuzzle).toContain('SHA256');
     
-    // Step 2: Solve the challenge
-    // Parse the puzzle to get the number of primes (default is 500 for medium difficulty)
+    // Step 2: Solve the challenge (now with salt)
     const primeMatch = challengePuzzle.match(/first (\d+) prime/i);
     const primeCount = primeMatch ? parseInt(primeMatch[1]) : 500;
+    
+    // Extract salt from puzzle
+    const saltMatch = challengePuzzle.match(/salt "([^"]+)"/);
+    expect(saltMatch).toBeTruthy();
+    const salt = saltMatch![1];
     
     const primes: number[] = [];
     let num = 2;
@@ -206,7 +225,7 @@ describe('Middleware - botchaVerify', () => {
       }
       num++;
     }
-    const concatenated = primes.join('');
+    const concatenated = primes.join('') + salt;
     const hash = crypto.createHash('sha256').update(concatenated).digest('hex');
     const solution = hash.substring(0, 16);
     
@@ -295,15 +314,16 @@ describe('Middleware - botchaVerify', () => {
     expect((mockReq as any).agent).toContain('speed-challenge-verified');
   });
 
-  // Test that User-Agent matching is case-insensitive
-  test('User-Agent matching is case-insensitive', async () => {
+  // User-Agent alone no longer grants access (security fix)
+  test('rejects User-Agent patterns regardless of case', async () => {
     mockReq.headers = { 'user-agent': 'openclaw/2.5' };
     
     const middleware = botchaVerify();
     await middleware(mockReq as Request, mockRes as Response, mockNext);
     
-    expect(mockNext).toHaveBeenCalled();
-    expect((mockReq as any).agent).toBe('openclaw/2.5');
+    // User-Agent patterns are no longer an auto-pass — trivially spoofable
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(403);
   });
 
   // Test with invalid challenge solution
