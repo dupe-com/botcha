@@ -15,6 +15,8 @@ export interface BotchaClientOptions {
   maxRetries?: number;
   /** Enable automatic token acquisition and management (default: true) */
   autoToken?: boolean;
+  /** Audience claim for token (optional) */
+  audience?: string;
 }
 
 export interface ChallengeResponse {
@@ -47,6 +49,10 @@ export interface VerifyResponse {
 export interface TokenResponse {
   success: boolean;
   token: string | null;
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  refresh_expires_in?: number;
   expiresIn?: string;
   challenge?: {
     id: string;
@@ -55,6 +61,8 @@ export interface TokenResponse {
     instructions: string;
   };
   nextStep?: string;
+  verified?: boolean;
+  solveTimeMs?: number;
 }
 
 /**

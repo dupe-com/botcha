@@ -570,3 +570,307 @@ async def test_fetch_403_without_challenge():
         assert response.status_code == 403
         data = response.json()
         assert data["error"] == "Forbidden"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_audience_passed_in_verify():
+    """Test that audience parameter is included in verify request."""
+    fake_token = make_fake_jwt()
+
+    # Mock GET /v1/token
+    respx.get("https://botcha.ai/v1/token").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "test-challenge-id",
+                "problems": [123456],
+                "timeLimit": 500,
+            },
+        )
+    )
+
+    # Mock POST /v1/token/verify and capture the request
+    verify_route = respx.post("https://botcha.ai/v1/token/verify").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "verified": True,
+                "token": fake_token,
+                "solveTimeMs": 42.5,
+            },
+        )
+    )
+
+    async with BotchaClient(audience="api.example.com") as client:
+        token = await client.get_token()
+
+        # Verify audience was sent in the request body
+        request = verify_route.calls.last.request
+        body = json.loads(request.content)
+        assert "audience" in body
+        assert body["audience"] == "api.example.com"
+        assert token == fake_token
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_audience_not_included_when_none():
+    """Test that audience is not included in verify request when not set."""
+    fake_token = make_fake_jwt()
+
+    # Mock GET /v1/token
+    respx.get("https://botcha.ai/v1/token").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "test-challenge-id",
+                "problems": [123456],
+                "timeLimit": 500,
+            },
+        )
+    )
+
+    # Mock POST /v1/token/verify and capture the request
+    verify_route = respx.post("https://botcha.ai/v1/token/verify").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "verified": True,
+                "token": fake_token,
+                "solveTimeMs": 42.5,
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        token = await client.get_token()
+
+        # Verify audience was NOT sent in the request body
+        request = verify_route.calls.last.request
+        body = json.loads(request.content)
+        assert "audience" not in body
+        assert token == fake_token
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_token_stored_from_verify():
+    """Test that refresh token is stored from get_token response."""
+    fake_token = make_fake_jwt()
+    fake_refresh_token = "refresh_token_12345"
+
+    # Mock GET /v1/token
+    respx.get("https://botcha.ai/v1/token").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "test-challenge-id",
+                "problems": [123456],
+                "timeLimit": 500,
+            },
+        )
+    )
+
+    # Mock POST /v1/token/verify with refresh_token
+    respx.post("https://botcha.ai/v1/token/verify").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "verified": True,
+                "token": fake_token,
+                "access_token": fake_token,
+                "expires_in": 300,
+                "refresh_token": fake_refresh_token,
+                "refresh_expires_in": 3600,
+                "solveTimeMs": 42.5,
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        token = await client.get_token()
+
+        assert token == fake_token
+        assert client._refresh_token == fake_refresh_token
+        # Token should expire in ~300 seconds (5 minutes)
+        assert client._token_expires_at <= time.time() + 305
+        assert client._token_expires_at >= time.time() + 295
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_token_method():
+    """Test that refresh_token() calls correct endpoint and updates token."""
+    fake_token = make_fake_jwt()
+    fake_refresh_token = "refresh_token_12345"
+    new_access_token = make_fake_jwt(exp=int(time.time()) + 3600)
+
+    # Mock refresh endpoint
+    refresh_route = respx.post("https://botcha.ai/v1/token/refresh").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": new_access_token,
+                "expires_in": 300,
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        # Manually set refresh token
+        client._refresh_token = fake_refresh_token
+        client._token = fake_token
+
+        # Call refresh
+        new_token = await client.refresh_token()
+
+        assert new_token == new_access_token
+        assert client._token == new_access_token
+
+        # Verify correct endpoint was called
+        request = refresh_route.calls.last.request
+        body = json.loads(request.content)
+        assert body["refresh_token"] == fake_refresh_token
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_token_without_refresh_token_raises():
+    """Test that refresh_token() raises ValueError when no refresh token is stored."""
+    async with BotchaClient() as client:
+        # No refresh token set
+        with pytest.raises(ValueError, match="No refresh token available"):
+            await client.refresh_token()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_401_tries_refresh_first():
+    """Test that 401 triggers refresh_token() before full re-verify."""
+    old_token = make_fake_jwt()
+    refresh_token = "refresh_token_12345"
+    refreshed_token = make_fake_jwt(exp=int(time.time()) + 3600)
+
+    # Mock refresh endpoint
+    refresh_route = respx.post("https://botcha.ai/v1/token/refresh").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": refreshed_token,
+                "expires_in": 300,
+            },
+        )
+    )
+
+    # Mock API endpoint - returns 401 first, then 200
+    api_call_count = 0
+
+    def api_handler(request):
+        nonlocal api_call_count
+        api_call_count += 1
+        if api_call_count == 1:
+            return httpx.Response(401, json={"error": "Unauthorized"})
+        # Check that refreshed token is being used
+        assert request.headers["Authorization"] == f"Bearer {refreshed_token}"
+        return httpx.Response(200, json={"result": "success"})
+
+    respx.get("https://api.example.com/data").mock(side_effect=api_handler)
+
+    async with BotchaClient() as client:
+        # Set up client with tokens
+        client._token = old_token
+        client._refresh_token = refresh_token
+        client._token_expires_at = time.time() + 600  # Still valid but will get 401
+
+        response = await client.fetch("https://api.example.com/data")
+
+        # Should succeed after refresh
+        assert response.status_code == 200
+        assert response.json() == {"result": "success"}
+
+        # Verify refresh was called
+        assert refresh_route.called
+        assert api_call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_401_falls_back_to_full_verify_on_refresh_failure():
+    """Test that if refresh fails, falls back to full get_token()."""
+    old_token = make_fake_jwt()
+    refresh_token = "refresh_token_12345"
+    new_token = make_fake_jwt(exp=int(time.time()) + 3600)
+
+    # Mock refresh endpoint - fails
+    refresh_route = respx.post("https://botcha.ai/v1/token/refresh").mock(
+        return_value=httpx.Response(401, json={"error": "Invalid refresh token"})
+    )
+
+    # Mock full token flow
+    respx.get("https://botcha.ai/v1/token").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "test-challenge-id",
+                "problems": [123456],
+                "timeLimit": 500,
+            },
+        )
+    )
+
+    verify_route = respx.post("https://botcha.ai/v1/token/verify").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "verified": True,
+                "token": new_token,
+                "solveTimeMs": 42.5,
+            },
+        )
+    )
+
+    # Mock API endpoint - returns 401 first, then 200
+    api_call_count = 0
+
+    def api_handler(request):
+        nonlocal api_call_count
+        api_call_count += 1
+        if api_call_count == 1:
+            return httpx.Response(401, json={"error": "Unauthorized"})
+        return httpx.Response(200, json={"result": "success"})
+
+    respx.get("https://api.example.com/data").mock(side_effect=api_handler)
+
+    async with BotchaClient() as client:
+        # Set up client with tokens
+        client._token = old_token
+        client._refresh_token = refresh_token
+        client._token_expires_at = time.time() + 600
+
+        response = await client.fetch("https://api.example.com/data")
+
+        # Should succeed after full re-verify
+        assert response.status_code == 200
+        assert response.json() == {"result": "success"}
+
+        # Verify refresh was attempted
+        assert refresh_route.called
+        # Verify fallback to full flow
+        assert verify_route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_close_clears_refresh_token():
+    """Test that close() clears the refresh token."""
+    client = BotchaClient()
+    client._token = "access_token"
+    client._refresh_token = "refresh_token"
+    client._token_expires_at = time.time() + 300
+
+    await client.close()
+
+    assert client._token is None
+    assert client._refresh_token is None
+    assert client._token_expires_at == 0

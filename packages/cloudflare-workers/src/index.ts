@@ -23,7 +23,7 @@ import {
   solveSpeedChallenge,
   type KVNamespace,
 } from './challenges';
-import { generateToken, verifyToken, extractBearerToken } from './auth';
+import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken } from './auth';
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
 import streamRoutes from './routes/stream';
@@ -118,7 +118,7 @@ async function requireJWT(c: Context<{ Bindings: Bindings; Variables: Variables 
     }, 401);
   }
 
-  const result = await verifyToken(token, c.env.JWT_SECRET);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
 
   if (!result.valid) {
     return c.json({
@@ -239,8 +239,10 @@ app.get('/', (c) => {
         'POST /v1/challenge/stream/:session': 'Send actions to streaming session',
       },
       authentication: {
-        'GET /v1/token': 'Get challenge for JWT token flow',
-        'POST /v1/token/verify': 'Verify challenge and receive JWT token',
+        'GET /v1/token': 'Get challenge for JWT token flow (supports ?audience= param)',
+        'POST /v1/token/verify': 'Verify challenge and receive JWT tokens (access + refresh)',
+        'POST /v1/token/refresh': 'Refresh access token using refresh token',
+        'POST /v1/token/revoke': 'Revoke a token (access or refresh)',
         'GET /agent-only': 'Protected endpoint (requires Bearer token)',
       },
       badges: {
@@ -275,14 +277,20 @@ app.get('/', (c) => {
     },
     authentication: {
       flow: [
-        '1. GET /v1/token - receive challenge',
+        '1. GET /v1/token?audience=myapi - receive challenge (optional audience param)',
         '2. Solve the challenge',
-        '3. POST /v1/token/verify - submit solution',
-        '4. Receive JWT token (valid 1 hour)',
-        '5. Use: Authorization: Bearer <token>',
+        '3. POST /v1/token/verify - submit solution with optional audience and bind_ip',
+        '4. Receive access_token (5 min) and refresh_token (1 hour)',
+        '5. Use: Authorization: Bearer <access_token>',
+        '6. Refresh: POST /v1/token/refresh with refresh_token',
+        '7. Revoke: POST /v1/token/revoke with token',
       ],
-      tokenExpiry: '1 hour',
-      usage: 'Authorization: Bearer <token>',
+      tokens: {
+        access_token: '5 minutes (for API access)',
+        refresh_token: '1 hour (to get new access tokens)',
+      },
+      usage: 'Authorization: Bearer <access_token>',
+      features: ['audience claims', 'client IP binding', 'token revocation', 'refresh tokens'],
     },
     rttAwareness: {
       purpose: 'Fair challenges for agents on slow networks',
@@ -621,6 +629,9 @@ app.get('/v1/token', rateLimitMiddleware, async (c) => {
   const clientTimestampParam = c.req.query('ts') || c.req.header('x-client-timestamp');
   const clientTimestamp = clientTimestampParam ? parseInt(clientTimestampParam, 10) : undefined;
   
+  // Extract optional audience parameter
+  const audience = c.req.query('audience');
+  
   const challenge = await generateSpeedChallenge(c.env.CHALLENGES, clientTimestamp);
   
   const response: any = {
@@ -632,7 +643,7 @@ app.get('/v1/token', rateLimitMiddleware, async (c) => {
       instructions: challenge.instructions,
     },
     token: null, // Will be populated after verification
-    nextStep: `POST /v1/token/verify with {id: "${challenge.id}", answers: ["..."]}`
+    nextStep: `POST /v1/token/verify with {id: "${challenge.id}", answers: ["..."]${audience ? `, audience: "${audience}"` : ''}}`
   };
   
   // Include RTT info if available
@@ -640,13 +651,18 @@ app.get('/v1/token', rateLimitMiddleware, async (c) => {
     response.rtt_adjustment = challenge.rttInfo;
   }
   
+  // Include audience hint if provided
+  if (audience) {
+    response.audience = audience;
+  }
+  
   return c.json(response);
 });
 
 // Verify challenge and issue JWT token
 app.post('/v1/token/verify', async (c) => {
-  const body = await c.req.json<{ id?: string; answers?: string[] }>();
-  const { id, answers } = body;
+  const body = await c.req.json<{ id?: string; answers?: string[]; audience?: string; bind_ip?: boolean }>();
+  const { id, answers, audience, bind_ip } = body;
 
   if (!id || !answers) {
     return c.json({
@@ -666,19 +682,135 @@ app.post('/v1/token/verify', async (c) => {
     }, 403);
   }
 
-  // Generate JWT token
-  const token = await generateToken(id, result.solveTimeMs || 0, c.env.JWT_SECRET);
+  // Get client IP from request headers
+  const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown';
+
+  // Generate JWT tokens (access + refresh)
+  const tokenResult = await generateToken(
+    id, 
+    result.solveTimeMs || 0, 
+    c.env.JWT_SECRET,
+    c.env,
+    {
+      aud: audience,
+      clientIp: bind_ip ? clientIp : undefined,
+    }
+  );
+
+  // Get badge information (for backward compatibility)
+  const baseUrl = new URL(c.req.url).origin;
+  const badge = await createBadgeResponse('speed-challenge', c.env.JWT_SECRET, baseUrl, result.solveTimeMs);
 
   return c.json({
+    verified: true,
+    access_token: tokenResult.access_token,
+    expires_in: tokenResult.expires_in,
+    refresh_token: tokenResult.refresh_token,
+    refresh_expires_in: tokenResult.refresh_expires_in,
+    solveTimeMs: result.solveTimeMs,
+    ...badge,
+    // Backward compatibility: include old fields
     success: true,
     message: `🤖 Challenge verified in ${result.solveTimeMs}ms! You are a bot.`,
-    token,
-    expiresIn: '1h',
+    token: tokenResult.access_token, // Old clients expect this
+    expiresIn: '5m',
     usage: {
       header: 'Authorization: Bearer <token>',
       protectedEndpoints: ['/agent-only'],
+      refreshEndpoint: '/v1/token/refresh',
     },
   });
+});
+
+// Refresh access token using refresh token
+app.post('/v1/token/refresh', async (c) => {
+  const body = await c.req.json<{ refresh_token?: string }>();
+  const { refresh_token } = body;
+
+  if (!refresh_token) {
+    return c.json({
+      success: false,
+      error: 'Missing refresh_token',
+      hint: 'Submit the refresh_token from /v1/token/verify response',
+    }, 400);
+  }
+
+  const result = await refreshAccessToken(
+    refresh_token,
+    c.env,
+    c.env.JWT_SECRET
+  );
+
+  if (!result.success) {
+    return c.json({
+      success: false,
+      error: 'INVALID_REFRESH_TOKEN',
+      message: result.error || 'Refresh token is invalid, expired, or revoked',
+    }, 401);
+  }
+
+  return c.json({
+    success: true,
+    access_token: result.tokens!.access_token,
+    expires_in: result.tokens!.expires_in,
+  });
+});
+
+// Revoke a token (access or refresh)
+app.post('/v1/token/revoke', async (c) => {
+  const body = await c.req.json<{ token?: string }>();
+  const { token } = body;
+
+  if (!token) {
+    return c.json({
+      success: false,
+      error: 'Missing token',
+      hint: 'Submit either an access_token or refresh_token to revoke',
+    }, 400);
+  }
+
+  // Decode JWT to extract JTI (without full verification since we're revoking anyway)
+  try {
+    // Simple base64 decode of JWT payload (format: header.payload.signature)
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return c.json({
+        success: false,
+        error: 'Invalid token format',
+        hint: 'Token must be a valid JWT',
+      }, 400);
+    }
+
+    // Decode payload
+    const payloadB64 = parts[1];
+    // Add padding if needed
+    const padded = payloadB64 + '='.repeat((4 - payloadB64.length % 4) % 4);
+    const payloadJson = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(payloadJson);
+
+    if (!payload.jti) {
+      return c.json({
+        success: false,
+        error: 'No JTI found in token',
+        hint: 'Token must contain a JTI claim for revocation',
+      }, 400);
+    }
+
+    // Revoke the token by JTI
+    await revokeToken(payload.jti, c.env);
+
+    return c.json({
+      success: true,
+      revoked: true,
+      message: 'Token has been revoked',
+    });
+  } catch (error) {
+    return c.json({
+      success: false,
+      error: 'Failed to decode or revoke token',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    }, 400);
+  }
 });
 
 // ============ REASONING CHALLENGE ============
@@ -991,7 +1123,7 @@ app.get('/agent-only', async (c) => {
     }, 401);
   }
 
-  const result = await verifyToken(token, c.env.JWT_SECRET);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
 
   // Track authentication attempt
   await trackAuthAttempt(

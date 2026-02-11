@@ -50,10 +50,13 @@ export class BotchaClient {
   private agentIdentity: string;
   private maxRetries: number;
   private autoToken: boolean;
+  private opts: BotchaClientOptions;
   private cachedToken: string | null = null;
+  private _refreshToken: string | null = null;
   private tokenExpiresAt: number | null = null;
 
   constructor(options: BotchaClientOptions = {}) {
+    this.opts = options;
     this.baseUrl = options.baseUrl || 'https://botcha.ai';
     this.agentIdentity = options.agentIdentity || `BotchaClient/${SDK_VERSION}`;
     this.maxRetries = options.maxRetries || 3;
@@ -75,17 +78,17 @@ export class BotchaClient {
   /**
    * Get a JWT token from the BOTCHA service using the token flow.
    * Automatically solves the challenge and verifies to obtain a token.
-   * Token is cached until near expiry (refreshed at 55 minutes).
+   * Token is cached until near expiry (refreshed at 4 minutes).
    * 
    * @returns JWT token string
    * @throws Error if token acquisition fails
    */
   async getToken(): Promise<string> {
-    // Check if we have a valid cached token (refresh at 55min = 3300000ms)
+    // Check if we have a valid cached token (refresh at 1 minute before expiry)
     if (this.cachedToken && this.tokenExpiresAt) {
       const now = Date.now();
       const timeUntilExpiry = this.tokenExpiresAt - now;
-      const refreshThreshold = 5 * 60 * 1000; // 5 minutes before expiry
+      const refreshThreshold = 1 * 60 * 1000; // 1 minute before expiry
       
       if (timeUntilExpiry > refreshThreshold) {
         return this.cachedToken;
@@ -115,16 +118,23 @@ export class BotchaClient {
     const answers = this.solve(problems);
 
     // Step 3: Submit solution to POST /v1/token/verify
+    const verifyBody: any = {
+      id: challengeData.challenge.id,
+      answers,
+    };
+    
+    // Include audience if specified
+    if (this.opts.audience) {
+      verifyBody.audience = this.opts.audience;
+    }
+
     const verifyRes = await fetch(`${this.baseUrl}/v1/token/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': this.agentIdentity,
       },
-      body: JSON.stringify({
-        id: challengeData.challenge.id,
-        answers,
-      }),
+      body: JSON.stringify(verifyBody),
     });
 
     if (!verifyRes.ok) {
@@ -133,13 +143,66 @@ export class BotchaClient {
 
     const verifyData = await verifyRes.json() as TokenResponse;
 
-    if (!verifyData.success || !verifyData.token) {
+    if (!verifyData.success && !verifyData.verified) {
       throw new Error('Failed to obtain token from verification');
     }
 
-    // Cache the token - default expiry is 1 hour
-    this.cachedToken = verifyData.token;
-    this.tokenExpiresAt = Date.now() + 60 * 60 * 1000; // 1 hour from now
+    // Extract access token (prefer access_token field, fall back to token for backward compat)
+    const accessToken = verifyData.access_token || verifyData.token;
+    if (!accessToken) {
+      throw new Error('Failed to obtain token from verification');
+    }
+
+    // Store refresh token if provided
+    if (verifyData.refresh_token) {
+      this._refreshToken = verifyData.refresh_token;
+    }
+
+    // Cache the token - use expires_in from response (in seconds), default to 5 minutes
+    const expiresInSeconds = verifyData.expires_in || 300; // Default to 5 minutes
+    this.cachedToken = accessToken;
+    this.tokenExpiresAt = Date.now() + expiresInSeconds * 1000;
+
+    return this.cachedToken;
+  }
+
+  /**
+   * Refresh the access token using the refresh token.
+   * Only works if a refresh token was obtained from a previous getToken() call.
+   * 
+   * @returns New JWT access token string
+   * @throws Error if refresh fails or no refresh token available
+   */
+  async refreshToken(): Promise<string> {
+    if (!this._refreshToken) {
+      throw new Error('No refresh token available. Call getToken() first.');
+    }
+
+    const refreshRes = await fetch(`${this.baseUrl}/v1/token/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': this.agentIdentity,
+      },
+      body: JSON.stringify({
+        refresh_token: this._refreshToken,
+      }),
+    });
+
+    if (!refreshRes.ok) {
+      throw new Error(`Token refresh failed with status ${refreshRes.status} ${refreshRes.statusText}`);
+    }
+
+    const refreshData = await refreshRes.json() as TokenResponse;
+
+    if (!refreshData.access_token) {
+      throw new Error('Failed to obtain access token from refresh');
+    }
+
+    // Update cached token with new access token
+    this.cachedToken = refreshData.access_token;
+    const expiresInSeconds = refreshData.expires_in || 300; // Default to 5 minutes
+    this.tokenExpiresAt = Date.now() + expiresInSeconds * 1000;
 
     return this.cachedToken;
   }
@@ -149,6 +212,7 @@ export class BotchaClient {
    */
   clearToken(): void {
     this.cachedToken = null;
+    this._refreshToken = null;
     this.tokenExpiresAt = null;
   }
 
@@ -238,15 +302,28 @@ export class BotchaClient {
       headers,
     });
     
-    // Handle 401 by refreshing token and retrying once
+    // Handle 401 by trying refresh first, then full re-verify if refresh fails
     if (response.status === 401 && this.autoToken) {
-      this.clearToken();
       try {
-        const token = await this.getToken();
+        // Try refresh token first if available
+        let token: string;
+        if (this._refreshToken) {
+          try {
+            token = await this.refreshToken();
+          } catch (refreshError) {
+            // Refresh failed, clear tokens and do full re-verify
+            this.clearToken();
+            token = await this.getToken();
+          }
+        } else {
+          // No refresh token, clear and do full re-verify
+          this.clearToken();
+          token = await this.getToken();
+        }
         headers.set('Authorization', `Bearer ${token}`);
         response = await fetch(url, { ...init, headers });
       } catch (error) {
-        // Token refresh failed, return the 401 response
+        // Token refresh/acquisition failed, return the 401 response
       }
     }
 

@@ -24,10 +24,15 @@ describe('BotchaClient - Token Flow', () => {
         nextStep: 'POST /v1/token/verify',
       };
 
-      // Mock POST /v1/token/verify - returns JWT
+      // Mock POST /v1/token/verify - returns JWT with new fields
       const verifyResponse = {
+        verified: true,
         success: true,
         token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token',
+        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token',
+        refresh_token: 'refresh.token.here',
+        expires_in: 300,
+        refresh_expires_in: 3600,
         expiresIn: '1h',
       };
 
@@ -49,6 +54,9 @@ describe('BotchaClient - Token Flow', () => {
       expect(token).toBe('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token');
       expect(global.fetch).toHaveBeenCalledTimes(2);
       
+      // Verify refresh token is stored
+      expect((client as any)._refreshToken).toBe('refresh.token.here');
+      
       // Verify first call was GET /v1/token
       const firstCall = (global.fetch as any).mock.calls[0];
       expect(firstCall[0]).toContain('/v1/token');
@@ -65,11 +73,87 @@ describe('BotchaClient - Token Flow', () => {
       expect(body.answers[0]).toHaveLength(8);
     });
 
+    test('sends audience in verify request when configured', async () => {
+      const challengeResponse = {
+        success: true,
+        token: null,
+        challenge: {
+          id: 'token-challenge-123',
+          problems: [{ num: 123456, operation: 'sha256_first8' }],
+          timeLimit: 10000,
+          instructions: 'Solve to get token',
+        },
+      };
+
+      const verifyResponse = {
+        verified: true,
+        access_token: 'token.with.audience',
+        refresh_token: 'refresh.token',
+        expires_in: 300,
+      };
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue(challengeResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue(verifyResponse),
+        });
+
+      const client = new BotchaClient({ audience: 'api.example.com' });
+      await client.getToken();
+
+      // Verify audience was sent in verify request
+      const verifyCall = (global.fetch as any).mock.calls[1];
+      const body = JSON.parse(verifyCall[1]?.body);
+      expect(body.audience).toBe('api.example.com');
+    });
+
+    test('does not send audience when not configured', async () => {
+      const challengeResponse = {
+        success: true,
+        token: null,
+        challenge: {
+          id: 'token-challenge-123',
+          problems: [{ num: 123456, operation: 'sha256_first8' }],
+          timeLimit: 10000,
+          instructions: 'Solve to get token',
+        },
+      };
+
+      const verifyResponse = {
+        verified: true,
+        access_token: 'token.without.audience',
+        expires_in: 300,
+      };
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue(challengeResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue(verifyResponse),
+        });
+
+      const client = new BotchaClient();
+      await client.getToken();
+
+      // Verify audience was NOT sent in verify request
+      const verifyCall = (global.fetch as any).mock.calls[1];
+      const body = JSON.parse(verifyCall[1]?.body);
+      expect(body.audience).toBeUndefined();
+    });
+
     test('caches token and reuses it within validity period', async () => {
       const verifyResponse = {
-        success: true,
-        token: 'cached.jwt.token',
-        expiresIn: '1h',
+        verified: true,
+        access_token: 'cached.jwt.token',
+        refresh_token: 'refresh.token',
+        expires_in: 300,
       };
 
       global.fetch = vi.fn()
@@ -104,7 +188,7 @@ describe('BotchaClient - Token Flow', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2); // No additional calls
     });
 
-    test('refreshes token when near expiry (within 5 minutes)', async () => {
+    test('refreshes token when near expiry (within 1 minute)', async () => {
       const firstToken = 'first.jwt.token';
       const secondToken = 'refreshed.jwt.token';
 
@@ -120,7 +204,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: firstToken, expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: firstToken, 
+            refresh_token: 'refresh.token',
+            expires_in: 300
+          }),
         })
         // Second token acquisition (after manipulating expiry)
         .mockResolvedValueOnce({
@@ -133,7 +222,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: secondToken, expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: secondToken,
+            refresh_token: 'refresh.token.2',
+            expires_in: 300
+          }),
         });
 
       const client = new BotchaClient();
@@ -142,8 +236,8 @@ describe('BotchaClient - Token Flow', () => {
       const token1 = await client.getToken();
       expect(token1).toBe(firstToken);
       
-      // Manually set token to expire in 4 minutes (within refresh threshold)
-      (client as any).tokenExpiresAt = Date.now() + 4 * 60 * 1000;
+      // Manually set token to expire in 30 seconds (within refresh threshold of 1 minute)
+      (client as any).tokenExpiresAt = Date.now() + 30 * 1000;
       
       // Should trigger refresh
       const token2 = await client.getToken();
@@ -258,6 +352,141 @@ describe('BotchaClient - Token Flow', () => {
     });
   });
 
+  describe('refreshToken()', () => {
+    test('successfully refreshes token using refresh token', async () => {
+      // First, get initial token with refresh token
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            success: true,
+            token: null,
+            challenge: { id: 'c1', problems: [123], timeLimit: 10000, instructions: 'Solve' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            verified: true,
+            access_token: 'initial.access.token',
+            refresh_token: 'valid.refresh.token',
+            expires_in: 300,
+          }),
+        })
+        // Mock refresh endpoint
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            access_token: 'new.access.token',
+            expires_in: 300,
+          }),
+        });
+
+      const client = new BotchaClient();
+      
+      // Get initial token
+      await client.getToken();
+      
+      // Refresh token
+      const newToken = await client.refreshToken();
+      
+      expect(newToken).toBe('new.access.token');
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      
+      // Verify refresh endpoint was called correctly
+      const refreshCall = (global.fetch as any).mock.calls[2];
+      expect(refreshCall[0]).toContain('/v1/token/refresh');
+      expect(refreshCall[1]?.method).toBe('POST');
+      
+      const body = JSON.parse(refreshCall[1]?.body);
+      expect(body.refresh_token).toBe('valid.refresh.token');
+    });
+
+    test('throws error when no refresh token available', async () => {
+      const client = new BotchaClient();
+      
+      await expect(client.refreshToken()).rejects.toThrow(
+        'No refresh token available. Call getToken() first.'
+      );
+    });
+
+    test('throws error when refresh endpoint returns error', async () => {
+      // First, get initial token with refresh token
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            success: true,
+            token: null,
+            challenge: { id: 'c1', problems: [123], timeLimit: 10000, instructions: 'Solve' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            verified: true,
+            access_token: 'initial.access.token',
+            refresh_token: 'invalid.refresh.token',
+            expires_in: 300,
+          }),
+        })
+        // Mock refresh endpoint failing
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+        });
+
+      const client = new BotchaClient();
+      
+      // Get initial token
+      await client.getToken();
+      
+      // Try to refresh - should fail
+      await expect(client.refreshToken()).rejects.toThrow(
+        'Token refresh failed with status 401 Unauthorized'
+      );
+    });
+
+    test('updates cached token after successful refresh', async () => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            success: true,
+            token: null,
+            challenge: { id: 'c1', problems: [123], timeLimit: 10000, instructions: 'Solve' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            verified: true,
+            access_token: 'initial.token',
+            refresh_token: 'refresh.token',
+            expires_in: 300,
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            access_token: 'refreshed.token',
+            expires_in: 300,
+          }),
+        });
+
+      const client = new BotchaClient();
+      
+      const token1 = await client.getToken();
+      expect(token1).toBe('initial.token');
+      
+      await client.refreshToken();
+      
+      // Verify cached token was updated
+      expect((client as any).cachedToken).toBe('refreshed.token');
+    });
+  });
+
   describe('clearToken()', () => {
     test('clears cached token and forces refresh', async () => {
       global.fetch = vi.fn()
@@ -272,7 +501,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: 'first.token', expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: 'first.token',
+            refresh_token: 'first.refresh',
+            expires_in: 300
+          }),
         })
         // Second acquisition after clear
         .mockResolvedValueOnce({
@@ -285,7 +519,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: 'second.token', expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: 'second.token',
+            refresh_token: 'second.refresh',
+            expires_in: 300
+          }),
         });
 
       const client = new BotchaClient();
@@ -293,9 +532,15 @@ describe('BotchaClient - Token Flow', () => {
       // Get first token
       await client.getToken();
       expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect((client as any)._refreshToken).toBe('first.refresh');
       
       // Clear token
       client.clearToken();
+      
+      // Verify both tokens are cleared
+      expect((client as any).cachedToken).toBeNull();
+      expect((client as any)._refreshToken).toBeNull();
+      expect((client as any).tokenExpiresAt).toBeNull();
       
       // Get token again - should fetch new one
       await client.getToken();
@@ -319,7 +564,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token, expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: token,
+            refresh_token: 'refresh.token',
+            expires_in: 300
+          }),
         })
         // Actual API request
         .mockResolvedValueOnce({
@@ -340,9 +590,9 @@ describe('BotchaClient - Token Flow', () => {
       expect(headers.get('Authorization')).toBe(`Bearer ${token}`);
     });
 
-    test('handles 401 by refreshing token and retrying', async () => {
+    test('handles 401 by using refresh token first, then retrying', async () => {
       const firstToken = 'expired.token';
-      const secondToken = 'fresh.token';
+      const refreshedToken = 'refreshed.token';
       
       global.fetch = vi.fn()
         // First token acquisition
@@ -356,27 +606,27 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: firstToken, expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: firstToken,
+            refresh_token: 'valid.refresh.token',
+            expires_in: 300
+          }),
         })
         // API request with expired token - returns 401
         .mockResolvedValueOnce({
           ok: false,
           status: 401,
         })
-        // Token refresh
+        // Token refresh using refresh token
         .mockResolvedValueOnce({
           ok: true,
           json: vi.fn().mockResolvedValue({
-            success: true,
-            token: null,
-            challenge: { id: 'c2', problems: [456], timeLimit: 10000, instructions: 'Solve' },
+            access_token: refreshedToken,
+            expires_in: 300,
           }),
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: secondToken, expiresIn: '1h' }),
-        })
-        // Retry API request with fresh token
+        // Retry API request with refreshed token
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -388,8 +638,80 @@ describe('BotchaClient - Token Flow', () => {
 
       expect(response.status).toBe(200);
       
-      // Should have: 2 calls for first token + 1 failed API call + 2 calls for refresh + 1 retry = 6 total
-      expect(global.fetch).toHaveBeenCalledTimes(6);
+      // Should have: 2 calls for initial token + 1 failed API call + 1 refresh call + 1 retry = 5 total
+      expect(global.fetch).toHaveBeenCalledTimes(5);
+      
+      // Verify refresh endpoint was used (not full re-verify)
+      const refreshCall = (global.fetch as any).mock.calls[3];
+      expect(refreshCall[0]).toContain('/v1/token/refresh');
+    });
+
+    test('handles 401 by doing full re-verify when refresh token fails', async () => {
+      const firstToken = 'expired.token';
+      const newToken = 'new.token';
+      
+      global.fetch = vi.fn()
+        // First token acquisition
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            success: true,
+            token: null,
+            challenge: { id: 'c1', problems: [123], timeLimit: 10000, instructions: 'Solve' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: firstToken,
+            refresh_token: 'invalid.refresh.token',
+            expires_in: 300
+          }),
+        })
+        // API request with expired token - returns 401
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+        })
+        // Token refresh fails
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+        })
+        // Full re-verify flow
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            success: true,
+            token: null,
+            challenge: { id: 'c2', problems: [456], timeLimit: 10000, instructions: 'Solve' },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: newToken,
+            refresh_token: 'new.refresh.token',
+            expires_in: 300
+          }),
+        })
+        // Retry API request with new token
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: vi.fn().mockResolvedValue({ data: 'success after full re-verify' }),
+        });
+
+      const client = new BotchaClient({ autoToken: true });
+      const response = await client.fetch('https://api.example.com/protected');
+
+      expect(response.status).toBe(200);
+      
+      // Should have: 2 calls for initial token + 1 failed API call + 1 failed refresh + 2 calls for re-verify + 1 retry = 7 total
+      expect(global.fetch).toHaveBeenCalledTimes(7);
     });
 
     test('can disable autoToken via options', async () => {
@@ -469,7 +791,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token, expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: token,
+            refresh_token: 'refresh.token',
+            expires_in: 300
+          }),
         });
 
       const client = new BotchaClient({ baseUrl: customBaseUrl });
@@ -515,7 +842,12 @@ describe('BotchaClient - Token Flow', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: vi.fn().mockResolvedValue({ success: true, token: 'jwt.token', expiresIn: '1h' }),
+          json: vi.fn().mockResolvedValue({ 
+            verified: true,
+            access_token: 'jwt.token',
+            refresh_token: 'refresh.token',
+            expires_in: 300
+          }),
         })
         // API returns 403 with challenge (token didn't work)
         .mockResolvedValueOnce(challengeResponse)
