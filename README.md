@@ -17,6 +17,7 @@
 
 🌐 **Website:** [botcha.ai](https://botcha.ai)  
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
+🐍 **Python:** Available at `packages/python/` (PyPI publishing coming soon)  
 🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
 
 ## Why?
@@ -31,11 +32,24 @@ Use cases:
 
 ## Install
 
+### TypeScript/JavaScript
+
 ```bash
 npm install @dupecom/botcha
 ```
 
+### Python
+
+```bash
+# Python SDK available at packages/python/ (PyPI publishing coming soon)
+# For now, install from source:
+cd packages/python
+pip install -e .
+```
+
 ## Quick Start
+
+### TypeScript/JavaScript
 
 ```typescript
 import express from 'express';
@@ -49,6 +63,21 @@ app.get('/agent-only', botcha.verify(), (req, res) => {
 });
 
 app.listen(3000);
+```
+
+### Python
+
+```python
+from botcha import BotchaClient, solve_botcha
+
+# Client SDK for AI agents
+async with BotchaClient() as client:
+    # Get verification token
+    token = await client.get_token()
+    
+    # Or auto-solve and fetch protected endpoints
+    response = await client.fetch("https://api.example.com/agent-only")
+    data = await response.json()
 ```
 
 ## How It Works
@@ -409,6 +438,22 @@ import { solveBotcha } from '@dupecom/botcha/client';
 const answers = solveBotcha([123456, 789012]);
 // Returns: ['a1b2c3d4', 'e5f6g7h8']
 ```
+
+**Python SDK:**
+```python
+from botcha import BotchaClient, solve_botcha
+
+# Option 1: Auto-solve with client
+async with BotchaClient() as client:
+    response = await client.fetch("https://api.example.com/agent-only")
+    data = await response.json()
+
+# Option 2: Manual solve
+answers = solve_botcha([123456, 789012])
+# Returns: ['a1b2c3d4', 'e5f6g7h8']
+```
+
+> **Note:** Python SDK is available in `packages/python/` but not yet published to PyPI. Install from source for now.
 
 ## License
 

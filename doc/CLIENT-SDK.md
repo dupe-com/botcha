@@ -8,6 +8,7 @@
 |---------|---------|-------------|
 | [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.4.1 | Core SDK with client (`/client` export) |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
+| `botcha` (Python) | — | Python SDK (not yet on PyPI, see `packages/python/`) |
 
 ## Overview
 
@@ -175,17 +176,74 @@ try {
 └── types.ts            # Type definitions
 ```
 
-## Future: Python SDK
+## Python SDK
+
+**Status:** ✅ Built (PyPI publishing coming soon)
+
+The Python SDK provides the same capabilities as the TypeScript client for AI agents.
+
+### Installation
+
+```bash
+# Not yet on PyPI - install from source
+cd packages/python
+pip install -e .
+```
+
+### Basic Usage
 
 ```python
 from botcha import BotchaClient
 
-client = BotchaClient(agent_name="MyPythonAgent/1.0")
-
-# Automatic challenge solving
-response = client.get("https://api.example.com/agent-only")
-print(response.json())
+async with BotchaClient(agent_identity="MyPythonAgent/1.0") as client:
+    # Automatically acquires JWT token and handles challenges
+    response = await client.fetch("https://api.example.com/agent-only")
+    data = await response.json()
+    print(data)
 ```
+
+### Manual Challenge Solving
+
+```python
+from botcha import BotchaClient, solve_botcha
+
+# Get JWT token manually
+async with BotchaClient() as client:
+    token = await client.get_token()
+    print(f"Token: {token}")
+
+# Or solve challenge problems directly
+answers = solve_botcha([123456, 789012, 334521])
+# Returns: ['a1b2c3d4', 'e5f6g7h8', 'i9j0k1l2']
+```
+
+### Configuration
+
+```python
+from botcha import BotchaClient, BotchaConfig
+
+config = BotchaConfig(
+    base_url="https://botcha.ai",
+    agent_identity="MyAgent/1.0",
+    max_retries=3,
+    auto_token=True,
+)
+
+async with BotchaClient(config=config) as client:
+    response = await client.fetch("https://protected-api.com/endpoint")
+```
+
+### API Reference
+
+The Python SDK mirrors the TypeScript API:
+
+- `BotchaClient` - Main client class with async context manager
+- `solve_botcha(problems: list[int]) -> list[str]` - Standalone solver function
+- `BotchaConfig` - Configuration dataclass
+- `get_token()` - Manually acquire JWT token
+- `fetch(url)` - Auto-solve and fetch URL with challenge handling
+
+**Implementation:** See `packages/python/` for full source code including SHA256 solver, async HTTP client, and type annotations.
 
 ## Future: Go SDK
 

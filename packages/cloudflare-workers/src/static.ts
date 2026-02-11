@@ -92,7 +92,8 @@ Endpoint: POST https://botcha.ai/api/speed-challenge - Verify speed challenge
 Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
 
 # Usage
-Install: npm install @dupecom/botcha
+Install-NPM: npm install @dupecom/botcha
+Install-Python: pip install botcha (coming soon)
 License: MIT
 
 # AI Agent Welcome
@@ -192,6 +193,10 @@ export function getOpenApiSpec(version: string) {
       license: {
         name: "MIT",
         url: "https://github.com/dupe-com/botcha/blob/main/LICENSE"
+      },
+      "x-sdk": {
+        npm: "@dupecom/botcha",
+        python: "botcha (PyPI coming soon)"
       }
     },
     servers: [

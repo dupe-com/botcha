@@ -20,7 +20,8 @@
 #### SDK & Integration
 - `@dupecom/botcha` npm package
 - Express middleware (`botcha.verify()`)
-- Client SDK for AI agents
+- Client SDK for AI agents (TypeScript)
+- Python SDK (`packages/python/`) - TODO: Publish to PyPI
 - OpenAPI spec at /openapi.json
 
 ---

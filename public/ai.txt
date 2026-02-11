@@ -34,6 +34,7 @@ Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
 
 # Usage
 Install: npm install @dupecom/botcha
+Install-Python: botcha (PyPI coming soon)
 License: MIT
 
 # AI Agent Welcome

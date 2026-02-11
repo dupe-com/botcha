@@ -45,6 +45,7 @@ curl https://botcha.ai/endpoint
 | [@dupecom/botcha-cloudflare](https://www.npmjs.com/package/@dupecom/botcha-cloudflare) | X.Y.Z | Changes |
 | [@dupecom/botcha-cli](https://www.npmjs.com/package/@dupecom/botcha-cli) | X.Y.Z | Changes |
 | [@dupecom/botcha-langchain](https://www.npmjs.com/package/@dupecom/botcha-langchain) | X.Y.Z | Changes |
+| `botcha` (Python) | — | Available at `packages/python/` (not yet on PyPI) |
 
 ## 🚀 Try It Now
 

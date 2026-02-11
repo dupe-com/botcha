@@ -185,6 +185,7 @@ function getHumanLanding(version: string): string {
 ║  Or install the SDK:                                         ║
 ║                                                              ║
 ║    npm install @dupecom/botcha                               ║
+║    pip install botcha  (coming soon)                         ║
 ║                                                              ║
 ║  GitHub:  https://github.com/dupe-com/botcha                 ║
 ║  npm:     https://npmjs.com/package/@dupecom/botcha          ║
@@ -297,12 +298,14 @@ app.get('/', (c) => {
     },
     sdk: {
       npm: 'npm install @dupecom/botcha',
+      python: 'pip install botcha (coming soon)',
       cloudflare: 'npm install @dupecom/botcha-cloudflare',
       usage: "import { BotchaClient } from '@dupecom/botcha/client'",
     },
     links: {
       github: 'https://github.com/dupe-com/botcha',
       npm: 'https://www.npmjs.com/package/@dupecom/botcha',
+      pypi: 'https://pypi.org/project/botcha (coming soon)',
       npmCloudflare: 'https://www.npmjs.com/package/@dupecom/botcha-cloudflare',
       openapi: 'https://botcha.ai/openapi.json',
       aiPlugin: 'https://botcha.ai/.well-known/ai-plugin.json',
