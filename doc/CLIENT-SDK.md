@@ -135,6 +135,8 @@ const client = new BotchaClient({
 
 ## Token Rotation & Caching (Shipped)
 
+> **📖 Full JWT guide:** [JWT-SECURITY.md](./JWT-SECURITY.md) — audience scoping, IP binding, revocation, request/response examples, design decisions.
+
 BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens:
 
 | Token Type | Expiry | Purpose |

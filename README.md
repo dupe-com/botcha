@@ -109,7 +109,9 @@ GET /v1/reasoning
 
 ## 🔐 JWT Security (Production-Grade)
 
-BOTCHA uses **OAuth2-style token rotation** with production-grade security features:
+BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens and long-lived refresh tokens.
+
+> **📖 Full guide:** [doc/JWT-SECURITY.md](./doc/JWT-SECURITY.md) — endpoint reference, request/response examples, audience scoping, IP binding, revocation, design decisions.
 
 ### Token Flow
 
@@ -120,56 +122,43 @@ BOTCHA uses **OAuth2-style token rotation** with production-grade security featu
 4. When compromised → POST /v1/token/revoke to invalidate immediately
 ```
 
-### Token Features
+### Security Features
 
-| Feature | Description |
+| Feature | What it does |
 |---------|-------------|
-| **Short-lived access tokens** | 5-minute expiry (was 1 hour) |
-| **Refresh tokens** | 1-hour expiry, used to get new access tokens |
-| **Audience (`aud`) claims** | Tokens scoped to specific services |
-| **Client IP binding** | Optional — prevents token sharing across machines |
-| **Token revocation** | Invalidate tokens before expiry via KV-backed list |
-| **JTI (JWT ID)** | Unique ID on every token for tracking and revocation |
+| **5-minute access tokens** | Compromise window reduced from 1hr to 5min |
+| **Refresh tokens (1hr)** | Renew access without re-solving challenges |
+| **Audience (`aud`) scoping** | Token for `api.stripe.com` is rejected by `api.github.com` |
+| **Client IP binding** | Optional — solve on machine A, can't use on machine B |
+| **Token revocation** | `POST /v1/token/revoke` — KV-backed, fail-open |
+| **JTI (JWT ID)** | Unique ID per token for revocation and audit |
 
-### TypeScript SDK
+### Quick Example
 
 ```typescript
-import { BotchaClient } from '@dupecom/botcha/client';
-
 const client = new BotchaClient({
-  baseUrl: 'https://botcha.ai',
-  audience: 'https://api.example.com', // Token scoped to this service
+  audience: 'https://api.example.com', // Scope token to this service
 });
 
-// Auto-handles token acquisition, refresh, and retry
+// Auto-handles: challenge → token → refresh → retry on 401
 const response = await client.fetch('https://api.example.com/agent-only');
-
-// Manual refresh
-const newToken = await client.refreshToken();
-
-// Revoke if compromised
-client.clearToken();
 ```
-
-### Python SDK
 
 ```python
-from botcha import BotchaClient
-
 async with BotchaClient(audience="https://api.example.com") as client:
-    # Auto-handles token lifecycle
     response = await client.fetch("https://api.example.com/agent-only")
-    
-    # Manual refresh
-    new_token = await client.refresh_token()
 ```
 
-### API Endpoints
+### Token Endpoints
 
-```
-POST /v1/token/refresh   — Exchange refresh_token for new access_token
-POST /v1/token/revoke    — Revoke a token (access or refresh)
-```
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/token` | Get challenge for token flow |
+| `POST /v1/token/verify` | Submit solution → receive `access_token` + `refresh_token` |
+| `POST /v1/token/refresh` | Exchange `refresh_token` for new `access_token` |
+| `POST /v1/token/revoke` | Invalidate any token immediately |
+
+See **[JWT Security Guide](./doc/JWT-SECURITY.md)** for full request/response examples, `curl` commands, and server-side verification.
 
 ## 🔄 SSE Streaming Flow (AI-Native)
 
