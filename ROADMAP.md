@@ -81,9 +81,9 @@ Optional IP-based token binding. Token includes `client_ip` claim, verification 
 ### ✅ JTI (JWT ID) on all tokens
 Every token gets a unique `jti` claim for revocation tracking and audit trail.
 
-### 🔜 Challenge difficulty scaling (Tier 1.5)
-**Problem:** 3 reasoning questions with some categories having small answer spaces. Brute-forceable.
-**Solution:** Adaptive difficulty based on abuse signals. More question generators. Larger answer spaces. Configurable per-service difficulty.
+### ✅ Challenge difficulty scaling (Tier 1.5) — SHIPPED
+**Problem:** Reasoning questions had small answer spaces (some as low as 5-10). Brute-forceable.
+**Solution:** Expanded all generators to ≥1,000 possible answers. genMathMachines (5→1,096), genLogicSyllogism (5→1,489), genMathDoubling (41→1,041), genCodeBitwise (675→2,883), genCodeStringLen (10→infinite), wordplay pool (8→50). Added diversity regression tests.
 **Effort:** Medium
 
 ---
