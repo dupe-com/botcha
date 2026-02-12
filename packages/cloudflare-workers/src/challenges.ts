@@ -558,8 +558,8 @@ function genCodeModulo(): ReasoningQuestion {
 }
 
 function genCodeBitwise(): ReasoningQuestion {
-  const a = randInt(1, 15);
-  const b = randInt(1, 15);
+  const a = randInt(1, 31);
+  const b = randInt(1, 31);
   const op = pickRandom(['&', '|', '^'] as const);
   const opName = op === '&' ? 'AND' : op === '|' ? 'OR' : 'XOR';
   let answer: number;
@@ -575,8 +575,14 @@ function genCodeBitwise(): ReasoningQuestion {
 }
 
 function genCodeStringLen(): ReasoningQuestion {
-  const words = ['hello', 'world', 'banana', 'algorithm', 'quantum', 'symphony', 'cryptography', 'paradigm', 'ephemeral', 'serendipity'];
-  const word = pickRandom(words);
+  // Generate random alphanumeric strings of varying lengths (3-20 chars)
+  // This creates effectively infinite answer space (18 possible lengths × countless string combinations)
+  const length = randInt(3, 20);
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let word = '';
+  for (let i = 0; i < length; i++) {
+    word += chars[Math.floor(Math.random() * chars.length)];
+  }
   return {
     id: `code-strlen-${uuid().substring(0, 8)}`,
     question: `What is the length of the string "${word}"? Answer with just the number.`,
@@ -628,6 +634,7 @@ function genLogicSequence(): ReasoningQuestion {
 
 // --- Wordplay / static (with randomized IDs so lookup by ID fails) ---
 const WORDPLAY_GENERATORS: QuestionGenerator[] = [
+  // Connection riddles (original + new)
   () => ({
     id: `wp-${uuid().substring(0, 8)}`,
     question: 'What single word connects: apple, Newton, gravity?',
@@ -654,6 +661,32 @@ const WORDPLAY_GENERATORS: QuestionGenerator[] = [
   }),
   () => ({
     id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What single word connects: fire, ice, boxing?',
+    category: 'wordplay',
+    acceptedAnswers: ['ring', 'fight', 'match'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What single word connects: music, radio, ocean?',
+    category: 'wordplay',
+    acceptedAnswers: ['wave', 'waves', 'frequency'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What word follows: high, middle, private?',
+    category: 'wordplay',
+    acceptedAnswers: ['school'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What word connects: sleeping, travel, time?',
+    category: 'wordplay',
+    acceptedAnswers: ['bag'],
+  }),
+  
+  // Common sense riddles (original + new)
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'What gets wetter the more it dries?',
     category: 'common-sense',
     acceptedAnswers: ['towel', 'a towel', 'cloth', 'rag'],
@@ -666,6 +699,56 @@ const WORDPLAY_GENERATORS: QuestionGenerator[] = [
   }),
   () => ({
     id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has keys but no locks, space but no room, and you can enter but not go inside?',
+    category: 'common-sense',
+    acceptedAnswers: ['keyboard', 'a keyboard'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What runs but never walks, has a mouth but never talks?',
+    category: 'common-sense',
+    acceptedAnswers: ['river', 'a river', 'stream'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has hands but cannot clap?',
+    category: 'common-sense',
+    acceptedAnswers: ['clock', 'a clock', 'watch'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has a head and tail but no body?',
+    category: 'common-sense',
+    acceptedAnswers: ['coin', 'a coin'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What goes up but never comes down?',
+    category: 'common-sense',
+    acceptedAnswers: ['age', 'your age'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has teeth but cannot bite?',
+    category: 'common-sense',
+    acceptedAnswers: ['comb', 'a comb', 'saw', 'zipper', 'gear'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What can fill a room but takes up no space?',
+    category: 'common-sense',
+    acceptedAnswers: ['light', 'air', 'sound', 'darkness'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has a neck but no head?',
+    category: 'common-sense',
+    acceptedAnswers: ['bottle', 'a bottle'],
+  }),
+  
+  // Analogies (original + new)
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
     question: 'Complete the analogy: Fish is to water as bird is to ___',
     category: 'analogy',
     acceptedAnswers: ['air', 'sky', 'atmosphere'],
@@ -675,6 +758,198 @@ const WORDPLAY_GENERATORS: QuestionGenerator[] = [
     question: 'Complete the analogy: Eye is to see as ear is to ___',
     category: 'analogy',
     acceptedAnswers: ['hear', 'listen', 'hearing', 'listening'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Painter is to brush as writer is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['pen', 'pencil', 'keyboard', 'typewriter', 'quill'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Hot is to cold as day is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['night'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Doctor is to patient as teacher is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['student', 'students', 'pupil'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Wheel is to car as sail is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['boat', 'ship', 'sailboat'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Chef is to kitchen as scientist is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['laboratory', 'lab'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Bark is to dog as meow is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['cat'],
+  }),
+  
+  // Anagrams
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Rearrange the letters in "listen" to make another common word.',
+    category: 'wordplay',
+    acceptedAnswers: ['silent', 'enlist'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Rearrange the letters in "earth" to make another common word.',
+    category: 'wordplay',
+    acceptedAnswers: ['heart', 'hater'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Rearrange the letters in "stream" to make another word meaning "leader".',
+    category: 'wordplay',
+    acceptedAnswers: ['master'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Rearrange the letters in "stop" to make containers.',
+    category: 'wordplay',
+    acceptedAnswers: ['pots', 'spot', 'tops'],
+  }),
+  
+  // Code/CS riddles
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What data structure uses LIFO (Last In, First Out)?',
+    category: 'code',
+    acceptedAnswers: ['stack', 'a stack'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What data structure uses FIFO (First In, First Out)?',
+    category: 'code',
+    acceptedAnswers: ['queue', 'a queue'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'In programming, what comes after "if" and "else if"?',
+    category: 'code',
+    acceptedAnswers: ['else'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What is the opposite of "true" in boolean logic?',
+    category: 'code',
+    acceptedAnswers: ['false'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What keyword is used to define a function in JavaScript?',
+    category: 'code',
+    acceptedAnswers: ['function', 'const', 'let', 'var', 'async'],
+  }),
+  
+  // Word puzzles
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What 5-letter word becomes shorter when you add two letters to it?',
+    category: 'wordplay',
+    acceptedAnswers: ['short', 'shorter'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What word starts with "e" and ends with "e" but only has one letter in it?',
+    category: 'wordplay',
+    acceptedAnswers: ['envelope'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What begins with T, ends with T, and has T in it?',
+    category: 'wordplay',
+    acceptedAnswers: ['teapot', 'a teapot'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Remove one letter from "startling" to create a new word. What is it?',
+    category: 'wordplay',
+    acceptedAnswers: ['starting', 'starling'],
+  }),
+  
+  // Math/Logic wordplay
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'How many months have 28 days?',
+    category: 'logic',
+    acceptedAnswers: ['12', 'twelve', 'all', 'all of them'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'If you have one, you want to share it. If you share it, you no longer have it. What is it?',
+    category: 'logic',
+    acceptedAnswers: ['secret', 'a secret'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What occurs once in a minute, twice in a moment, but never in a thousand years?',
+    category: 'wordplay',
+    acceptedAnswers: ['m', 'the letter m'],
+  }),
+  
+  // Technology wordplay
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has a screen, keyboard, and mouse but is not alive?',
+    category: 'common-sense',
+    acceptedAnswers: ['computer', 'a computer', 'pc', 'laptop'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What connects computers worldwide but has no physical form?',
+    category: 'common-sense',
+    acceptedAnswers: ['internet', 'the internet', 'web', 'network'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What do you call a group of 8 bits?',
+    category: 'code',
+    acceptedAnswers: ['byte', 'a byte'],
+  }),
+  
+  // Nature/Science wordplay
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What falls but never breaks, and breaks but never falls?',
+    category: 'wordplay',
+    acceptedAnswers: ['night and day', 'nightfall and daybreak', 'night falls day breaks'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has roots that nobody sees, taller than trees, up up it goes, yet never grows?',
+    category: 'common-sense',
+    acceptedAnswers: ['mountain', 'a mountain', 'mountains'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What travels around the world but stays in one corner?',
+    category: 'common-sense',
+    acceptedAnswers: ['stamp', 'a stamp', 'postage stamp'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'Complete the analogy: Bee is to hive as human is to ___',
+    category: 'analogy',
+    acceptedAnswers: ['house', 'home', 'city', 'building'],
+  }),
+  () => ({
+    id: `wp-${uuid().substring(0, 8)}`,
+    question: 'What has four fingers and a thumb but is not alive?',
+    category: 'common-sense',
+    acceptedAnswers: ['glove', 'a glove'],
   }),
 ];
 

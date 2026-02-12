@@ -80,22 +80,46 @@ function genMathSheep(): ReasoningQuestion {
 }
 
 function genMathDoubling(): ReasoningQuestion {
-  const days = randInt(20, 60);
+  // Vary starting value (days: 10-1050) to get 1041 unique answer values
+  // Answer is always (days - 1), so days range of 10-1050 gives answers 9-1049
+  const days = randInt(10, 1050);
+  const items = pickRandom([
+    'lily pads',
+    'bacteria cells',
+    'algae colonies',
+    'viral particles',
+    'yeast cells',
+    'water plants',
+    'moss patches',
+    'fungal spores',
+  ]);
   const answer = (days - 1).toString();
   return {
     id: `math-double-${crypto.randomUUID().substring(0, 8)}`,
-    question: `A patch of lily pads doubles in size every day. If it takes ${days} days to cover the entire lake, how many days to cover half? Answer with just the number.`,
+    question: `A patch of ${items} doubles in size every day. If it takes ${days} days to cover the entire lake, how many days to cover half? Answer with just the number.`,
     category: 'math',
     acceptedAnswers: [answer],
   };
 }
 
 function genMathMachines(): ReasoningQuestion {
-  const n = pickRandom([5, 7, 8, 10, 12]);
-  const m = randInt(50, 200);
+  // Parameterized: n (5-1100) to get 1096 unique answer values
+  // Answer is always n (the time in minutes)
+  const n = randInt(5, 1100);
+  const m = randInt(50, 500);
+  const items = pickRandom([
+    'widgets',
+    'parts',
+    'components',
+    'units',
+    'products',
+    'items',
+    'gadgets',
+    'devices',
+  ]);
   return {
     id: `math-machines-${crypto.randomUUID().substring(0, 8)}`,
-    question: `If it takes ${n} machines ${n} minutes to make ${n} widgets, how many minutes would it take ${m} machines to make ${m} widgets? Answer with just the number.`,
+    question: `If it takes ${n} machines ${n} minutes to make ${n} ${items}, how many minutes would it take ${m} machines to make ${m} ${items}? Answer with just the number.`,
     category: 'math',
     acceptedAnswers: [n.toString()],
   };
@@ -144,19 +168,31 @@ function genCodeStringLen(): ReasoningQuestion {
 
 // --- Logic generators (randomized names/items) ---
 function genLogicSyllogism(): ReasoningQuestion {
+  // Generate counting-based syllogism to produce numeric answers with ≥1000 answer space
+  // "In a group of N people, if X are teachers and all teachers are kind, how many kind people are there at minimum?"
+  // Answer: X (the number in the subset)
+  // Range: X from 10 to 1500 = 1491 unique answers
+  const total = randInt(50, 2000);
+  const count = randInt(10, Math.min(total - 5, 1500));
+  
   const groups = [
-    ['Bloops', 'Razzies', 'Lazzies'],
-    ['Florps', 'Zinkies', 'Mopples'],
-    ['Grunts', 'Tazzles', 'Wibbles'],
-    ['Plonks', 'Snazzles', 'Krinkles'],
-    ['Dweems', 'Fozzits', 'Glimmers'],
+    { container: 'people', subsetName: 'teachers', property: 'kind' },
+    { container: 'animals', subsetName: 'dogs', property: 'friendly' },
+    { container: 'students', subsetName: 'seniors', property: 'experienced' },
+    { container: 'employees', subsetName: 'managers', property: 'trained' },
+    { container: 'books', subsetName: 'novels', property: 'fictional' },
+    { container: 'vehicles', subsetName: 'cars', property: 'motorized' },
+    { container: 'plants', subsetName: 'trees', property: 'woody' },
+    { container: 'items', subsetName: 'tools', property: 'useful' },
   ];
-  const [a, b, c] = pickRandom(groups);
+  
+  const { container, subsetName, property } = pickRandom(groups);
+  
   return {
     id: `logic-syl-${crypto.randomUUID().substring(0, 8)}`,
-    question: `If all ${a} are ${b} and all ${b} are ${c}, are all ${a} definitely ${c}? Answer yes or no.`,
+    question: `In a group of ${total} ${container}, ${count} of them are ${subsetName}. If all ${subsetName} are ${property}, what is the minimum number of ${property} ${container}? Answer with just the number.`,
     category: 'logic',
-    acceptedAnswers: ['yes'],
+    acceptedAnswers: [count.toString()],
   };
 }
 

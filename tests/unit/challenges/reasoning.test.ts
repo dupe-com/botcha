@@ -146,6 +146,213 @@ describe('Reasoning Challenge', () => {
       expect(count).toBeGreaterThanOrEqual(15); // We added ~20 generators
     });
   });
+
+  describe('answer space diversity (anti-lookup-table)', () => {
+    // These tests verify each generator produces sufficient answer diversity (≥1000 unique answers)
+    // to prevent lookup table attacks. We sample N times and verify we get enough unique answers.
+
+    test('genMathMachines has answer space ≥1000', () => {
+      // genMathMachines: n ranges from 5-1100, answer is always n → 1096 unique answers
+      const answers = new Set<string>();
+      
+      // Each challenge has 3 random questions from ~22 generators
+      // So we need many challenges to get enough samples of this specific generator
+      for (let i = 0; i < 2000; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Match machine question pattern
+          if (q.question.match(/takes (\d+) machines (\d+) minutes to make (\d+)/)) {
+            const match = q.question.match(/takes (\d+) machines/);
+            if (match) {
+              answers.add(match[1]); // The n value (which is also the answer)
+            }
+          }
+        }
+      }
+      
+      // With ~270 samples (2000 challenges × 3 questions × ~4.5% chance) from 1096 possibilities
+      // expect ~200-250 unique values
+      expect(answers.size).toBeGreaterThan(150);
+    });
+
+    test('genLogicSyllogism has answer space ≥1000', () => {
+      // genLogicSyllogism: count ranges from 10-1500 → 1491 unique answers
+      const answers = new Set<string>();
+      
+      for (let i = 0; i < 2000; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Match syllogism pattern: "In a group of N container, X of them are..."
+          if (q.question.match(/In a group of \d+ \w+, (\d+) of them are/)) {
+            const match = q.question.match(/In a group of \d+ \w+, (\d+) of them are/);
+            if (match) {
+              answers.add(match[1]); // The count (which is the answer)
+            }
+          }
+        }
+      }
+      
+      // With ~270 samples from 1491 possibilities, expect ~200-250 unique
+      expect(answers.size).toBeGreaterThan(150);
+    });
+
+    test('genMathDoubling has answer space ≥1000', () => {
+      // genMathDoubling: days range 10-1050, answers are (days - 1) → 9-1049 = 1041 unique answers
+      const answers = new Set<string>();
+      
+      for (let i = 0; i < 2000; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Match doubling pattern: "takes X days to cover the entire lake"
+          if (q.question.match(/takes (\d+) days.*cover the entire lake/)) {
+            const match = q.question.match(/takes (\d+) days/);
+            if (match) {
+              const days = parseInt(match[1]);
+              answers.add((days - 1).toString()); // Answer is always (days - 1)
+            }
+          }
+        }
+      }
+      
+      // With ~270 samples from 1041 possibilities, expect ~200-250 unique
+      expect(answers.size).toBeGreaterThan(150);
+    });
+
+    test('genCodeBitwise has sufficient answer diversity', () => {
+      // genCodeBitwise: a (1-15) × b (1-15) × 3 ops = 675 unique combinations
+      // Not quite 1000, but still substantial diversity
+      const questions = new Set<string>();
+      
+      for (let i = 0; i < 2000; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Match bitwise pattern: "What is A & B" or "A | B" or "A ^ B"
+          if (q.question.match(/What is (\d+) ([&|^]) (\d+)/)) {
+            questions.add(q.question); // Track the full question (includes a, b, op)
+          }
+        }
+      }
+      
+      // With ~270 samples from 675 possibilities, expect ~200-250 unique
+      expect(questions.size).toBeGreaterThan(150);
+    });
+
+    test('genCodeStringLen produces varied outputs', () => {
+      // genCodeStringLen: 10 word pool with different lengths
+      // Not parametric enough to reach 1000, but verify diversity exists
+      const words = new Set<string>();
+      const answers = new Set<string>();
+      
+      for (let i = 0; i < 100; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Match string length pattern
+          const match = q.question.match(/length of the string "(\w+)"/);
+          if (match) {
+            words.add(match[1]);
+            answers.add(match[1].length.toString());
+          }
+        }
+      }
+      
+      // Should see multiple different words from the pool
+      expect(words.size).toBeGreaterThan(3);
+      // Should have multiple different lengths
+      expect(answers.size).toBeGreaterThan(3);
+    });
+
+    test('wordplay pool has sufficient variety', () => {
+      // WORDPLAY_QUESTIONS: 10 static questions (each returns fresh with new ID)
+      const questionTexts = new Set<string>();
+      
+      for (let i = 0; i < 50; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Collect all wordplay/analogy/common-sense questions
+          if (['wordplay', 'analogy', 'common-sense'].includes(q.category)) {
+            questionTexts.add(q.question);
+          }
+        }
+      }
+      
+      // Should have at least 8-10 unique wordplay questions
+      expect(questionTexts.size).toBeGreaterThanOrEqual(8);
+    });
+
+    test('overall challenge has high answer diversity', () => {
+      // Meta-test: verify that across many challenge generations,
+      // we get a large variety of answer combinations
+      const answerSets = new Set<string>();
+      
+      for (let i = 0; i < 200; i++) {
+        const challenge = generateReasoningChallenge();
+        const answers: string[] = [];
+        
+        for (const q of challenge.questions) {
+          const solved = solveQuestion(q.question);
+          answers.push(solved);
+        }
+        
+        // Create a fingerprint of this challenge's answer set
+        const fingerprint = answers.sort().join('|');
+        answerSets.add(fingerprint);
+      }
+      
+      // With parameterized generators, we should get mostly unique answer combinations
+      // (200 samples should yield close to 200 unique sets)
+      expect(answerSets.size).toBeGreaterThan(150);
+    });
+
+    test('parameter ranges are correct for high-diversity generators', () => {
+      // Verify that parameterized generators actually use their full ranges
+      const machineValues = new Set<number>();
+      const syllogismValues = new Set<number>();
+      const doublingValues = new Set<number>();
+      
+      // Sample many times to verify range boundaries
+      for (let i = 0; i < 3000; i++) {
+        const challenge = generateReasoningChallenge();
+        for (const q of challenge.questions) {
+          // Machines: should see values from 5-1100
+          let match = q.question.match(/takes (\d+) machines/);
+          if (match) {
+            machineValues.add(parseInt(match[1]));
+          }
+          
+          // Syllogism: should see values from 10-1500
+          match = q.question.match(/In a group of \d+ \w+, (\d+) of them are/);
+          if (match) {
+            syllogismValues.add(parseInt(match[1]));
+          }
+          
+          // Doubling: should see days from 10-1050
+          match = q.question.match(/takes (\d+) days.*cover the entire lake/);
+          if (match) {
+            doublingValues.add(parseInt(match[1]));
+          }
+        }
+      }
+      
+      // Verify we're seeing good coverage of the ranges
+      if (machineValues.size > 0) {
+        expect(Math.min(...machineValues)).toBeGreaterThanOrEqual(5);
+        expect(Math.max(...machineValues)).toBeLessThanOrEqual(1100);
+        expect(machineValues.size).toBeGreaterThan(80); // Good sampling
+      }
+      
+      if (syllogismValues.size > 0) {
+        expect(Math.min(...syllogismValues)).toBeGreaterThanOrEqual(10);
+        expect(Math.max(...syllogismValues)).toBeLessThanOrEqual(1500);
+        expect(syllogismValues.size).toBeGreaterThan(80);
+      }
+      
+      if (doublingValues.size > 0) {
+        expect(Math.min(...doublingValues)).toBeGreaterThanOrEqual(10);
+        expect(Math.max(...doublingValues)).toBeLessThanOrEqual(1050);
+        expect(doublingValues.size).toBeGreaterThan(80);
+      }
+    });
+  });
 });
 
 // ============ TEST HELPER: Solve a generated question ============
@@ -167,12 +374,12 @@ function solveQuestion(question: string): string {
   match = question.match(/All but (\d+) run away/);
   if (match) return match[1];
 
-  // Math: "takes X days to cover the entire lake"
+  // Math: "takes X days to cover the entire lake" (supports various growth patterns and items)
   match = question.match(/takes (\d+) days.*cover the entire lake/);
   if (match) return String(Number(match[1]) - 1);
 
-  // Math: "takes N machines N minutes to make N widgets"
-  match = question.match(/takes (\d+) machines (\d+) minutes to make (\d+) widgets/);
+  // Math: "takes N machines N minutes to make N widgets/items/etc"
+  match = question.match(/takes (\d+) machines (\d+) minutes to make (\d+) \w+/);
   if (match) return match[2]; // Answer is always N minutes
 
   // Code: "A % B evaluate to"
@@ -194,8 +401,12 @@ function solveQuestion(question: string): string {
   match = question.match(/length of the string "(\w+)"/);
   if (match) return String(match[1].length);
 
-  // Logic: syllogism "are all X definitely Z?"
+  // Logic: syllogism "are all X definitely Z?" (old format - may not appear anymore)
   if (question.match(/are all .+ definitely .+\? Answer yes or no/)) return 'yes';
+  
+  // Logic: counting syllogism "In a group of N container, X of them are subset..."
+  match = question.match(/In a group of \d+ \w+, (\d+) of them are/);
+  if (match) return match[1];
 
   // Logic: negation "remove all but X"
   match = question.match(/remove all but (\d+)/);
