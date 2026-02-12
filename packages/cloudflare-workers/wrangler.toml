@@ -38,7 +38,7 @@ id = "c45e9f02ad104ad98d00699db3ad258c"
 # Apps KV namespace for multi-tenant app storage
 [[kv_namespaces]]
 binding = "APPS"
-id = "d56e0f13be215be09e11790ec4be369d"
+id = "18d9da1e11364a7b981061c6b01f4855"
 
 # Analytics Engine binding for usage tracking
 [[analytics_engine_datasets]]
