@@ -3,9 +3,14 @@ import {
   generateAppId,
   generateAppSecret,
   hashSecret,
+  generateVerificationCode,
   createApp,
   getApp,
   validateAppSecret,
+  verifyEmailCode,
+  getAppByEmail,
+  rotateAppSecret,
+  regenerateVerificationCode,
   type KVNamespace,
 } from '../../../packages/cloudflare-workers/src/apps.js';
 
@@ -39,7 +44,13 @@ class MockKV implements KVNamespace {
   size(): number {
     return this.store.size;
   }
+
+  getRaw(key: string): string | undefined {
+    return this.store.get(key);
+  }
 }
+
+const TEST_EMAIL = 'agent@botcha.ai';
 
 describe('Apps - Multi-Tenant Infrastructure', () => {
   describe('generateAppId()', () => {
@@ -130,6 +141,30 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
   });
 
+  describe('generateVerificationCode()', () => {
+    test('produces a 6-digit numeric string', () => {
+      const code = generateVerificationCode();
+      expect(code).toMatch(/^\d{6}$/);
+    });
+
+    test('pads with leading zeros', () => {
+      // Run multiple times to check padding
+      for (let i = 0; i < 20; i++) {
+        const code = generateVerificationCode();
+        expect(code).toHaveLength(6);
+      }
+    });
+
+    test('generates varying codes', () => {
+      const codes = new Set<string>();
+      for (let i = 0; i < 10; i++) {
+        codes.add(generateVerificationCode());
+      }
+      // At least some should be different (probabilistic but extremely likely)
+      expect(codes.size).toBeGreaterThan(1);
+    });
+  });
+
   describe('createApp()', () => {
     let mockKV: MockKV;
 
@@ -137,17 +172,21 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       mockKV = new MockKV();
     });
 
-    test('creates app with app_id and app_secret', async () => {
-      const result = await createApp(mockKV);
+    test('creates app with app_id, app_secret, and email', async () => {
+      const result = await createApp(mockKV, TEST_EMAIL);
       
       expect(result).toHaveProperty('app_id');
       expect(result).toHaveProperty('app_secret');
+      expect(result).toHaveProperty('email');
       expect(result.app_id).toMatch(/^app_[0-9a-f]{16}$/);
       expect(result.app_secret).toMatch(/^sk_[0-9a-f]{32}$/);
+      expect(result.email).toBe(TEST_EMAIL);
+      expect(result.email_verified).toBe(false);
+      expect(result.verification_required).toBe(true);
     });
 
-    test('stores app in KV with hashed secret', async () => {
-      const result = await createApp(mockKV);
+    test('stores app in KV with hashed secret and email', async () => {
+      const result = await createApp(mockKV, TEST_EMAIL);
       
       // Verify KV entry exists
       expect(mockKV.has(`app:${result.app_id}`)).toBe(true);
@@ -162,10 +201,28 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       expect(config).toHaveProperty('created_at');
       expect(config.created_at).toBeGreaterThan(Date.now() - 1000); // Recent
       expect(config.rate_limit).toBe(100); // Default rate limit
+      expect(config.email).toBe(TEST_EMAIL);
+      expect(config.email_verified).toBe(false);
+      expect(config.email_verification_code).toBeDefined();
+      expect(config.email_verification_expires).toBeDefined();
+    });
+
+    test('stores email→app_id reverse index in KV', async () => {
+      const result = await createApp(mockKV, TEST_EMAIL);
+      
+      const storedAppId = await mockKV.get(`email:${TEST_EMAIL}`, 'text');
+      expect(storedAppId).toBe(result.app_id);
+    });
+
+    test('email index is case-insensitive', async () => {
+      const result = await createApp(mockKV, 'Agent@Botcha.AI');
+      
+      const storedAppId = await mockKV.get('email:agent@botcha.ai', 'text');
+      expect(storedAppId).toBe(result.app_id);
     });
 
     test('never stores plaintext secret in KV', async () => {
-      const result = await createApp(mockKV);
+      const result = await createApp(mockKV, TEST_EMAIL);
       
       const stored = await mockKV.get(`app:${result.app_id}`, 'text');
       
@@ -174,7 +231,7 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('stored secret_hash matches hashed app_secret', async () => {
-      const result = await createApp(mockKV);
+      const result = await createApp(mockKV, TEST_EMAIL);
       
       const stored = await mockKV.get(`app:${result.app_id}`, 'text');
       const config = JSON.parse(stored);
@@ -184,9 +241,9 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('creates multiple unique apps', async () => {
-      const app1 = await createApp(mockKV);
-      const app2 = await createApp(mockKV);
-      const app3 = await createApp(mockKV);
+      const app1 = await createApp(mockKV, 'agent1@botcha.ai');
+      const app2 = await createApp(mockKV, 'agent2@botcha.ai');
+      const app3 = await createApp(mockKV, 'agent3@botcha.ai');
       
       // All IDs should be unique
       expect(app1.app_id).not.toBe(app2.app_id);
@@ -197,9 +254,6 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       expect(app1.app_secret).not.toBe(app2.app_secret);
       expect(app2.app_secret).not.toBe(app3.app_secret);
       expect(app1.app_secret).not.toBe(app3.app_secret);
-      
-      // All should be stored in KV
-      expect(mockKV.size()).toBe(3);
     });
   });
 
@@ -210,8 +264,8 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       mockKV = new MockKV();
     });
 
-    test('retrieves app by app_id', async () => {
-      const created = await createApp(mockKV);
+    test('retrieves app by app_id with email fields', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
       const retrieved = await getApp(mockKV, created.app_id);
       
       expect(retrieved).not.toBeNull();
@@ -219,10 +273,12 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       expect(retrieved).toHaveProperty('created_at');
       expect(retrieved).toHaveProperty('rate_limit');
       expect(retrieved?.rate_limit).toBe(100);
+      expect(retrieved?.email).toBe(TEST_EMAIL);
+      expect(retrieved?.email_verified).toBe(false);
     });
 
     test('does NOT return secret_hash (security)', async () => {
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       const retrieved = await getApp(mockKV, created.app_id);
       
       expect(retrieved).not.toHaveProperty('secret_hash');
@@ -241,9 +297,9 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('retrieves correct app from multiple apps', async () => {
-      const app1 = await createApp(mockKV);
-      const app2 = await createApp(mockKV);
-      const app3 = await createApp(mockKV);
+      const app1 = await createApp(mockKV, 'a1@botcha.ai');
+      const app2 = await createApp(mockKV, 'a2@botcha.ai');
+      const app3 = await createApp(mockKV, 'a3@botcha.ai');
       
       const retrieved2 = await getApp(mockKV, app2.app_id);
       
@@ -262,7 +318,7 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('validates correct app_secret', async () => {
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       
       const isValid = await validateAppSecret(
         mockKV,
@@ -274,7 +330,7 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('rejects incorrect app_secret', async () => {
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       
       const isValid = await validateAppSecret(
         mockKV,
@@ -296,7 +352,7 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('rejects empty secret', async () => {
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       
       const isValid = await validateAppSecret(
         mockKV,
@@ -308,7 +364,7 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('rejects secret with slight modification', async () => {
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       
       // Modify last character of secret
       const modifiedSecret = created.app_secret.slice(0, -1) + 'x';
@@ -323,8 +379,8 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('validates secrets for multiple apps independently', async () => {
-      const app1 = await createApp(mockKV);
-      const app2 = await createApp(mockKV);
+      const app1 = await createApp(mockKV, 'a1@botcha.ai');
+      const app2 = await createApp(mockKV, 'a2@botcha.ai');
       
       // App1 secret should work for app1
       expect(await validateAppSecret(mockKV, app1.app_id, app1.app_secret)).toBe(true);
@@ -340,7 +396,7 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
 
     test('uses constant-time comparison (prevents timing attacks)', async () => {
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       
       // Test with secrets of different lengths
       // Constant-time should not leak length information
@@ -356,6 +412,198 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
     });
   });
 
+  describe('verifyEmailCode()', () => {
+    let mockKV: MockKV;
+
+    beforeEach(() => {
+      mockKV = new MockKV();
+    });
+
+    test('verifies correct code and marks email verified', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+
+      // Get the stored verification code hash, then regenerate to get plaintext
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      expect(regen).not.toBeNull();
+
+      const result = await verifyEmailCode(mockKV, created.app_id, regen!.code);
+      expect(result.verified).toBe(true);
+
+      // Confirm email is now verified
+      const app = await getApp(mockKV, created.app_id);
+      expect(app?.email_verified).toBe(true);
+    });
+
+    test('rejects wrong code', async () => {
+      await createApp(mockKV, TEST_EMAIL);
+      const created = await createApp(mockKV, 'other@botcha.ai');
+
+      const result = await verifyEmailCode(mockKV, created.app_id, '000000');
+      expect(result.verified).toBe(false);
+      expect(result.reason).toBe('Invalid verification code');
+    });
+
+    test('rejects already verified email', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      await verifyEmailCode(mockKV, created.app_id, regen!.code);
+
+      // Try again
+      const result = await verifyEmailCode(mockKV, created.app_id, regen!.code);
+      expect(result.verified).toBe(false);
+      expect(result.reason).toBe('Email already verified');
+    });
+
+    test('rejects expired code', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+
+      // Manually expire the code
+      const data = JSON.parse(mockKV.getRaw(`app:${created.app_id}`)!);
+      data.email_verification_expires = Date.now() - 1000; // expired 1s ago
+      await mockKV.put(`app:${created.app_id}`, JSON.stringify(data));
+
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      // After regen, the new code has a fresh expiry so we need to expire it again
+      const data2 = JSON.parse(mockKV.getRaw(`app:${created.app_id}`)!);
+      data2.email_verification_expires = Date.now() - 1000;
+      await mockKV.put(`app:${created.app_id}`, JSON.stringify(data2));
+
+      const result = await verifyEmailCode(mockKV, created.app_id, regen!.code);
+      expect(result.verified).toBe(false);
+      expect(result.reason).toBe('Verification code expired');
+    });
+
+    test('returns error for non-existent app', async () => {
+      const result = await verifyEmailCode(mockKV, 'app_nonexistent1234', '123456');
+      expect(result.verified).toBe(false);
+      expect(result.reason).toBe('App not found');
+    });
+  });
+
+  describe('getAppByEmail()', () => {
+    let mockKV: MockKV;
+
+    beforeEach(() => {
+      mockKV = new MockKV();
+    });
+
+    test('finds app by email', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+
+      const found = await getAppByEmail(mockKV, TEST_EMAIL);
+      expect(found).not.toBeNull();
+      expect(found?.app_id).toBe(created.app_id);
+      expect(found?.email_verified).toBe(false);
+    });
+
+    test('lookup is case-insensitive', async () => {
+      const created = await createApp(mockKV, 'Agent@Botcha.AI');
+
+      const found = await getAppByEmail(mockKV, 'agent@botcha.ai');
+      expect(found).not.toBeNull();
+      expect(found?.app_id).toBe(created.app_id);
+    });
+
+    test('returns null for non-existent email', async () => {
+      const found = await getAppByEmail(mockKV, 'nobody@botcha.ai');
+      expect(found).toBeNull();
+    });
+
+    test('reflects verified status after verification', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      await verifyEmailCode(mockKV, created.app_id, regen!.code);
+
+      const found = await getAppByEmail(mockKV, TEST_EMAIL);
+      expect(found?.email_verified).toBe(true);
+    });
+  });
+
+  describe('rotateAppSecret()', () => {
+    let mockKV: MockKV;
+
+    beforeEach(() => {
+      mockKV = new MockKV();
+    });
+
+    test('generates new secret and invalidates old one', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      
+      const rotated = await rotateAppSecret(mockKV, created.app_id);
+      expect(rotated).not.toBeNull();
+      expect(rotated!.app_secret).toMatch(/^sk_[0-9a-f]{32}$/);
+      expect(rotated!.app_secret).not.toBe(created.app_secret);
+
+      // Old secret should no longer work
+      expect(await validateAppSecret(mockKV, created.app_id, created.app_secret)).toBe(false);
+      
+      // New secret should work
+      expect(await validateAppSecret(mockKV, created.app_id, rotated!.app_secret)).toBe(true);
+    });
+
+    test('returns null for non-existent app', async () => {
+      const result = await rotateAppSecret(mockKV, 'app_nonexistent1234');
+      expect(result).toBeNull();
+    });
+
+    test('preserves other app fields after rotation', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      
+      // Verify email first
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      await verifyEmailCode(mockKV, created.app_id, regen!.code);
+
+      await rotateAppSecret(mockKV, created.app_id);
+
+      const app = await getApp(mockKV, created.app_id);
+      expect(app?.email).toBe(TEST_EMAIL);
+      expect(app?.email_verified).toBe(true);
+      expect(app?.rate_limit).toBe(100);
+    });
+  });
+
+  describe('regenerateVerificationCode()', () => {
+    let mockKV: MockKV;
+
+    beforeEach(() => {
+      mockKV = new MockKV();
+    });
+
+    test('generates new plaintext code', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      
+      expect(regen).not.toBeNull();
+      expect(regen!.code).toMatch(/^\d{6}$/);
+    });
+
+    test('returns null for already verified app', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      await verifyEmailCode(mockKV, created.app_id, regen!.code);
+
+      const regen2 = await regenerateVerificationCode(mockKV, created.app_id);
+      expect(regen2).toBeNull();
+    });
+
+    test('returns null for non-existent app', async () => {
+      const result = await regenerateVerificationCode(mockKV, 'app_nonexistent1234');
+      expect(result).toBeNull();
+    });
+
+    test('new code works for verification after regeneration', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      
+      // Regenerate
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      expect(regen).not.toBeNull();
+      
+      // Verify with the new code
+      const result = await verifyEmailCode(mockKV, created.app_id, regen!.code);
+      expect(result.verified).toBe(true);
+    });
+  });
+
   describe('Integration: Full workflow', () => {
     let mockKV: MockKV;
 
@@ -363,39 +611,47 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       mockKV = new MockKV();
     });
 
-    test('complete app lifecycle: create → retrieve → validate', async () => {
+    test('complete app lifecycle: create → verify email → validate → rotate', async () => {
       // 1. Create app
-      const created = await createApp(mockKV);
+      const created = await createApp(mockKV, TEST_EMAIL);
       expect(created.app_id).toBeDefined();
       expect(created.app_secret).toBeDefined();
+      expect(created.email).toBe(TEST_EMAIL);
       
       // 2. Retrieve app (without secret)
       const retrieved = await getApp(mockKV, created.app_id);
       expect(retrieved).not.toBeNull();
       expect(retrieved?.app_id).toBe(created.app_id);
+      expect(retrieved?.email_verified).toBe(false);
       expect(retrieved).not.toHaveProperty('secret_hash');
       
-      // 3. Validate correct secret
-      const isValidCorrect = await validateAppSecret(
-        mockKV,
-        created.app_id,
-        created.app_secret
-      );
-      expect(isValidCorrect).toBe(true);
+      // 3. Verify email
+      const regen = await regenerateVerificationCode(mockKV, created.app_id);
+      const verifyResult = await verifyEmailCode(mockKV, created.app_id, regen!.code);
+      expect(verifyResult.verified).toBe(true);
+
+      // 4. Lookup by email
+      const found = await getAppByEmail(mockKV, TEST_EMAIL);
+      expect(found?.app_id).toBe(created.app_id);
+      expect(found?.email_verified).toBe(true);
+
+      // 5. Validate correct secret
+      expect(await validateAppSecret(mockKV, created.app_id, created.app_secret)).toBe(true);
       
-      // 4. Validate incorrect secret
-      const isValidWrong = await validateAppSecret(
-        mockKV,
-        created.app_id,
-        'sk_wrong_secret'
-      );
-      expect(isValidWrong).toBe(false);
+      // 6. Validate incorrect secret
+      expect(await validateAppSecret(mockKV, created.app_id, 'sk_wrong_secret')).toBe(false);
+
+      // 7. Rotate secret
+      const rotated = await rotateAppSecret(mockKV, created.app_id);
+      expect(rotated).not.toBeNull();
+      expect(await validateAppSecret(mockKV, created.app_id, created.app_secret)).toBe(false);
+      expect(await validateAppSecret(mockKV, created.app_id, rotated!.app_secret)).toBe(true);
     });
 
     test('handles multiple apps in parallel', async () => {
-      // Create 10 apps
+      // Create 10 apps with unique emails
       const apps = await Promise.all(
-        Array(10).fill(null).map(() => createApp(mockKV))
+        Array(10).fill(null).map((_, i) => createApp(mockKV, `agent${i}@botcha.ai`))
       );
       
       // All should have unique IDs
@@ -414,6 +670,13 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
         apps.map(a => validateAppSecret(mockKV, a.app_id, a.app_secret))
       );
       expect(validations.every(v => v === true)).toBe(true);
+
+      // All email→app_id indexes should exist
+      for (let i = 0; i < 10; i++) {
+        const found = await getAppByEmail(mockKV, `agent${i}@botcha.ai`);
+        expect(found).not.toBeNull();
+        expect(found?.app_id).toBe(apps[i].app_id);
+      }
     });
   });
 });

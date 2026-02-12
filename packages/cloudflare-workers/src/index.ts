@@ -27,8 +27,16 @@ import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAcc
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
 import streamRoutes from './routes/stream';
+import dashboardRoutes from './dashboard/index';
+import {
+  handleDashboardAuthChallenge,
+  handleDashboardAuthVerify,
+  handleDeviceCodeChallenge,
+  handleDeviceCodeVerify,
+} from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec } from './static';
-import { createApp, getApp } from './apps';
+import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode } from './apps';
+import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
 import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
@@ -65,6 +73,7 @@ app.use('*', cors());
 
 // ============ MOUNT ROUTES ============
 app.route('/', streamRoutes);
+app.route('/dashboard', dashboardRoutes);
 
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
@@ -271,8 +280,24 @@ app.get('/', (c) => {
         'GET /agent-only': 'Protected endpoint (requires Bearer token)',
       },
       apps: {
-        'POST /v1/apps': 'Create a new app with app_id and app_secret (multi-tenant)',
-        'GET /v1/apps/:id': 'Get app information by app_id (without secret)',
+        'POST /v1/apps': 'Create a new app (email required, returns app_id + app_secret)',
+        'GET /v1/apps/:id': 'Get app info (includes email + verification status)',
+        'POST /v1/apps/:id/verify-email': 'Verify email with 6-digit code',
+        'POST /v1/apps/:id/resend-verification': 'Resend verification email',
+        'POST /v1/apps/:id/rotate-secret': 'Rotate app secret (auth required)',
+      },
+      recovery: {
+        'POST /v1/auth/recover': 'Request account recovery via verified email',
+      },
+      dashboard: {
+        'GET /dashboard': 'Per-app metrics dashboard (login required)',
+        'GET /dashboard/login': 'Dashboard login page',
+        'GET /dashboard/code': 'Enter device code (human-facing)',
+        'GET /dashboard/api/*': 'htmx data fragments (overview, volume, types, performance, errors, geo)',
+        'POST /v1/auth/dashboard': 'Request challenge for dashboard login (agent-first)',
+        'POST /v1/auth/dashboard/verify': 'Solve challenge, get session token',
+        'POST /v1/auth/device-code': 'Request challenge for device code flow',
+        'POST /v1/auth/device-code/verify': 'Solve challenge, get device code (BOTCHA-XXXX)',
       },
       badges: {
         'GET /badge/:id': 'Badge verification page (HTML)',
@@ -1370,18 +1395,52 @@ app.get('/api/badge/:id', async (c) => {
 
 // ============ APPS API (Multi-Tenant) ============
 
-// Create a new app
+// Create a new app (email required)
 app.post('/v1/apps', async (c) => {
   try {
-    const result = await createApp(c.env.APPS);
-    
+    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    const { email } = body;
+
+    if (!email || typeof email !== 'string') {
+      return c.json({
+        success: false,
+        error: 'MISSING_EMAIL',
+        message: 'Email is required to create an app. Provide { "email": "you@example.com" } in the request body.',
+      }, 400);
+    }
+
+    // Basic email format validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({
+        success: false,
+        error: 'INVALID_EMAIL',
+        message: 'Invalid email format',
+      }, 400);
+    }
+
+    const result = await createApp(c.env.APPS, email);
+
+    // Generate a fresh verification code and send email
+    const regen = await regenerateVerificationCode(c.env.APPS, result.app_id);
+    if (regen) {
+      const template = verificationEmail(regen.code);
+      await sendEmail((c.env as any).RESEND_API_KEY, {
+        ...template,
+        to: email,
+      });
+    }
+
     return c.json({
       success: true,
       app_id: result.app_id,
       app_secret: result.app_secret,
-      warning: '⚠️ Save your app_secret now — it cannot be retrieved again!',
+      email: result.email,
+      email_verified: false,
+      verification_required: true,
+      warning: '⚠️ Save your app_secret now — it cannot be retrieved again! Check your email for a verification code.',
       created_at: new Date().toISOString(),
       rate_limit: 100,
+      next_step: `POST /v1/apps/${result.app_id}/verify-email with { "code": "123456" }`,
     }, 201);
   } catch (error) {
     return c.json({
@@ -1419,9 +1478,201 @@ app.get('/v1/apps/:id', async (c) => {
       app_id: app.app_id,
       created_at: new Date(app.created_at).toISOString(),
       rate_limit: app.rate_limit,
+      email: app.email,
+      email_verified: app.email_verified,
     },
   });
 });
+
+// ============ EMAIL VERIFICATION ============
+
+// Verify email with 6-digit code
+app.post('/v1/apps/:id/verify-email', async (c) => {
+  const app_id = c.req.param('id');
+  const body = await c.req.json<{ code?: string }>().catch(() => ({} as { code?: string }));
+  const { code } = body;
+
+  if (!code || typeof code !== 'string') {
+    return c.json({
+      success: false,
+      error: 'MISSING_CODE',
+      message: 'Provide { "code": "123456" } in the request body',
+    }, 400);
+  }
+
+  const result = await verifyEmailCode(c.env.APPS, app_id, code);
+
+  if (!result.verified) {
+    return c.json({
+      success: false,
+      error: 'VERIFICATION_FAILED',
+      message: result.reason || 'Verification failed',
+    }, 400);
+  }
+
+  return c.json({
+    success: true,
+    email_verified: true,
+    message: 'Email verified successfully. Account recovery is now available.',
+  });
+});
+
+// Resend verification email
+app.post('/v1/apps/:id/resend-verification', async (c) => {
+  const app_id = c.req.param('id');
+  const appData = await getApp(c.env.APPS, app_id);
+
+  if (!appData) {
+    return c.json({ success: false, error: 'App not found' }, 404);
+  }
+
+  if (appData.email_verified) {
+    return c.json({ success: false, error: 'Email already verified' }, 400);
+  }
+
+  const regen = await regenerateVerificationCode(c.env.APPS, app_id);
+  if (!regen) {
+    return c.json({ success: false, error: 'Failed to generate new code' }, 500);
+  }
+
+  const template = verificationEmail(regen.code);
+  await sendEmail((c.env as any).RESEND_API_KEY, {
+    ...template,
+    to: appData.email,
+  });
+
+  return c.json({
+    success: true,
+    message: 'Verification email sent. Check your inbox.',
+  });
+});
+
+// ============ ACCOUNT RECOVERY ============
+
+// Request recovery — look up app by email, send device code
+app.post('/v1/auth/recover', async (c) => {
+  const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+  const { email } = body;
+
+  if (!email || typeof email !== 'string') {
+    return c.json({
+      success: false,
+      error: 'MISSING_EMAIL',
+      message: 'Provide { "email": "you@example.com" } in the request body',
+    }, 400);
+  }
+
+  // Always return success to prevent email enumeration
+  const lookup = await getAppByEmail(c.env.APPS, email);
+
+  if (!lookup || !lookup.email_verified) {
+    // Don't reveal whether email exists — same response shape
+    return c.json({
+      success: true,
+      message: 'If an app with this email exists and is verified, a recovery code has been sent.',
+    });
+  }
+
+  // Generate a device-code-style recovery code (reuse device code system)
+  const { generateDeviceCode, storeDeviceCode } = await import('./dashboard/device-code');
+  const code = generateDeviceCode();
+  await storeDeviceCode(c.env.CHALLENGES, code, lookup.app_id);
+
+  // Send recovery email
+  const baseUrl = new URL(c.req.url).origin;
+  const loginUrl = `${baseUrl}/dashboard/code`;
+  const template = recoveryEmail(code, loginUrl);
+  await sendEmail((c.env as any).RESEND_API_KEY, {
+    ...template,
+    to: email,
+  });
+
+  return c.json({
+    success: true,
+    message: 'If an app with this email exists and is verified, a recovery code has been sent.',
+    hint: `Enter the code at ${loginUrl}`,
+  });
+});
+
+// ============ SECRET ROTATION ============
+
+// Rotate app secret (requires dashboard session)
+app.post('/v1/apps/:id/rotate-secret', async (c) => {
+  const app_id = c.req.param('id');
+
+  // Require authentication — check Bearer token or cookie
+  const authHeader = c.req.header('authorization');
+  const token = extractBearerToken(authHeader);
+  const cookieHeader = c.req.header('cookie') || '';
+  const sessionCookie = cookieHeader.split(';').find(c => c.trim().startsWith('botcha_session='))?.split('=')[1]?.trim();
+  const authToken = token || sessionCookie;
+
+  if (!authToken) {
+    return c.json({
+      success: false,
+      error: 'UNAUTHORIZED',
+      message: 'Authentication required. Use a dashboard session token (Bearer or cookie).',
+    }, 401);
+  }
+
+  // Verify the session token includes this app_id
+  const { jwtVerify, createLocalJWKSet } = await import('jose');
+  try {
+    const secret = new TextEncoder().encode(c.env.JWT_SECRET);
+    const { payload } = await jwtVerify(authToken, secret);
+    const tokenAppId = (payload as any).app_id;
+
+    if (tokenAppId !== app_id) {
+      return c.json({
+        success: false,
+        error: 'FORBIDDEN',
+        message: 'Session token does not match the requested app_id',
+      }, 403);
+    }
+  } catch {
+    return c.json({
+      success: false,
+      error: 'INVALID_TOKEN',
+      message: 'Invalid or expired session token',
+    }, 401);
+  }
+
+  const appData = await getApp(c.env.APPS, app_id);
+  if (!appData) {
+    return c.json({ success: false, error: 'App not found' }, 404);
+  }
+
+  const result = await rotateAppSecret(c.env.APPS, app_id);
+  if (!result) {
+    return c.json({ success: false, error: 'Failed to rotate secret' }, 500);
+  }
+
+  // Send notification email if email is verified
+  if (appData.email_verified && appData.email) {
+    const template = secretRotatedEmail(app_id);
+    await sendEmail((c.env as any).RESEND_API_KEY, {
+      ...template,
+      to: appData.email,
+    });
+  }
+
+  return c.json({
+    success: true,
+    app_id,
+    app_secret: result.app_secret,
+    warning: '⚠️ Save your new app_secret now — it cannot be retrieved again! The old secret is now invalid.',
+  });
+});
+
+// ============ DASHBOARD AUTH API ENDPOINTS ============
+
+// Challenge-based dashboard login (agent direct)
+app.post('/v1/auth/dashboard', handleDashboardAuthChallenge);
+app.post('/v1/auth/dashboard/verify', handleDashboardAuthVerify);
+
+// Device code flow (agent → human handoff)
+app.post('/v1/auth/device-code', handleDeviceCodeChallenge);
+app.post('/v1/auth/device-code/verify', handleDeviceCodeVerify);
 
 // ============ LEGACY ENDPOINTS (v0 - backward compatibility) ============
 

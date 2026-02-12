@@ -9,6 +9,21 @@ BOTCHA — reverse CAPTCHA for AI agents. Proves you're a bot, not a human.
 - **SDKs:** TypeScript (`@dupecom/botcha` on npm) + Python (`botcha` on PyPI)
 - **Tests:** `bun run test:run` (TypeScript, vitest) + `cd packages/python && pytest tests/` (Python)
 
+## Design Philosophy: Agent-First, Always
+
+**An AI agent must always be involved.** This is the core principle of BOTCHA.
+
+Every feature, flow, and interaction should be designed so that an AI agent is a required participant — not optional, not bypassed. Humans are welcome, but only through an agent. This is what makes BOTCHA different from every other auth/identity system.
+
+Concrete implications for feature design:
+
+- **Authentication:** Agents authenticate by solving challenges (proving they're AI). Humans access the system through their agent, never around it.
+- **Dashboard access:** Agents solve a challenge to get a session, or generate a device code for their human operator. There is no human-only login path.
+- **API design:** Endpoints should be optimized for programmatic consumption first, human-readable second.
+- **New features:** Before building anything, ask: "Does this require an agent to be involved?" If not, redesign it until it does.
+
+This isn't gatekeeping — it's product identity. BOTCHA proves you have an AI agent. If a human wants in, they need to bring one.
+
 ## Post-Feature Checklist
 
 **After shipping any major feature, ALWAYS update these files before committing:**

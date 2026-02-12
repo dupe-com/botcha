@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.8.0)
+## Current Status (v0.9.1)
 
 ### Shipped
 
@@ -107,16 +107,34 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 **Status:** Built and tested. TypeScript: 58 tests (Express + Hono middleware). Python: 30 tests (FastAPI + Django middleware). Both verify JWT signature, expiry, type, audience, client IP binding, and revocation.
 **Packages:** `@botcha/verify` (npm) · `botcha-verify` (PyPI)
 
+### ✅ Email-Tied App Creation & Recovery — SHIPPED (v0.10.0)
+**What:** Email required at app creation. Verification via 6-digit code. Account recovery via email. Secret rotation with notification.
+**Status:** Built and tested. Breaking change: `POST /v1/apps` now requires `{ "email": "..." }` in body.
+**Implementation:**
+- `POST /v1/apps` → requires email, sends 6-digit verification code
+- `POST /v1/apps/:id/verify-email` → verify email with code
+- `POST /v1/apps/:id/resend-verification` → resend verification code
+- `POST /v1/auth/recover` → send recovery device code to verified email
+- `POST /v1/apps/:id/rotate-secret` → rotate secret (auth required), sends notification email
+- Email→app_id reverse index in KV for recovery lookups
+- Resend API integration (falls back to console.log in dev)
+**Effort:** Large
+
 ### Agent Registry
 **What:** Agents register with name, operator, version, public key. Get a persistent identity.
 **Why:** Today every verification is anonymous. We prove intelligence but never learn *who*. No accountability, no reputation.
 **How:** `POST /v1/agents/register` → agent ID + keypair. Agents sign requests with their key. Operators manage their agents via dashboard.
 **Effort:** Large
 
-### Dashboard
-**What:** Stripe-style web dashboard showing verification volume, success rates, agent breakdown, geographic distribution, abuse alerts.
-**Why:** Enterprises need visibility. Dashboards sell products. Also needed for multi-tenant.
-**How:** React app backed by Analytics Engine queries. Per-app views for multi-tenant.
+### ✅ Per-App Metrics Dashboard — SHIPPED (v0.9.1)
+**What:** Server-rendered dashboard at `/dashboard` showing per-app verification volume, success rates, challenge type breakdown, performance metrics, geographic distribution, and error tracking.
+**Status:** Built with Hono JSX + htmx 2.0.4. Turbopuffer-inspired ASCII terminal aesthetic (JetBrains Mono, dark slate theme, fieldset borders). Cookie-based auth reusing existing JWT infrastructure. Data from Cloudflare Analytics Engine SQL API. Graceful fallback with sample data when CF_API_TOKEN not configured.
+**Implementation:**
+- `GET /dashboard` → main metrics page (auth required)
+- `GET /dashboard/login` → login with app_id + app_secret
+- `GET /dashboard/api/*` → htmx HTML fragment endpoints (overview, volume, types, performance, errors, geo)
+- Period filters: 1h, 24h, 7d, 30d via htmx buttons
+- Cookie: `botcha_session` (HttpOnly, Secure, SameSite=Lax, 1hr maxAge)
 **Effort:** Large
 
 ---

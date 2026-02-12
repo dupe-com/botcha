@@ -48,8 +48,8 @@ const intro = `
 
 console.log(intro);
 
-// Start wrangler dev and forward all output
-const proc = spawn('wrangler', ['dev'], {
+// Start wrangler dev from source (bypasses dist/ so changes hot-reload)
+const proc = spawn('wrangler', ['dev', 'src/index.ts'], {
   stdio: 'inherit',
 });
 

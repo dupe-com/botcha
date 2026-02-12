@@ -146,11 +146,47 @@ BOTCHA supports **multi-tenant isolation** — create separate apps with unique 
 ### Creating an App
 
 ```bash
-curl -X POST https://botcha.ai/v1/apps
-# Returns: {app_id: "app_abc123", app_secret: "sk_xyz789", warning: "..."}
+curl -X POST https://botcha.ai/v1/apps \
+  -H "Content-Type: application/json" \
+  -d '{"email": "agent@example.com"}'
+# Returns: {app_id, app_secret, email, email_verified: false, verification_required: true, ...}
 ```
 
 **⚠️ Important:** The `app_secret` is only shown once. Save it securely.
+
+**Email is required.** A 6-digit verification code will be sent to the provided email.
+
+### Verifying Email
+
+```bash
+curl -X POST https://botcha.ai/v1/apps/app_abc123/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+# Returns: {success: true, email_verified: true}
+```
+
+### Account Recovery
+
+If you lose your `app_secret`, you can recover access via your verified email:
+
+```bash
+curl -X POST https://botcha.ai/v1/auth/recover \
+  -H "Content-Type: application/json" \
+  -d '{"email": "agent@example.com"}'
+# A device code is emailed — enter it at /dashboard/code
+```
+
+### Secret Rotation
+
+Rotate your `app_secret` (requires active dashboard session):
+
+```bash
+curl -X POST https://botcha.ai/v1/apps/app_abc123/rotate-secret \
+  -H "Authorization: Bearer <session_token>"
+# Returns: {app_secret: "sk_new_...", warning: "Save your new secret..."}
+```
+
+A notification email is sent when the secret is rotated (if email is verified).
 
 ### Using App ID in SDK
 
@@ -188,10 +224,75 @@ async with BotchaClient(app_id="app_abc123") as client:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/v1/apps` | POST | Create new app (returns app_id + app_secret) |
-| `/v1/apps/:id` | GET | Get app info (secret NOT included) |
+| `/v1/apps` | POST | Create new app (email required, returns app_id + app_secret) |
+| `/v1/apps/:id` | GET | Get app info (includes email + verification status) |
+| `/v1/apps/:id/verify-email` | POST | Verify email with 6-digit code |
+| `/v1/apps/:id/resend-verification` | POST | Resend verification email |
+| `/v1/apps/:id/rotate-secret` | POST | Rotate app secret (auth required) |
+| `/v1/auth/recover` | POST | Request account recovery via email |
 
 All existing endpoints (`/v1/challenges`, `/v1/token`, etc.) accept `?app_id=` query param.
+
+## Per-App Metrics Dashboard (Shipped)
+
+A server-rendered dashboard at `/dashboard` shows per-app analytics.
+
+### Dashboard Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/dashboard` | GET | Main dashboard (auth required) |
+| `/dashboard/login` | GET | Login page |
+| `/dashboard/login` | POST | Login with app_id + app_secret |
+| `/dashboard/logout` | GET | Logout (clears session cookie) |
+| `/dashboard/api/overview` | GET | Overview stats (htmx fragment) |
+| `/dashboard/api/volume` | GET | Request volume chart (htmx fragment) |
+| `/dashboard/api/types` | GET | Challenge type breakdown (htmx fragment) |
+| `/dashboard/api/performance` | GET | Performance metrics table (htmx fragment) |
+| `/dashboard/api/errors` | GET | Error & rate limit breakdown (htmx fragment) |
+| `/dashboard/api/geo` | GET | Geographic distribution (htmx fragment) |
+
+All `/dashboard/api/*` endpoints accept `?period=1h|24h|7d|30d` query parameter.
+
+### Authentication
+
+Three ways to access the dashboard — all require an AI agent:
+
+**Flow 1: Agent Direct (challenge-based)**
+```bash
+# 1. Agent requests challenge
+curl -X POST https://botcha.ai/v1/auth/dashboard \
+  -d '{"app_id": "app_abc123"}'
+# Returns: {challenge_id, problems, ...}
+
+# 2. Agent solves and verifies
+curl -X POST https://botcha.ai/v1/auth/dashboard/verify \
+  -d '{"challenge_id": "...", "answers": [...], "app_id": "app_abc123"}'
+# Returns: {session_token: "..."}
+```
+
+**Flow 2: Device Code (agent → human handoff)**
+```bash
+# 1. Agent requests challenge
+curl -X POST https://botcha.ai/v1/auth/device-code \
+  -d '{"app_id": "app_abc123"}'
+
+# 2. Agent solves to get device code
+curl -X POST https://botcha.ai/v1/auth/device-code/verify \
+  -d '{"challenge_id": "...", "answers": [...], "app_id": "app_abc123"}'
+# Returns: {device_code: "BOTCHA-XXXX"} (10 min TTL)
+
+# 3. Human enters code at /dashboard/code
+```
+
+**Flow 3: Legacy (credentials)**
+Login with `app_id` + `app_secret` at `/dashboard/login`.
+
+Session uses cookie-based auth:
+- Cookie name: `botcha_session`
+- HttpOnly, Secure, SameSite=Lax
+- Max age: 1 hour
+- JWT verified using existing auth infrastructure
 
 ### Constructor Parameters
 

@@ -31,6 +31,10 @@ Feature: Client IP Binding (optional token-to-IP binding)
 Feature: Token Revocation (invalidate tokens before expiry)
 Feature: Server-Side Verification SDK (@botcha/verify for TS, botcha-verify for Python)
 Feature: Multi-Tenant API Keys (per-app isolation, rate limiting, and token scoping)
+Feature: Per-App Metrics Dashboard (server-rendered at /dashboard, htmx-powered)
+Feature: Email-Tied App Creation (email required, 6-digit verification, account recovery)
+Feature: Secret Rotation (rotate app_secret with email notification)
+Feature: Agent-First Dashboard Auth (challenge-based login + device code handoff)
 
 # Challenge Endpoints
 Endpoint: GET https://botcha.ai/v1/challenges - Generate challenge (hybrid by default)
@@ -47,8 +51,26 @@ Endpoint: POST https://botcha.ai/v1/token/refresh - Refresh access token using r
 Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or refresh)
 
 # Multi-Tenant Endpoints
-Endpoint: POST https://botcha.ai/v1/apps - Create new app (returns app_id + app_secret)
-Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (without secret)
+Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, returns app_id + app_secret)
+Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
+Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code
+Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email
+Endpoint: POST https://botcha.ai/v1/apps/:id/rotate-secret - Rotate app secret (auth required)
+
+# Account Recovery
+Endpoint: POST https://botcha.ai/v1/auth/recover - Request recovery via verified email
+
+# Dashboard Auth Endpoints (Agent-First)
+Endpoint: POST https://botcha.ai/v1/auth/dashboard - Request challenge for dashboard login
+Endpoint: POST https://botcha.ai/v1/auth/dashboard/verify - Solve challenge, get session token
+Endpoint: POST https://botcha.ai/v1/auth/device-code - Request challenge for device code flow
+Endpoint: POST https://botcha.ai/v1/auth/device-code/verify - Solve challenge, get device code
+
+# Dashboard Endpoints
+Endpoint: GET https://botcha.ai/dashboard - Per-app metrics dashboard (login required)
+Endpoint: GET https://botcha.ai/dashboard/login - Dashboard login page
+Endpoint: POST https://botcha.ai/dashboard/login - Login with app_id + app_secret
+Endpoint: GET https://botcha.ai/dashboard/code - Enter device code (human-facing)
 
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
@@ -96,7 +118,10 @@ RTT-Security: Humans still can't solve even with extra time
 
 # MULTI-TENANT API KEYS
 Multi-Tenant: Create apps with unique app_id for isolation
-Multi-Tenant-Create: POST /v1/apps → {app_id, app_secret} (secret only shown once!)
+Multi-Tenant-Create: POST /v1/apps with {"email": "..."} → {app_id, app_secret} (secret only shown once!)
+Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456"}
+Multi-Tenant-Recover: POST /v1/auth/recover with {"email": "..."} → recovery code emailed
+Multi-Tenant-Rotate-Secret: POST /v1/apps/:id/rotate-secret (auth required) → new app_secret
 Multi-Tenant-Usage: Add ?app_id=<your_app_id> to any challenge/token endpoint
 Multi-Tenant-SDK-TS: new BotchaClient({ appId: 'app_abc123' })
 Multi-Tenant-SDK-Python: BotchaClient(app_id='app_abc123')

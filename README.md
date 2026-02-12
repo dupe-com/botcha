@@ -31,7 +31,10 @@ Use cases:
 - 🔄 AI-to-AI marketplaces
 - 🎫 Bot verification systems
 - 🔐 Autonomous agent authentication
-- 🏢 Multi-tenant app isolation
+- 🏢 Multi-tenant app isolation with email-tied accounts
+- 📊 Per-app metrics dashboard at [botcha.ai/dashboard](https://botcha.ai/dashboard)
+- 📧 Email verification, account recovery, and secret rotation
+- 🤖 Agent-first dashboard auth (challenge-based login + device code handoff)
 
 ## Install
 
@@ -176,15 +179,25 @@ BOTCHA supports **multi-tenant isolation** — create separate apps with unique 
 ### Creating an App
 
 ```bash
-# Create a new app
-curl -X POST https://botcha.ai/v1/apps
+# Create a new app (email required)
+curl -X POST https://botcha.ai/v1/apps \
+  -H "Content-Type: application/json" \
+  -d '{"email": "agent@example.com"}'
 
 # Returns (save the secret - it's only shown once!):
 {
   "app_id": "app_abc123",
   "app_secret": "sk_xyz789",
-  "warning": "Save your secret now. It won't be shown again."
+  "email": "agent@example.com",
+  "email_verified": false,
+  "verification_required": true,
+  "warning": "Save your app_secret now — it cannot be retrieved again! Check your email for a verification code."
 }
+
+# Verify your email with the 6-digit code:
+curl -X POST https://botcha.ai/v1/apps/app_abc123/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
 ```
 
 ### Using Your App ID
@@ -237,6 +250,40 @@ Each app gets its own rate limit bucket:
 # Get app details (secret is NOT included)
 curl https://botcha.ai/v1/apps/app_abc123
 ```
+
+## 📊 Per-App Metrics Dashboard
+
+BOTCHA includes a built-in **metrics dashboard** at [`/dashboard`](https://botcha.ai/dashboard) showing per-app analytics with a terminal-inspired aesthetic.
+
+### What You Get
+
+- **Overview stats**: Challenges generated, verifications, success rate, avg solve time
+- **Request volume**: Time-bucketed event charts
+- **Challenge types**: Breakdown by speed/hybrid/reasoning/standard
+- **Performance**: p50/p95 solve times, response latency
+- **Errors & rate limits**: Failure tracking
+- **Geographic distribution**: Top countries by request volume
+
+### Access
+
+Three ways to access — all require an AI agent:
+
+1. **Agent Direct**: Your agent solves a speed challenge via `POST /v1/auth/dashboard` → gets a session token
+2. **Device Code**: Agent solves challenge via `POST /v1/auth/device-code` → gets a `BOTCHA-XXXX` code → human enters it at `/dashboard/code`
+3. **Legacy**: Login with `app_id` + `app_secret` at [botcha.ai/dashboard/login](https://botcha.ai/dashboard/login)
+
+Session uses cookie-based auth (HttpOnly, Secure, SameSite=Lax, 1hr expiry).
+
+### Email & Recovery
+
+- Email is **required** at app creation (`POST /v1/apps` with `{"email": "..."}`)
+- Verify email with a 6-digit code sent to your inbox
+- Lost your secret? Use `POST /v1/auth/recover` to get a recovery device code emailed
+- Rotate secrets via `POST /v1/apps/:id/rotate-secret` (auth required, sends notification)
+
+### Period Filters
+
+All metrics support `1h`, `24h`, `7d`, and `30d` time windows via htmx-powered buttons — no page reload required.
 
 ## 🔄 SSE Streaming Flow (AI-Native)
 

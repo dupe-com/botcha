@@ -90,6 +90,10 @@ Feature: Client IP Binding (optional token-to-IP binding)
 Feature: Token Revocation (invalidate tokens before expiry)
 Feature: Server-Side Verification SDK (@botcha/verify for TS, botcha-verify for Python)
 Feature: Multi-Tenant API Keys (per-app isolation, rate limiting, and token scoping)
+Feature: Per-App Metrics Dashboard (server-rendered at /dashboard, htmx-powered)
+Feature: Email-Tied App Creation (email required, 6-digit verification, account recovery)
+Feature: Secret Rotation (rotate app_secret with email notification)
+Feature: Agent-First Dashboard Auth (challenge-based login + device code handoff)
 
 # Endpoints
 # Challenge Endpoints
@@ -107,8 +111,26 @@ Endpoint: POST https://botcha.ai/v1/token/refresh - Refresh access token using r
 Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or refresh)
 
 # Multi-Tenant Endpoints
-Endpoint: POST https://botcha.ai/v1/apps - Create new app (returns app_id + app_secret)
-Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (without secret)
+Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, returns app_id + app_secret)
+Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
+Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code
+Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email
+Endpoint: POST https://botcha.ai/v1/apps/:id/rotate-secret - Rotate app secret (auth required)
+
+# Account Recovery
+Endpoint: POST https://botcha.ai/v1/auth/recover - Request recovery via verified email
+
+# Dashboard Auth Endpoints (Agent-First)
+Endpoint: POST https://botcha.ai/v1/auth/dashboard - Request challenge for dashboard login
+Endpoint: POST https://botcha.ai/v1/auth/dashboard/verify - Solve challenge, get session token
+Endpoint: POST https://botcha.ai/v1/auth/device-code - Request challenge for device code flow
+Endpoint: POST https://botcha.ai/v1/auth/device-code/verify - Solve challenge, get device code
+
+# Dashboard Endpoints
+Endpoint: GET https://botcha.ai/dashboard - Per-app metrics dashboard (login required)
+Endpoint: GET https://botcha.ai/dashboard/login - Dashboard login page
+Endpoint: POST https://botcha.ai/dashboard/login - Login with app_id + app_secret
+Endpoint: GET https://botcha.ai/dashboard/code - Enter device code (human-facing)
 
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
@@ -156,7 +178,10 @@ RTT-Security: Humans still can't solve even with extra time
 
 # MULTI-TENANT API KEYS
 Multi-Tenant: Create apps with unique app_id for isolation
-Multi-Tenant-Create: POST /v1/apps → {app_id, app_secret} (secret only shown once!)
+Multi-Tenant-Create: POST /v1/apps with {"email": "..."} → {app_id, app_secret} (secret only shown once!)
+Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456"}
+Multi-Tenant-Recover: POST /v1/auth/recover with {"email": "..."} → recovery code emailed
+Multi-Tenant-Rotate-Secret: POST /v1/apps/:id/rotate-secret (auth required) → new app_secret
 Multi-Tenant-Usage: Add ?app_id=<your_app_id> to any challenge/token endpoint
 Multi-Tenant-SDK-TS: new BotchaClient({ appId: 'app_abc123' })
 Multi-Tenant-SDK-Python: BotchaClient(app_id='app_abc123')
@@ -566,11 +591,25 @@ export function getOpenApiSpec(version: string) {
       },
       "/v1/apps": {
         post: {
-          summary: "Create a new multi-tenant app",
-          description: "Create a new app with unique app_id and app_secret for multi-tenant isolation. The app_secret is SHA-256 hashed and only returned once.",
+          summary: "Create a new multi-tenant app (email required)",
+          description: "Create a new app with unique app_id and app_secret. Email is required for account recovery. A 6-digit verification code is sent to the provided email.",
           operationId: "createApp",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email"],
+                  properties: {
+                    "email": { type: "string", format: "email", description: "Owner email (required for recovery)" }
+                  }
+                }
+              }
+            }
+          },
           responses: {
-            "200": {
+            "201": {
               description: "App created successfully",
               content: {
                 "application/json": {
@@ -579,19 +618,23 @@ export function getOpenApiSpec(version: string) {
                     properties: {
                       "app_id": { type: "string", description: "Unique app identifier" },
                       "app_secret": { type: "string", description: "Secret key (only shown once!)" },
-                      "warning": { type: "string", description: "Warning to save secret" }
+                      "email": { type: "string" },
+                      "email_verified": { type: "boolean" },
+                      "verification_required": { type: "boolean" },
+                      "warning": { type: "string" }
                     }
                   }
                 }
               }
-            }
+            },
+            "400": { description: "Missing or invalid email" }
           }
         }
       },
       "/v1/apps/{id}": {
         get: {
           summary: "Get app information",
-          description: "Retrieve app details by app_id. The app_secret is NOT included in the response.",
+          description: "Retrieve app details by app_id. Includes email and verification status.",
           operationId: "getApp",
           parameters: [
             {
@@ -611,13 +654,143 @@ export function getOpenApiSpec(version: string) {
                     type: "object",
                     properties: {
                       "app_id": { type: "string" },
-                      "created_at": { type: "string", format: "date-time" }
+                      "created_at": { type: "string", format: "date-time" },
+                      "email": { type: "string" },
+                      "email_verified": { type: "boolean" }
                     }
                   }
                 }
               }
             },
             "404": { description: "App not found" }
+          }
+        }
+      },
+      "/v1/apps/{id}/verify-email": {
+        post: {
+          summary: "Verify email with 6-digit code",
+          operationId: "verifyEmail",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["code"],
+                  properties: {
+                    "code": { type: "string", description: "6-digit verification code from email" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Email verified" },
+            "400": { description: "Invalid or expired code" }
+          }
+        }
+      },
+      "/v1/apps/{id}/resend-verification": {
+        post: {
+          summary: "Resend verification email",
+          operationId: "resendVerification",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } }
+          ],
+          responses: {
+            "200": { description: "Verification email sent" },
+            "400": { description: "Already verified" }
+          }
+        }
+      },
+      "/v1/apps/{id}/rotate-secret": {
+        post: {
+          summary: "Rotate app secret (auth required)",
+          description: "Generate a new app_secret and invalidate the old one. Requires active dashboard session. Sends notification email.",
+          operationId: "rotateSecret",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } }
+          ],
+          security: [{ BearerAuth: [] }],
+          responses: {
+            "200": {
+              description: "Secret rotated",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      "app_secret": { type: "string", description: "New secret (only shown once!)" }
+                    }
+                  }
+                }
+              }
+            },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Token doesn't match app_id" }
+          }
+        }
+      },
+      "/v1/auth/recover": {
+        post: {
+          summary: "Request account recovery via email",
+          description: "Sends a device code to the verified email associated with the app. Use the code at /dashboard/code.",
+          operationId: "recoverAccount",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email"],
+                  properties: {
+                    "email": { type: "string", format: "email" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Recovery code sent (if email exists and is verified)" }
+          }
+        }
+      },
+      "/v1/auth/dashboard": {
+        post: {
+          summary: "Request challenge for dashboard login (agent-first)",
+          operationId: "dashboardAuthChallenge",
+          responses: {
+            "200": { description: "Speed challenge for dashboard auth" }
+          }
+        }
+      },
+      "/v1/auth/dashboard/verify": {
+        post: {
+          summary: "Solve challenge, get dashboard session token",
+          operationId: "dashboardAuthVerify",
+          responses: {
+            "200": { description: "Session token granted" }
+          }
+        }
+      },
+      "/v1/auth/device-code": {
+        post: {
+          summary: "Request challenge for device code flow",
+          operationId: "deviceCodeChallenge",
+          responses: {
+            "200": { description: "Speed challenge for device code" }
+          }
+        }
+      },
+      "/v1/auth/device-code/verify": {
+        post: {
+          summary: "Solve challenge, get device code for human handoff",
+          operationId: "deviceCodeVerify",
+          responses: {
+            "200": { description: "Device code (BOTCHA-XXXX, 10 min TTL)" }
           }
         }
       }
