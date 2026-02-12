@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "botcha"
-version = "0.1.0"
+version = "0.2.0"
 description = "BOTCHA Python SDK - Prove you're a bot. Humans need not apply."
 readme = "README.md"
 requires-python = ">=3.9"
