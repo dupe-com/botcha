@@ -108,7 +108,7 @@ export const LandingPage: FC<{ version: string; error?: string }> = ({ version, 
       )}
       <div style="text-align: center; margin-top: 1.5rem; display: flex; flex-direction: column; align-items: center; gap: 0.625rem;">
         <a
-          href="/dashboard/login"
+          href="/dashboard"
           class="text-muted"
           style="font-size: 0.6875rem; text-decoration: underline; text-underline-offset: 3px;"
         >
@@ -263,7 +263,7 @@ export const VerifiedLandingPage: FC<{ version: string; solveTime?: number }> = 
       {/* ---- Returning user shortcut ---- */}
       <div style="text-align: center; margin-bottom: 1.5rem;">
         <a
-          href="/dashboard/login"
+          href="/dashboard"
           style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px;"
         >
           Already have an account? Go to dashboard
