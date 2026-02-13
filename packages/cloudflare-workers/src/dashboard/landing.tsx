@@ -112,7 +112,7 @@ export const LandingPage: FC<{ version: string; error?: string }> = ({ version, 
           class="text-muted"
           style="font-size: 0.6875rem; text-decoration: underline; text-underline-offset: 3px;"
         >
-          Already have an account? Log in
+          Already have an account? Go to dashboard
         </a>
         <details style="margin: 0;">
           <summary class="text-muted" style="font-size: 0.6875rem; cursor: pointer; text-align: center; list-style: none; text-decoration: underline; text-underline-offset: 3px;">
