@@ -9,7 +9,7 @@
  * - Session management with expiration
  */
 
-import { Agent, KVNamespace, generateAgentId } from './agents.js';
+import { Agent, KVNamespace, generateAgentId } from './agents';
 
 // ============ TAP TYPES ============
 

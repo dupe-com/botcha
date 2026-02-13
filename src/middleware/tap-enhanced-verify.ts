@@ -10,8 +10,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { generateChallenge, verifyChallenge } from '../challenges/compute.js';
-import { generateSpeedChallenge, verifySpeedChallenge } from '../challenges/speed.js';
+import { generateChallenge, verifyChallenge } from '../challenges/compute';
+import { generateSpeedChallenge, verifySpeedChallenge } from '../challenges/speed';
 import { 
   verifyHTTPMessageSignature, 
   parseTAPIntent, 
@@ -19,14 +19,14 @@ import {
   getVerificationMode,
   buildTAPChallengeResponse,
   TAPVerificationResult 
-} from '../../packages/cloudflare-workers/src/tap-verify.js';
+} from '../../packages/cloudflare-workers/src/tap-verify';
 import { 
   getTAPAgent, 
   updateAgentVerification, 
   createTAPSession, 
   validateCapability,
   TAPAgent 
-} from '../../packages/cloudflare-workers/src/tap-agents.js';
+} from '../../packages/cloudflare-workers/src/tap-agents';
 
 // ============ EXTENDED OPTIONS ============
 

@@ -6,7 +6,7 @@
  */
 
 import type { Context } from 'hono';
-import { extractBearerToken, verifyToken } from './auth.js';
+import { extractBearerToken, verifyToken } from './auth';
 import { 
   registerTAPAgent, 
   getTAPAgent, 
@@ -17,13 +17,13 @@ import {
   validateCapability,
   TAPAgent,
   TAPCapability
-} from './tap-agents.js';
+} from './tap-agents';
 import { 
   verifyHTTPMessageSignature,
   parseTAPIntent,
   extractTAPHeaders,
   TAPVerificationResult
-} from './tap-verify.js';
+} from './tap-verify';
 
 // ============ VALIDATION HELPERS ============
 
