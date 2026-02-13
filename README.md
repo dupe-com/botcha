@@ -36,6 +36,7 @@ Use cases:
 - 📧 Email verification, account recovery, and secret rotation
 - 🤖 Agent-first dashboard auth (challenge-based login + device code handoff)
 - 🆔 Persistent agent identities with registry
+- 🔏 Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures
 
 ## Install
 
@@ -122,10 +123,11 @@ BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens and l
 ### Token Flow
 
 ```
-1. Solve challenge → receive access_token (5min) + refresh_token (1hr)
+1. Solve challenge → receive access_token (5min) + refresh_token (1hr) + human_link
 2. Use access_token for API calls
-3. When access_token expires → POST /v1/token/refresh with refresh_token
-4. When compromised → POST /v1/token/revoke to invalidate immediately
+3. Give human_link to your human → they click it → instant browser access via /go/:code
+4. When access_token expires → POST /v1/token/refresh with refresh_token
+5. When compromised → POST /v1/token/revoke to invalidate immediately
 ```
 
 ### Security Features
@@ -160,7 +162,7 @@ async with BotchaClient(audience="https://api.example.com") as client:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /v1/token` | Get challenge for token flow |
-| `POST /v1/token/verify` | Submit solution → receive `access_token` + `refresh_token` |
+| `POST /v1/token/verify` | Submit solution → receive `access_token` + `refresh_token` + `human_link` |
 | `POST /v1/token/refresh` | Exchange `refresh_token` for new `access_token` |
 | `POST /v1/token/revoke` | Invalidate any token immediately |
 
@@ -356,6 +358,81 @@ curl -X POST "https://botcha.ai/v1/agents/register?app_id=app_abc123" \
 
 > **Note:** Agent Registry is the foundation for future features like delegation chains, capability attestation, and reputation scoring. See [ROADMAP.md](./ROADMAP.md) for details.
 
+## 🔏 Trusted Agent Protocol (TAP)
+
+BOTCHA v0.12.0 introduces the **Trusted Agent Protocol** — enterprise-grade cryptographic agent authentication using HTTP Message Signatures (RFC 9421).
+
+### Why TAP?
+
+- **Cryptographic Identity**: Agents register public keys and sign requests — no more shared secrets
+- **Capability Scoping**: Define exactly what an agent can do (`read:invoices`, `write:transfers`)
+- **Intent Verification**: Every session requires a declared intent that's validated against capabilities
+- **Trust Levels**: `basic`, `verified`, `enterprise` — different access tiers for different agents
+
+### Registering a TAP Agent
+
+```bash
+# Register with public key and capabilities
+curl -X POST "https://botcha.ai/v1/agents/register/tap?app_id=app_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "enterprise-agent",
+    "operator": "Acme Corp",
+    "version": "2.0.0",
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMFkw...\n-----END PUBLIC KEY-----",
+    "signature_algorithm": "ecdsa-p256-sha256",
+    "trust_level": "enterprise",
+    "capabilities": [
+      {"action": "read", "resource": "/api/invoices"},
+      {"action": "write", "resource": "/api/orders", "constraints": {"max_amount": 10000}}
+    ]
+  }'
+```
+
+### Creating a TAP Session
+
+```bash
+# Create session with intent declaration
+curl -X POST https://botcha.ai/v1/sessions/tap \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent_xyz789",
+    "user_context": "user_123",
+    "intent": {
+      "action": "read",
+      "resource": "/api/invoices",
+      "purpose": "Monthly billing report"
+    }
+  }'
+```
+
+### TAP Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /v1/agents/register/tap` | Register TAP agent with public key + capabilities |
+| `GET /v1/agents/:id/tap` | Get TAP agent details (includes public key) |
+| `GET /v1/agents/tap` | List TAP-enabled agents for app |
+| `POST /v1/sessions/tap` | Create TAP session with intent validation |
+| `GET /v1/sessions/:id/tap` | Get TAP session info |
+
+### Express Middleware (Verification Modes)
+
+```typescript
+import { createTAPVerifyMiddleware } from '@dupecom/botcha/middleware';
+
+// Mode: 'tap' — require TAP signature
+app.use('/api', createTAPVerifyMiddleware({ mode: 'tap', secret: process.env.BOTCHA_SECRET }));
+
+// Mode: 'flexible' — accept TAP signature OR challenge token
+app.use('/api', createTAPVerifyMiddleware({ mode: 'flexible', secret: process.env.BOTCHA_SECRET }));
+
+// Mode: 'challenge-only' — traditional BOTCHA challenge (backward compatible)
+app.use('/api', createTAPVerifyMiddleware({ mode: 'challenge-only', secret: process.env.BOTCHA_SECRET }));
+```
+
+> **Supported algorithms:** `ecdsa-p256-sha256`, `rsa-pss-sha256`. See [ROADMAP.md](./ROADMAP.md) for details.
+
 ## 🔄 SSE Streaming Flow (AI-Native)
 
 For AI agents that prefer a **conversational handshake**, BOTCHA offers **Server-Sent Events (SSE)** streaming:
@@ -433,7 +510,7 @@ BOTCHA is designed to be auto-discoverable by AI agents through multiple standar
 All responses include these headers for agent discovery:
 
 ```http
-X-Botcha-Version: 0.11.0
+X-Botcha-Version: 0.12.0
 X-Botcha-Enabled: true
 X-Botcha-Methods: hybrid-challenge,speed-challenge,reasoning-challenge,standard-challenge
 X-Botcha-Docs: https://botcha.ai/openapi.json

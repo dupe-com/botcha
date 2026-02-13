@@ -25,7 +25,7 @@ routes = [
 
 # Environment variables
 [vars]
-BOTCHA_VERSION = "0.11.0"
+BOTCHA_VERSION = "0.13.0"
 # JWT_SECRET is stored securely via: wrangler secret put JWT_SECRET
 
 # KV namespace for challenge storage
@@ -47,6 +47,11 @@ id = "18d9da1e11364a7b981061c6b01f4855"
 [[kv_namespaces]]
 binding = "AGENTS"
 id = "8107336e9e8c418b895c4134a53037fd"
+
+# Sessions KV namespace for TAP session storage
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "268aa950ddec41e78d88e78526eaaa44"
 
 # Analytics Engine binding for usage tracking
 [[analytics_engine_datasets]]

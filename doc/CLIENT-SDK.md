@@ -6,7 +6,7 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.11.0 | Core SDK with client (`/client` export) |
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.12.0 | Core SDK with client (`/client` export) |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
 | [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.4.0 | Python SDK on PyPI |
 | [`@botcha/verify`](../packages/verify/) | 0.1.0 | Server-side verification (Express/Hono middleware) |
@@ -24,6 +24,7 @@ The client SDK allows AI agents to:
 7. ✅ Token revocation for compromised tokens
 8. ✅ App creation with email verification (SDK methods)
 9. ✅ Account recovery and secret rotation (SDK methods)
+10. ✅ TAP (Trusted Agent Protocol) — cryptographic agent auth with public keys and capability-scoped sessions
 
 ## Implemented API
 
@@ -416,6 +417,19 @@ client.clearToken();
 | `/v1/token/refresh` | POST | Exchange refresh_token for new access_token |
 | `/v1/token/revoke` | POST | Revoke a token (access or refresh) |
 
+### Human Handoff (from Token Verify Response)
+
+`POST /v1/token/verify` returns human handoff fields alongside the tokens:
+
+| Field | Description |
+|-------|-------------|
+| `human_link` | **Primary.** URL for human to click for browser access (e.g., `https://botcha.ai/go/BOTCHA-XXXXXX`) |
+| `human_code` | The gate code (e.g., `BOTCHA-XXXXXX`) |
+| `human_instruction` | Human-readable instruction string |
+| `human_magic_link` | Backward compat alias for `human_link` |
+
+The `/go/:code` endpoint handles both gate codes (from `/v1/token/verify`) and device codes (from `/v1/auth/device-code/verify`).
+
 ```typescript
 // Manual token refresh
 const newToken = await client.refreshToken();
@@ -630,6 +644,140 @@ result = verify_botcha_token(token, secret='your-key', options=VerifyOptions(aud
 ```
 
 **Features:** JWT signature (HS256), expiry, token type, audience claim, client IP binding, auto_error toggle (FastAPI), path-based protection (Django).
+
+## Trusted Agent Protocol (TAP) Endpoints (v0.12.0+)
+
+TAP adds cryptographic agent authentication using HTTP Message Signatures (RFC 9421). TAP-enabled agents register public keys, declare capabilities, and create intent-scoped sessions.
+
+### TAP Agent Registration
+
+```bash
+# Register a TAP agent with public key and capabilities
+curl -X POST "https://botcha.ai/v1/agents/register/tap?app_id=app_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "enterprise-agent",
+    "operator": "Acme Corp",
+    "version": "2.0.0",
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMFkw...\n-----END PUBLIC KEY-----",
+    "signature_algorithm": "ecdsa-p256-sha256",
+    "trust_level": "enterprise",
+    "capabilities": [
+      {"action": "read", "resource": "/api/invoices"},
+      {"action": "write", "resource": "/api/orders"}
+    ]
+  }'
+
+# Returns:
+{
+  "success": true,
+  "agent_id": "agent_xyz789",
+  "tap_enabled": true,
+  "trust_level": "enterprise",
+  "capabilities": [...],
+  "has_public_key": true,
+  "key_fingerprint": "a1b2c3d4e5f6g7h8"
+}
+```
+
+### TAP Agent Retrieval
+
+```bash
+# Get TAP agent details (includes public key for verification)
+curl https://botcha.ai/v1/agents/agent_xyz789/tap
+
+# List TAP-enabled agents for an app
+curl "https://botcha.ai/v1/agents/tap?app_id=app_abc123&tap_only=true"
+```
+
+### TAP Session Creation
+
+```bash
+# Create a TAP session with intent declaration
+curl -X POST https://botcha.ai/v1/sessions/tap \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agent_xyz789",
+    "user_context": "user_123",
+    "intent": {
+      "action": "read",
+      "resource": "/api/invoices",
+      "purpose": "Monthly billing report"
+    }
+  }'
+
+# Returns:
+{
+  "success": true,
+  "session_id": "sess_abc123",
+  "capabilities": [...],
+  "intent": { "action": "read", "resource": "/api/invoices" },
+  "expires_at": "2026-02-14T17:00:00.000Z"
+}
+```
+
+### TAP Session Retrieval
+
+```bash
+curl https://botcha.ai/v1/sessions/sess_abc123/tap
+```
+
+### TAP API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/agents/register/tap` | POST | Register TAP agent with public key + capabilities |
+| `/v1/agents/:id/tap` | GET | Get TAP agent details (includes public key) |
+| `/v1/agents/tap` | GET | List TAP-enabled agents for app (`?tap_only=true` to filter) |
+| `/v1/sessions/tap` | POST | Create TAP session with intent validation |
+| `/v1/sessions/:id/tap` | GET | Get TAP session info (includes time remaining) |
+
+### TAP Verification Middleware (Express)
+
+The TAP-enhanced verification middleware supports multiple modes:
+
+```typescript
+import { createTAPVerifyMiddleware } from '@dupecom/botcha/middleware';
+
+// TAP-only: require HTTP Message Signature
+app.use('/api', createTAPVerifyMiddleware({
+  mode: 'tap',
+  secret: process.env.BOTCHA_SECRET!,
+}));
+
+// Flexible: accept TAP signature OR traditional BOTCHA challenge token
+app.use('/api', createTAPVerifyMiddleware({
+  mode: 'flexible',
+  secret: process.env.BOTCHA_SECRET!,
+}));
+
+// Signature-only: verify signature without full TAP session
+app.use('/api', createTAPVerifyMiddleware({
+  mode: 'signature-only',
+  secret: process.env.BOTCHA_SECRET!,
+}));
+
+// Challenge-only: backward compatible (traditional BOTCHA)
+app.use('/api', createTAPVerifyMiddleware({
+  mode: 'challenge-only',
+  secret: process.env.BOTCHA_SECRET!,
+}));
+```
+
+### Supported Algorithms
+
+| Algorithm | Key Type | Usage |
+|-----------|----------|-------|
+| `ecdsa-p256-sha256` | ECDSA P-256 | Recommended — compact keys, fast verification |
+| `rsa-pss-sha256` | RSA-PSS | Legacy compatibility — larger keys |
+
+### Trust Levels
+
+| Level | Description |
+|-------|-------------|
+| `basic` | Default. Agent registered without public key. |
+| `verified` | Agent registered with public key. |
+| `enterprise` | Agent with verified organizational identity. |
 
 ## Future: Go SDK
 

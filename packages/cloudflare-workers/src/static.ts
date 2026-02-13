@@ -78,6 +78,16 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | \`GET\` | \`/v1/agents/:id\` | Get agent by ID (public, no auth) |
 | \`GET\` | \`/v1/agents\` | List all agents for your app (auth required) |
 
+### TAP (Trusted Agent Protocol)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`POST\` | \`/v1/agents/register/tap\` | Register TAP agent with public key + capabilities |
+| \`GET\` | \`/v1/agents/:id/tap\` | Get TAP agent details (includes public key) |
+| \`GET\` | \`/v1/agents/tap\` | List TAP-enabled agents for app |
+| \`POST\` | \`/v1/sessions/tap\` | Create TAP session with intent validation |
+| \`GET\` | \`/v1/sessions/:id/tap\` | Get TAP session info |
+
 ### Challenges
 
 | Method | Path | Description |
@@ -275,6 +285,9 @@ Feature: Email-Tied App Creation (email required, 6-digit verification, account 
 Feature: Secret Rotation (rotate app_secret with email notification)
 Feature: Agent-First Dashboard Auth (challenge-based login + device code handoff)
 Feature: Agent Registry (persistent agent identities with name, operator, version)
+Feature: Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures (RFC 9421)
+Feature: TAP Capabilities (action + resource scoping for agent sessions)
+Feature: TAP Trust Levels (basic, verified, enterprise)
 
 # Endpoints
 # Challenge Endpoints
@@ -313,10 +326,21 @@ Endpoint: GET https://botcha.ai/dashboard/login - Dashboard login page
 Endpoint: POST https://botcha.ai/dashboard/login - Login with app_id + app_secret
 Endpoint: GET https://botcha.ai/dashboard/code - Enter device code (human-facing)
 
+# Code Redemption (Unified)
+Endpoint: GET https://botcha.ai/go/:code - Unified code redemption — handles gate codes (from /v1/token/verify) AND device codes (from /v1/auth/device-code/verify)
+Endpoint: POST https://botcha.ai/gate - Submit code form, redirects to /go/:code
+
 # Agent Registry Endpoints
 Endpoint: POST https://botcha.ai/v1/agents/register - Register agent identity (requires app_id)
 Endpoint: GET https://botcha.ai/v1/agents/:id - Get agent by ID (public, no auth)
 Endpoint: GET https://botcha.ai/v1/agents - List all agents for authenticated app
+
+# TAP (Trusted Agent Protocol) Endpoints
+Endpoint: POST https://botcha.ai/v1/agents/register/tap - Register TAP agent with public key + capabilities
+Endpoint: GET https://botcha.ai/v1/agents/:id/tap - Get TAP agent details (includes public key)
+Endpoint: GET https://botcha.ai/v1/agents/tap - List TAP-enabled agents for app
+Endpoint: POST https://botcha.ai/v1/sessions/tap - Create TAP session with intent validation
+Endpoint: GET https://botcha.ai/v1/sessions/:id/tap - Get TAP session info
 
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
@@ -353,7 +377,8 @@ Content-Negotiation-Example: curl https://botcha.ai -H "Accept: text/markdown"
 Content-Negotiation-Benefit: 80% fewer tokens vs HTML — ideal for LLM context windows
 
 # JWT TOKEN SECURITY
-Token-Flow: 1. GET /v1/token (get challenge) → 2. Solve → 3. POST /v1/token/verify (get tokens)
+Token-Flow: 1. GET /v1/token (get challenge) → 2. Solve → 3. POST /v1/token/verify (get tokens + human_link)
+Token-Human-Link: /v1/token/verify response includes human_link — give this URL to your human for one-click browser access
 Token-Access-Expiry: 5 minutes (short-lived for security)
 Token-Refresh-Expiry: 1 hour (use to get new access tokens)
 Token-Refresh: POST /v1/token/refresh with {"refresh_token": "<token>"}
@@ -383,6 +408,18 @@ SDK-App-Lifecycle-TS: createApp(email), verifyEmail(code), resendVerification(),
 SDK-App-Lifecycle-Python: create_app(email), verify_email(code), resend_verification(), recover_account(email), rotate_secret()
 Multi-Tenant-Rate-Limit: Each app gets isolated rate limit bucket
 Multi-Tenant-Token-Claim: Tokens include app_id claim when app_id provided
+
+# TRUSTED AGENT PROTOCOL (TAP)
+TAP-Description: Enterprise-grade cryptographic agent auth using HTTP Message Signatures (RFC 9421)
+TAP-Register: POST /v1/agents/register/tap with {name, public_key, signature_algorithm, capabilities, trust_level}
+TAP-Algorithms: ecdsa-p256-sha256, rsa-pss-sha256
+TAP-Trust-Levels: basic, verified, enterprise
+TAP-Capabilities: Array of {action, resource, constraints} — scoped access control
+TAP-Session-Create: POST /v1/sessions/tap with {agent_id, user_context, intent}
+TAP-Session-Get: GET /v1/sessions/:id/tap — includes time_remaining
+TAP-Get-Agent: GET /v1/agents/:id/tap — includes public_key for verification
+TAP-List-Agents: GET /v1/agents/tap?app_id=...&tap_only=true
+TAP-Middleware-Modes: tap, signature-only, challenge-only, flexible
 
 # EMBEDDED CHALLENGE (for bots visiting HTML pages)
 Embedded-Challenge: <script type="application/botcha+json">
@@ -1103,6 +1140,159 @@ export function getOpenApiSpec(version: string) {
               }
             },
             "401": { description: "Unauthorized - app_id required" }
+          }
+        }
+      },
+      "/v1/agents/register/tap": {
+        post: {
+          summary: "Register a TAP-enabled agent",
+          description: "Register an agent with Trusted Agent Protocol (TAP) capabilities including public key, signature algorithm, capabilities, and trust level. Requires app_id.",
+          operationId: "registerTAPAgent",
+          parameters: [
+            {
+              name: "app_id",
+              in: "query",
+              schema: { type: "string" },
+              description: "Multi-tenant app ID (or use JWT Bearer token with app_id claim)"
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: {
+                    "name": { type: "string", description: "Agent name" },
+                    "operator": { type: "string", description: "Operator/organization name" },
+                    "version": { type: "string", description: "Agent version" },
+                    "public_key": { type: "string", description: "PEM-encoded public key" },
+                    "signature_algorithm": { type: "string", enum: ["ecdsa-p256-sha256", "rsa-pss-sha256"], description: "Signature algorithm (required if public_key provided)" },
+                    "trust_level": { type: "string", enum: ["basic", "verified", "enterprise"], description: "Agent trust level (default: basic)" },
+                    "capabilities": {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          "action": { type: "string", description: "Capability action (e.g., read, write, execute)" },
+                          "resource": { type: "string", description: "Resource path" },
+                          "constraints": { type: "object", description: "Optional constraints" }
+                        }
+                      },
+                      description: "Agent capabilities (action + resource pairs)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "TAP agent registered successfully" },
+            "400": { description: "Invalid request (missing fields, bad key format, invalid algorithm)" },
+            "401": { description: "Unauthorized - app_id required" }
+          }
+        }
+      },
+      "/v1/agents/{id}/tap": {
+        get: {
+          summary: "Get TAP agent details",
+          description: "Retrieve TAP-enhanced agent information including public key, capabilities, and trust level.",
+          operationId: "getTAPAgent",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "The agent_id to retrieve"
+            }
+          ],
+          responses: {
+            "200": { description: "TAP agent details including public key and capabilities" },
+            "404": { description: "Agent not found" }
+          }
+        }
+      },
+      "/v1/agents/tap": {
+        get: {
+          summary: "List TAP-enabled agents",
+          description: "List all TAP-enabled agents for the authenticated app. Use ?tap_only=true to filter to TAP-enabled agents only.",
+          operationId: "listTAPAgents",
+          parameters: [
+            {
+              name: "app_id",
+              in: "query",
+              schema: { type: "string" },
+              description: "Multi-tenant app ID"
+            },
+            {
+              name: "tap_only",
+              in: "query",
+              schema: { type: "string", enum: ["true", "false"] },
+              description: "Filter to TAP-enabled agents only"
+            }
+          ],
+          responses: {
+            "200": { description: "List of TAP agents with capabilities and trust levels" },
+            "401": { description: "Unauthorized - app_id required" }
+          }
+        }
+      },
+      "/v1/sessions/tap": {
+        post: {
+          summary: "Create a TAP session",
+          description: "Create a capability-scoped session after validating the agent's intent against its registered capabilities.",
+          operationId: "createTAPSession",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agent_id", "user_context", "intent"],
+                  properties: {
+                    "agent_id": { type: "string", description: "Registered TAP agent ID" },
+                    "user_context": { type: "string", description: "User context identifier" },
+                    "intent": {
+                      type: "object",
+                      properties: {
+                        "action": { type: "string", description: "Intended action (e.g., read, write)" },
+                        "resource": { type: "string", description: "Target resource path" },
+                        "purpose": { type: "string", description: "Human-readable purpose" }
+                      },
+                      description: "Declared intent for the session"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "TAP session created with capabilities and expiry" },
+            "400": { description: "Missing required fields or invalid intent" },
+            "403": { description: "Agent lacks required capability for declared intent" },
+            "404": { description: "Agent not found" }
+          }
+        }
+      },
+      "/v1/sessions/{id}/tap": {
+        get: {
+          summary: "Get TAP session info",
+          description: "Retrieve TAP session details including capabilities, intent, and time remaining.",
+          operationId: "getTAPSession",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "The session_id to retrieve"
+            }
+          ],
+          responses: {
+            "200": { description: "TAP session details with time remaining" },
+            "404": { description: "Session not found or expired" }
           }
         }
       }

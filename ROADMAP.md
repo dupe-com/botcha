@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.11.0)
+## Current Status (v0.12.0)
 
 ### Shipped
 
@@ -41,6 +41,9 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - SSE streaming for interactive challenge flow
 - Analytics Engine tracking (challenge_generated, verified, auth events)
 - Badge system with shareable SVG verification proofs
+- Ultra-minimal landing page with single curl prompt (agent-first UX)
+- Unified code redemption at `/go/:code` (handles both gate codes and device codes)
+- `human_link` field in `/v1/token/verify` response (primary human handoff mechanism)
 
 #### SDKs & Integration
 - `@dupecom/botcha` npm package (v0.10.0) — TypeScript client SDK with app lifecycle methods
@@ -142,6 +145,24 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - KV storage: `agent:{agent_id}` for agent data, `app_agents:{app_id}` for app→agent index
 - Crypto-random agent IDs with `agent_` prefix
 - Fail-open validation (KV errors don't block requests)
+**Effort:** Large
+
+### ✅ Trusted Agent Protocol (TAP) — SHIPPED (v0.12.0)
+**What:** Enterprise-grade cryptographic agent authentication using HTTP Message Signatures (RFC 9421). TAP-enabled agents register public keys, sign requests, and create capability-scoped sessions.
+**Status:** Built and tested. Extends the Agent Registry with cryptographic identity and intent-based access control.
+**Implementation:**
+- `POST /v1/agents/register/tap` → register TAP agent with public key, signature algorithm, capabilities, trust level
+- `GET /v1/agents/:id/tap` → get TAP agent details (including public key for verification)
+- `GET /v1/agents/tap` → list TAP-enabled agents for an app
+- `POST /v1/sessions/tap` → create TAP session after intent + capability validation
+- `GET /v1/sessions/:id/tap` → retrieve TAP session info
+- Supported algorithms: `ecdsa-p256-sha256`, `rsa-pss-sha256`
+- Trust levels: `basic`, `verified`, `enterprise`
+- Capabilities: action + resource + optional constraints (e.g., `{action: "read", resource: "/api/invoices"}`)
+- Intent parsing with structured validation
+- SHA-256 key fingerprinting
+- Express middleware with verification modes: `tap`, `signature-only`, `challenge-only`, `flexible`
+- KV storage: `SESSIONS` namespace for TAP sessions, `AGENTS` namespace for TAP agent data
 **Effort:** Large
 
 ---

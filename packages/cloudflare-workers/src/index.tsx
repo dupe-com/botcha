@@ -1,5 +1,5 @@
 /**
- * BOTCHA - Cloudflare Workers Edition v0.11.0
+ * BOTCHA - Cloudflare Workers Edition v0.12.0
  * 
  * Prove you're a bot. Humans need not apply.
  * 
@@ -41,6 +41,13 @@ import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from 
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { createAgent, getAgent, listAgents } from './agents';
 import {
+  registerTAPAgentRoute,
+  getTAPAgentRoute,
+  listTAPAgentsRoute,
+  createTAPSessionRoute,
+  getTAPSessionRoute,
+} from './tap-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -55,6 +62,7 @@ type Bindings = {
   RATE_LIMITS: KVNamespace;
   APPS: KVNamespace;
   AGENTS: KVNamespace;
+  SESSIONS: KVNamespace;
   ANALYTICS?: AnalyticsEngineDataset;
   JWT_SECRET: string;
   BOTCHA_VERSION: string;
@@ -82,7 +90,7 @@ app.route('/dashboard', dashboardRoutes);
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.11.0');
+  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.13.0');
   c.header('X-Botcha-Enabled', 'true');
   c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
@@ -196,7 +204,7 @@ function detectAcceptPreference(c: Context<{ Bindings: Bindings; Variables: Vari
 }
 
 app.get('/', async (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.11.0';
+  const version = c.env.BOTCHA_VERSION || '0.13.0';
   const preference = detectAcceptPreference(c);
   const baseUrl = new URL(c.req.url).origin;
 
@@ -232,7 +240,16 @@ app.get('/', async (c) => {
       }
     }
 
-    return c.html(<LandingPage version={version} />);
+    // Check for error from /go/:code redirect
+    const url = new URL(c.req.url);
+    const errorParam = url.searchParams.get('error');
+    const errorMap: Record<string, string> = {
+      invalid: 'Invalid or expired code. Ask your agent to try again.',
+      missing: 'No code provided.',
+    };
+    const error = errorParam ? errorMap[errorParam] : undefined;
+
+    return c.html(<LandingPage version={version} error={error} />);
   }
 
   // === UNVERIFIED: minimal teaser — just enough to get started ===
@@ -250,9 +267,9 @@ app.get('/', async (c) => {
         step4: `Revisit: GET ${baseUrl}/ with header Authorization: Bearer <access_token>`,
       },
       human_handoff: {
-        note: 'After verifying, you will receive a short code (BOTCHA-XXXXXX). Give it to your human.',
-        instruction: 'Tell your human: "Enter this code at botcha.ai to unlock the site."',
-        code_field: 'human_code from step 3 response',
+        note: 'After verifying, the response includes a human_link. Give it to your human to open in their browser.',
+        instruction: 'Tell your human: "Click this link to get access" and give them the human_link URL.',
+        link_field: 'human_link from step 3 response',
       },
       hint: 'You have 500ms. Only a bot can do this.',
       links: {
@@ -279,8 +296,10 @@ You have 500ms. Only a bot can do this.
 
 ## Human Handoff
 
-After verifying, give your human the \`access_token\` and tell them:
-**"Paste this token into the input at botcha.ai to unlock the full site."**
+After verifying, the response includes a \`human_link\`. Give this URL to your human:
+**"Click this link to get access: {human_link}"**
+
+The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the verified site.
 
 ---
 
@@ -424,49 +443,8 @@ app.post('/gate', async (c) => {
   // Normalize: accept "BOTCHA-ABC123" or just "ABC123"
   const code = input.startsWith('BOTCHA-') ? input : `BOTCHA-${input}`;
 
-  // Look up the code in KV
-  let token: string | null = null;
-  try {
-    token = await c.env.CHALLENGES.get(`gate:${code}`);
-  } catch {
-    // KV error — fail open with helpful message
-  }
-
-  if (!token) {
-    return c.html(<LandingPage version={version} error="Invalid or expired code. Ask your agent to solve a new challenge." />, 401);
-  }
-
-  // Verify the token is still valid
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
-
-  if (!result.valid) {
-    // Code existed but token expired — clean up
-    try { await c.env.CHALLENGES.delete(`gate:${code}`); } catch {}
-    return c.html(<LandingPage version={version} error="Code expired. Ask your agent to solve a new challenge." />, 401);
-  }
-
-  // Delete the code after use (one-time use)
-  try { await c.env.CHALLENGES.delete(`gate:${code}`); } catch {}
-
-  // Mint a long-lived visitor JWT (1 year) — only proves "an agent vouched for this human"
-  // This is NOT an access token and cannot be used for API calls
-  const vPayload = result.payload as Record<string, unknown> | undefined;
-  const visitorToken = await new SignJWT({
-    type: 'botcha-visitor',
-    solveTime: vPayload?.solveTime as number | undefined,
-    gateCode: code,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('365d')
-    .sign(new TextEncoder().encode(c.env.JWT_SECRET));
-
-  // Set a 1-year visitor cookie and redirect to /
-  const ONE_YEAR = 365 * 24 * 60 * 60;
-  const headers = new Headers();
-  headers.append('Set-Cookie', `botcha_visitor=${visitorToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${ONE_YEAR}`);
-  headers.set('Location', '/');
-  return new Response(null, { status: 302, headers });
+  // Redirect to /go/:code which handles both gate codes and device codes
+  return c.redirect(`/go/${code}`);
 });
 
 app.get('/health', (c) => {
@@ -493,7 +471,7 @@ app.get('/ai.txt', (c) => {
 
 // OpenAPI spec
 app.get('/openapi.json', (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.11.0';
+  const version = c.env.BOTCHA_VERSION || '0.13.0';
   return c.json(getOpenApiSpec(version), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
@@ -896,18 +874,18 @@ app.post('/v1/token/verify', async (c) => {
     solveTimeMs: result.solveTimeMs,
     message: `Challenge verified in ${result.solveTimeMs}ms. You are a bot.`,
 
-    // === Human handoff code (GIVE THIS TO YOUR HUMAN) ===
+    // === Human handoff (GIVE THIS TO YOUR HUMAN) ===
+    // The magic link is the primary way to get your human in.
+    // They click it, get a cookie, and see the verified landing page.
+    human_link: `${baseUrl}/go/${gateCode}`,
     human_code: gateCode,
-    human_url: `${baseUrl}`,
-    human_magic_link: `${baseUrl}/go/${gateCode}`,
-    human_instruction: `Give your human this link: ${baseUrl}/go/${gateCode} (or code: ${gateCode} at ${baseUrl})`,
+    human_instruction: `Give your human this link to open in their browser: ${baseUrl}/go/${gateCode}`,
 
     // === What to do next ===
     usage: {
       header: 'Authorization: Bearer <access_token>',
       try_it: 'GET /agent-only',
       full_docs: 'GET / with Authorization: Bearer <access_token>',
-      human_handoff: `Tell your human: "Enter code ${gateCode} at ${baseUrl} to unlock the site."`,
       refresh: 'POST /v1/token/refresh with {"refresh_token":"<refresh_token>"}',
       revoke: 'POST /v1/token/revoke with {"token":"<token>"}',
     },
@@ -917,6 +895,8 @@ app.post('/v1/token/verify', async (c) => {
 
     // Backward compatibility
     token: tokenResult.access_token,
+    human_magic_link: `${baseUrl}/go/${gateCode}`,
+    human_url: `${baseUrl}`,
   });
 });
 
@@ -1983,6 +1963,17 @@ app.get('/v1/agents', async (c) => {
   }
 });
 
+// ============ TAP (TRUSTED AGENT PROTOCOL) ENDPOINTS ============
+
+// TAP agent registration and retrieval
+app.post('/v1/agents/register/tap', registerTAPAgentRoute);
+app.get('/v1/agents/tap', listTAPAgentsRoute);
+app.get('/v1/agents/:id/tap', getTAPAgentRoute);
+
+// TAP session management
+app.post('/v1/sessions/tap', createTAPSessionRoute);
+app.get('/v1/sessions/:id/tap', getTAPSessionRoute);
+
 // ============ DASHBOARD AUTH API ENDPOINTS ============
 
 // Challenge-based dashboard login (agent direct)
@@ -2007,33 +1998,65 @@ app.get('/go/:code', async (c) => {
   const code = c.req.param('code')?.toUpperCase();
   
   if (!code) {
-    return c.redirect('/dashboard/code?error=missing');
+    return c.redirect('/?error=missing');
   }
 
-  // Normalize: accept both "AR8C" and "BOTCHA-AR8C", always look up with prefix
+  // Normalize: accept "AR8CZX", "BOTCHA-AR8CZX", etc.
   let normalizedCode = code;
   if (!code.startsWith('BOTCHA-')) {
     normalizedCode = `BOTCHA-${code}`;
   }
 
-  // Import device code functions (same as dashboard auth)
+  // === Try gate code first (visitor access from /v1/token/verify) ===
+  // Gate codes are stored as gate:{code} → access_token string
+  let gateToken: string | null = null;
+  try {
+    gateToken = await c.env.CHALLENGES.get(`gate:${normalizedCode}`);
+  } catch {}
+
+  if (gateToken) {
+    // Verify the underlying token is still valid
+    const result = await verifyToken(gateToken, c.env.JWT_SECRET, c.env);
+    
+    // Delete the code (one-time use) regardless of token validity
+    try { await c.env.CHALLENGES.delete(`gate:${normalizedCode}`); } catch {}
+    
+    if (result.valid) {
+      // Mint a long-lived visitor JWT (1 year) — proves "an agent vouched for this human"
+      const vPayload = result.payload as Record<string, unknown> | undefined;
+      const visitorToken = await new SignJWT({
+        type: 'botcha-visitor',
+        solveTime: vPayload?.solveTime as number | undefined,
+        gateCode: normalizedCode,
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('365d')
+        .sign(new TextEncoder().encode(c.env.JWT_SECRET));
+
+      const ONE_YEAR = 365 * 24 * 60 * 60;
+      const headers = new Headers();
+      headers.append('Set-Cookie', `botcha_visitor=${visitorToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${ONE_YEAR}`);
+      headers.set('Location', '/');
+      return new Response(null, { status: 302, headers });
+    }
+    // Gate token expired — fall through to try device code
+  }
+
+  // === Try device code (dashboard access from /v1/auth/device-code/verify) ===
   const { redeemDeviceCode } = await import('./dashboard/device-code');
   const data = await redeemDeviceCode(c.env.CHALLENGES, normalizedCode);
   
-  if (!data) {
-    // Code invalid/expired/used - redirect to manual entry with error
-    return c.redirect('/dashboard/code?error=invalid');
+  if (data) {
+    // Generate session token and redirect to dashboard
+    const { generateSessionToken, setSessionCookie } = await import('./dashboard/auth');
+    const sessionToken = await generateSessionToken(data.app_id, c.env.JWT_SECRET);
+    setSessionCookie(c, sessionToken);
+    return c.redirect('/dashboard');
   }
 
-  // Generate session token using existing helper
-  const { generateSessionToken, setSessionCookie } = await import('./dashboard/auth');
-  const sessionToken = await generateSessionToken(data.app_id, c.env.JWT_SECRET);
-  
-  // Set session cookie using consistent Hono helper
-  setSessionCookie(c, sessionToken);
-  
-  // Success! Redirect to dashboard
-  return c.redirect('/dashboard');
+  // Neither code type found — redirect to landing with error
+  return c.redirect('/?error=invalid');
 });
 
 // ============ LEGACY ENDPOINTS (v0 - backward compatibility) ============
