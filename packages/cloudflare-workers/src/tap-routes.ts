@@ -6,24 +6,20 @@
  */
 
 import type { Context } from 'hono';
-import { extractBearerToken, verifyToken } from './auth';
+import { extractBearerToken, verifyToken } from './auth.js';
 import { 
   registerTAPAgent, 
   getTAPAgent, 
   listTAPAgents, 
-  updateAgentVerification,
   createTAPSession,
   getTAPSession,
   validateCapability,
-  TAPAgent,
-  TAPCapability
-} from './tap-agents';
+  TAPCapability,
+  TAP_VALID_ACTIONS
+} from './tap-agents.js';
 import { 
-  verifyHTTPMessageSignature,
-  parseTAPIntent,
-  extractTAPHeaders,
-  TAPVerificationResult
-} from './tap-verify';
+  parseTAPIntent
+} from './tap-verify.js';
 
 // ============ VALIDATION HELPERS ============
 
@@ -103,10 +99,9 @@ function validateTAPRegistration(body: any): {
       return { valid: false, error: 'Capabilities must be an array' };
     }
     
-    const validActions = ['browse', 'compare', 'purchase', 'audit', 'search'];
     for (const cap of body.capabilities) {
-      if (!cap.action || !validActions.includes(cap.action)) {
-        return { valid: false, error: `Invalid capability action. Valid: ${validActions.join(', ')}` };
+      if (!cap.action || !(TAP_VALID_ACTIONS as readonly string[]).includes(cap.action)) {
+        return { valid: false, error: `Invalid capability action. Valid: ${TAP_VALID_ACTIONS.join(', ')}` };
       }
     }
   }
@@ -141,7 +136,7 @@ export async function registerTAPAgentRoute(c: Context) {
         success: false,
         error: appAccess.error,
         message: 'Authentication required'
-      }, appAccess.status);
+      }, (appAccess.status || 401) as 401);
     }
     
     // Parse and validate request body
@@ -193,7 +188,7 @@ export async function registerTAPAgentRoute(c: Context) {
       // Security info (don't expose full public key)
       has_public_key: Boolean(agent.public_key),
       key_fingerprint: agent.public_key ? 
-        generateKeyFingerprint(agent.public_key) : undefined
+        await generateKeyFingerprint(agent.public_key) : undefined
     }, 201);
     
   } catch (error) {
@@ -254,7 +249,7 @@ export async function getTAPAgentRoute(c: Context) {
       // Public key info (secure)
       has_public_key: Boolean(agent.public_key),
       key_fingerprint: agent.public_key ? 
-        generateKeyFingerprint(agent.public_key) : undefined,
+        await generateKeyFingerprint(agent.public_key) : undefined,
       public_key: agent.public_key // Include for verification
     });
     
@@ -280,7 +275,7 @@ export async function listTAPAgentsRoute(c: Context) {
         success: false,
         error: appAccess.error,
         message: 'Authentication required'
-      }, appAccess.status);
+      }, (appAccess.status || 401) as 401);
     }
     
     const tapOnly = c.req.query('tap_only') === 'true';
@@ -470,16 +465,13 @@ export async function getTAPSessionRoute(c: Context) {
 
 // ============ UTILITY FUNCTIONS ============
 
-function generateKeyFingerprint(publicKey: string): string {
-  // Simple fingerprint generation - in production use proper crypto hash
+async function generateKeyFingerprint(publicKey: string): Promise<string> {
   const normalized = publicKey.replace(/\s/g, '').replace(/-----[^-]+-----/g, '');
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    const char = normalized.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString(16).padStart(8, '0');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(normalized);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export default {

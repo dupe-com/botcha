@@ -6,6 +6,8 @@
  * enterprise-grade cryptographic agent authentication
  */
 
+import { TAP_VALID_ACTIONS } from './tap-agents.js';
+
 // ============ TYPES ============
 
 export interface TAPVerificationRequest {
@@ -98,7 +100,7 @@ export async function verifyHTTPMessageSignature(
     return { valid: isValid, error: isValid ? undefined : 'Signature verification failed' };
     
   } catch (error) {
-    return { valid: false, error: `Verification error: ${error}` };
+    return { valid: false, error: `Verification error: ${error instanceof Error ? error.message : 'Unknown error'}` };
   }
 }
 
@@ -194,7 +196,7 @@ async function verifyCryptoSignature(
     const cryptoKey = await crypto.subtle.importKey(
       'spki',
       keyData,
-      getAlgorithmParams(algorithm),
+      getImportParams(algorithm),
       false,
       ['verify']
     );
@@ -204,7 +206,7 @@ async function verifyCryptoSignature(
     const data = encoder.encode(signatureBase);
     
     return await crypto.subtle.verify(
-      getAlgorithmParams(algorithm),
+      getVerifyParams(algorithm),
       cryptoKey,
       signatureBytes,
       data
@@ -234,13 +236,41 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/** Algorithm params for key import (compatible with Web Crypto & CF Workers) */
+interface CryptoImportParams {
+  name: string;
+  hash?: string;
+  namedCurve?: string;
+}
+
+/** Algorithm params for signature verify (compatible with Web Crypto & CF Workers) */
+interface CryptoVerifyParams {
+  name: string;
+  hash?: string;
+  saltLength?: number;
+}
+
 /**
- * Get Web Crypto API algorithm parameters
+ * Get Web Crypto API algorithm parameters for key import
  */
-function getAlgorithmParams(algorithm: string): AlgorithmIdentifier {
+function getImportParams(algorithm: string): CryptoImportParams {
   switch (algorithm) {
     case 'ecdsa-p256-sha256':
       return { name: 'ECDSA', namedCurve: 'P-256' };
+    case 'rsa-pss-sha256':
+      return { name: 'RSA-PSS', hash: 'SHA-256' };
+    default:
+      throw new Error(`Unsupported algorithm: ${algorithm}`);
+  }
+}
+
+/**
+ * Get Web Crypto API algorithm parameters for signature verification
+ */
+function getVerifyParams(algorithm: string): CryptoVerifyParams {
+  switch (algorithm) {
+    case 'ecdsa-p256-sha256':
+      return { name: 'ECDSA', hash: 'SHA-256' };
     case 'rsa-pss-sha256':
       return { name: 'RSA-PSS', saltLength: 32 };
     default:
@@ -270,8 +300,7 @@ export function parseTAPIntent(intentString: string): {
       return { valid: false, error: 'Intent must specify action' };
     }
     
-    const validActions = ['browse', 'compare', 'purchase', 'audit', 'search'];
-    if (!validActions.includes(intent.action)) {
+    if (!(TAP_VALID_ACTIONS as readonly string[]).includes(intent.action)) {
       return { valid: false, error: `Invalid action: ${intent.action}` };
     }
     

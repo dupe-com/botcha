@@ -9,7 +9,7 @@
  * - Session management with expiration
  */
 
-import { Agent, KVNamespace, generateAgentId } from './agents';
+import { Agent, KVNamespace, generateAgentId } from './agents.js';
 
 // ============ TAP TYPES ============
 
@@ -32,8 +32,12 @@ export interface TAPAgent extends Agent {
   last_verified_at?: number;    // Last successful TAP verification
 }
 
+/** Valid TAP capability actions — single source of truth */
+export const TAP_VALID_ACTIONS = ['browse', 'compare', 'purchase', 'audit', 'search'] as const;
+export type TAPAction = typeof TAP_VALID_ACTIONS[number];
+
 export interface TAPCapability {
-  action: 'browse' | 'compare' | 'purchase' | 'audit' | 'search';
+  action: TAPAction;
   scope?: string[];             // Resource patterns ['products', 'orders', '*']
   restrictions?: {
     max_amount?: number;        // For purchase actions
@@ -217,7 +221,9 @@ export async function createTAPSession(
   try {
     const sessionId = generateSessionId();
     const now = Date.now();
-    const expiresAt = now + (intent.duration || 3600) * 1000; // Default 1 hour
+    const MAX_SESSION_DURATION = 86400; // 24 hours max
+    const duration = Math.min(intent.duration || 3600, MAX_SESSION_DURATION);
+    const expiresAt = now + duration * 1000;
     
     const session: TAPSession = {
       session_id: sessionId,

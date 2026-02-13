@@ -10,7 +10,6 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { generateChallenge, verifyChallenge } from '../challenges/compute.js';
 import { generateSpeedChallenge, verifySpeedChallenge } from '../challenges/speed.js';
 import { 
   verifyHTTPMessageSignature, 
@@ -24,7 +23,6 @@ import {
   getTAPAgent, 
   updateAgentVerification, 
   createTAPSession, 
-  validateCapability,
   TAPAgent,
   TAPCapability
 } from '../../packages/cloudflare-workers/src/tap-agents.js';
@@ -387,7 +385,7 @@ async function verifyComputationalChallenge(req: Request): Promise<{
       solveTimeMs: result.solveTimeMs
     };
   } catch (err) {
-    return { valid: false, error: `Challenge verification error: ${err}` };
+    return { valid: false, error: `Challenge verification error: ${err instanceof Error ? err.message : 'Unknown error'}` };
   }
 }
 
@@ -423,7 +421,8 @@ function sendVerificationChallenge(
     res.header('X-Botcha-Time-Limit', challenge.timeLimit.toString());
   }
   
-  const statusCode = result.challenges_passed.cryptographic ? 401 : 403;
+  // 403 Forbidden for all verification failures (not 401 which implies re-authentication)
+  const statusCode = 403;
   res.status(statusCode).json(response);
 }
 
@@ -437,7 +436,7 @@ function logVerificationAttempt(
     method: req.method,
     path: req.path,
     userAgent: req.headers['user-agent'],
-    clientIP: req.ip || req.connection?.remoteAddress,
+    clientIP: req.ip || req.socket?.remoteAddress,
     verificationMethod: result.verification_method,
     verified: result.verified,
     challengesPassed: result.challenges_passed,
