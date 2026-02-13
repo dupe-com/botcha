@@ -64,6 +64,7 @@ dashboard.get('/logout', handleLogout);
 
 // Device code pages (human enters code here)
 dashboard.get('/code', renderDeviceCodePage);
+dashboard.get('/code/:code', renderDeviceCodePage); // Pre-filled code from URL
 dashboard.post('/code', handleDeviceCodeRedeem);
 
 // ============ PROTECTED ROUTES (auth required) ============

@@ -899,7 +899,8 @@ app.post('/v1/token/verify', async (c) => {
     // === Human handoff code (GIVE THIS TO YOUR HUMAN) ===
     human_code: gateCode,
     human_url: `${baseUrl}`,
-    human_instruction: `Give your human this code: ${gateCode} — they enter it at ${baseUrl} to see the site.`,
+    human_magic_link: `${baseUrl}/go/${gateCode}`,
+    human_instruction: `Give your human this link: ${baseUrl}/go/${gateCode} (or code: ${gateCode} at ${baseUrl})`,
 
     // === What to do next ===
     usage: {
@@ -1991,6 +1992,49 @@ app.post('/v1/auth/dashboard/verify', handleDashboardAuthVerify);
 // Device code flow (agent → human handoff)
 app.post('/v1/auth/device-code', handleDeviceCodeChallenge);
 app.post('/v1/auth/device-code/verify', handleDeviceCodeVerify);
+
+// ============ ONE-CLICK ACCESS LINKS ============
+
+/**
+ * GET /go/:code - One-click device code redemption
+ * 
+ * Magic link for instant dashboard access. Agent gives human this link:
+ * https://botcha.ai/go/BOTCHA-XXXX → auto-login + redirect to dashboard
+ * 
+ * UX improvement: no more copy-pasting codes!
+ */
+app.get('/go/:code', async (c) => {
+  const code = c.req.param('code')?.toUpperCase();
+  
+  if (!code) {
+    return c.redirect('/dashboard/code?error=missing');
+  }
+
+  // Normalize: accept both "AR8C" and "BOTCHA-AR8C", always look up with prefix
+  let normalizedCode = code;
+  if (!code.startsWith('BOTCHA-')) {
+    normalizedCode = `BOTCHA-${code}`;
+  }
+
+  // Import device code functions (same as dashboard auth)
+  const { redeemDeviceCode } = await import('./dashboard/device-code');
+  const data = await redeemDeviceCode(c.env.CHALLENGES, normalizedCode);
+  
+  if (!data) {
+    // Code invalid/expired/used - redirect to manual entry with error
+    return c.redirect('/dashboard/code?error=invalid');
+  }
+
+  // Generate session token using existing helper
+  const { generateSessionToken, setSessionCookie } = await import('./dashboard/auth');
+  const sessionToken = await generateSessionToken(data.app_id, c.env.JWT_SECRET);
+  
+  // Set session cookie using consistent Hono helper
+  setSessionCookie(c, sessionToken);
+  
+  // Success! Redirect to dashboard
+  return c.redirect('/dashboard');
+});
 
 // ============ LEGACY ENDPOINTS (v0 - backward compatibility) ============
 
