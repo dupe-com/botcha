@@ -10,8 +10,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { generateChallenge, verifyChallenge } from '../challenges/compute';
-import { generateSpeedChallenge, verifySpeedChallenge } from '../challenges/speed';
+import { generateChallenge, verifyChallenge } from '../challenges/compute.js';
+import { generateSpeedChallenge, verifySpeedChallenge } from '../challenges/speed.js';
 import { 
   verifyHTTPMessageSignature, 
   parseTAPIntent, 
@@ -19,14 +19,15 @@ import {
   getVerificationMode,
   buildTAPChallengeResponse,
   TAPVerificationResult 
-} from '../../packages/cloudflare-workers/src/tap-verify';
+} from '../../packages/cloudflare-workers/src/tap-verify.js';
 import { 
   getTAPAgent, 
   updateAgentVerification, 
   createTAPSession, 
   validateCapability,
-  TAPAgent 
-} from '../../packages/cloudflare-workers/src/tap-agents';
+  TAPAgent,
+  TAPCapability
+} from '../../packages/cloudflare-workers/src/tap-agents.js';
 
 // ============ EXTENDED OPTIONS ============
 
@@ -136,7 +137,7 @@ export function tapEnhancedVerify(options: TAPBotchaOptions = {}) {
       
       if (opts.auditLogging) {
         console.log('TAP_VERIFICATION_ERROR', {
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
           path: req.path,
           method: req.method,
           timestamp: new Date().toISOString()
@@ -232,7 +233,7 @@ async function performFullTAPVerification(
     metadata: {
       solve_time_ms: challengeResult.solveTimeMs,
       signature_valid: cryptoResult.valid,
-      capabilities: agent.capabilities?.map(c => c.action)
+      capabilities: agent.capabilities?.map((c: TAPCapability) => c.action)
     }
   };
 }
