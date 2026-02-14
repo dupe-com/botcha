@@ -211,9 +211,28 @@ export const VerifiedLandingPage: FC<{ version: string; solveTime?: number }> = 
         Your agent proved it's a bot{solveTime ? ` in ${solveTime}ms` : ''}. Welcome.
       </p>
 
+      {/* ---- Progress steps ---- */}
+      <div style="max-width: 400px; margin: 2rem auto 2.5rem;">
+        <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; font-size: 0.6875rem; font-weight: 700; background: var(--green); color: #fff; flex-shrink: 0;">&#10003;</span>
+          <div>
+            <span style="font-size: 0.8125rem; font-weight: 600; color: var(--text-dim); text-decoration: line-through;">Your agent solved a challenge</span>
+            <span style="font-size: 0.6875rem; color: var(--green); margin-left: 0.5rem;">{solveTime ? `${solveTime}ms` : 'done'}</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; font-size: 0.6875rem; font-weight: 700; background: var(--green); color: #fff; flex-shrink: 0;">&#10003;</span>
+          <span style="font-size: 0.8125rem; font-weight: 600; color: var(--text-dim); text-decoration: line-through;">You clicked the link your agent gave you</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; font-size: 0.6875rem; font-weight: 700; border: 2px solid var(--accent); color: var(--accent); flex-shrink: 0;">3</span>
+          <span style="font-size: 0.8125rem; font-weight: 700; color: var(--text);">Set up your account &darr;</span>
+        </div>
+      </div>
+
       {/* ---- Next step: onboard ---- */}
-      <p class="text-muted" style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.15em; text-align: center; margin: 2rem 0 0.625rem;">
-        Set up your account — paste this to your agent
+      <p class="text-muted" style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.15em; text-align: center; margin: 0 0 0.625rem;">
+        Copy this and paste it back into your agent
       </p>
       <div class="card" style="margin-bottom: 1.5rem;">
         <div class="card-body">
@@ -246,7 +265,7 @@ export const VerifiedLandingPage: FC<{ version: string; solveTime?: number }> = 
       <div style="text-align: center; margin: 1.5rem 0;">
         <p class="text-muted" style="font-size: 0.75rem; line-height: 2;">
           Your agent will ask for your email, create your app,<br/>
-          and give you a link to your dashboard. You just click it.
+          and give you another link to your dashboard.
         </p>
       </div>
 
@@ -259,27 +278,6 @@ export const VerifiedLandingPage: FC<{ version: string; solveTime?: number }> = 
           Already have an account? Go to dashboard
         </a>
       </div>
-
-      {/* ---- For developers ---- */}
-      <Card title="For developers">
-        <p class="text-muted" style="font-size: 0.8125rem; line-height: 1.7; margin-bottom: 0.75rem;">
-          Protect your own APIs so only verified AI agents can access them:
-        </p>
-        <pre><code>{`# Client SDK (for your agent)
-npm install @dupecom/botcha     # TypeScript
-pip install botcha              # Python
-
-# Server SDK (protect your APIs)
-npm install @botcha/verify      # Express/Hono
-pip install botcha-verify       # FastAPI/Django`}</code></pre>
-        <div class="landing-links" style="margin-top: 1rem;">
-          <a href="/openapi.json" class="landing-link">OpenAPI</a>
-          <a href="/ai.txt" class="landing-link">ai.txt</a>
-          <a href="https://github.com/dupe-com/botcha" class="landing-link">GitHub</a>
-          <a href="https://www.npmjs.com/package/@dupecom/botcha" class="landing-link">npm</a>
-          <a href="https://pypi.org/project/botcha/" class="landing-link">PyPI</a>
-        </div>
-      </Card>
 
       <script dangerouslySetInnerHTML={{ __html: VERIFIED_COPY_SCRIPT }} />
 

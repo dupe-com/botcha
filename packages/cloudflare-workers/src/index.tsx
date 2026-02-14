@@ -35,11 +35,12 @@ import {
   handleDeviceCodeChallenge,
   handleDeviceCodeVerify,
 } from './dashboard/auth';
-import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown } from './static';
+import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
+import { WhitepaperPage } from './dashboard/whitepaper';
 import { createAgent, getAgent, listAgents } from './agents';
 import {
   registerTAPAgentRoute,
@@ -432,6 +433,46 @@ app.post('/gate', async (c) => {
 // ============ SHOWCASE PAGE (legacy URL, redirect to home) ============
 app.get('/showcase', (c) => {
   return c.redirect('/', 301);
+});
+
+// ============ WHITEPAPER ============
+app.get('/whitepaper', (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.15.0';
+  const preference = detectAcceptPreference(c);
+
+  // Markdown for agents
+  if (preference === 'markdown') {
+    return c.text(getWhitepaperMarkdown(), 200, {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    });
+  }
+
+  // JSON summary for programmatic access
+  if (preference === 'json') {
+    return c.json({
+      title: 'BOTCHA: Identity Infrastructure for the Agentic Web',
+      version: '1.0',
+      date: 'February 2026',
+      url: 'https://botcha.ai/whitepaper',
+      format_hint: 'Request with Accept: text/markdown for the full whitepaper, or text/html for the rendered page.',
+      sections: [
+        'Executive Summary',
+        'The Problem: Who Is This Agent?',
+        'BOTCHA: Reverse CAPTCHA for AI Agents',
+        'How It Works: The Challenge System',
+        'The Trusted Agent Protocol (TAP)',
+        'Architecture and Security',
+        'Integration: SDKs and Middleware',
+        'The Agent Infrastructure Stack',
+        'Use Cases',
+        'Roadmap',
+      ],
+    });
+  }
+
+  // HTML for browsers
+  return c.html(<WhitepaperPage version={version} />);
 });
 
 app.get('/health', (c) => {

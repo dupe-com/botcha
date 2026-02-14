@@ -265,8 +265,10 @@ API-Format: OpenAPI 3.1.0
 
 # Documentation
 Docs: https://botcha.ai
+Docs: https://botcha.ai/whitepaper
 Docs: https://github.com/dupe-com/botcha#readme
 Docs: https://www.npmjs.com/package/@dupecom/botcha
+Whitepaper: https://botcha.ai/whitepaper
 
 # Verification Methods
 Feature: Web Bot Auth (cryptographic signatures)
@@ -486,8 +488,161 @@ export const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
+  <url>
+    <loc>https://botcha.ai/whitepaper</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
 </urlset>
 `;
+
+// Whitepaper markdown — served at /whitepaper with Accept: text/markdown
+export function getWhitepaperMarkdown(): string {
+  return `---
+title: "BOTCHA: Identity Infrastructure for the Agentic Web"
+version: "1.0"
+date: February 2026
+url: https://botcha.ai/whitepaper
+---
+
+# BOTCHA: Identity Infrastructure for the Agentic Web
+
+**Version 1.0 — February 2026**
+
+## 1. Executive Summary
+
+BOTCHA is a reverse CAPTCHA — a verification system that proves you are an AI agent, not a human. While traditional CAPTCHAs exist to block bots, BOTCHA exists to welcome them.
+
+As AI agents become first-class participants on the internet — browsing, purchasing, comparing, auditing — they need a way to prove their identity and declare their intent. BOTCHA provides three layers of proof:
+
+- **Proof of AI** — Computational challenges (SHA-256 hashes in under 500ms) that only machines can solve.
+- **Proof of Identity** — Persistent agent registration with cryptographic keys, verified via HTTP Message Signatures (RFC 9421).
+- **Proof of Intent** — Capability-scoped sessions where agents declare what they plan to do, for how long, and on behalf of whom.
+
+BOTCHA is open source, free to use, and deployed at https://botcha.ai.
+
+## 2. The Problem: Who Is This Agent?
+
+The internet was built for humans. Authentication systems — passwords, OAuth, CAPTCHAs — all assume a human is at the keyboard.
+
+AI agents are now browsing product catalogs, comparing prices, purchasing goods, auditing compliance, and negotiating contracts. When an agent hits your API, existing infrastructure cannot answer three critical questions:
+
+1. **Is this actually an AI agent?** User-Agent strings are trivially spoofable.
+2. **Which specific agent is this?** Even knowing it is AI, you do not know its organization or track record.
+3. **What does it intend to do?** Traditional auth grants blanket access — it does not capture intent.
+
+## 3. BOTCHA: Reverse CAPTCHA for AI Agents
+
+A CAPTCHA asks: *Can you identify traffic lights?* A human can; a bot struggles.
+BOTCHA asks: *Can you compute 5 SHA-256 hashes in 500ms?* A machine can; a human cannot.
+
+### Design Principles
+
+- **Agent-first, always.** Every flow requires an AI agent as participant. No human-only login paths.
+- **Fail-open on infrastructure errors.** Blocking legitimate traffic is worse than allowing an unverified request.
+- **Zero configuration to start.** Solve one challenge, get a token. No registration required.
+
+## 4. The Challenge System
+
+| Challenge | Tests | Time Limit | Best For |
+|-----------|-------|------------|----------|
+| Speed | SHA-256 computation | 500ms | Quick verification |
+| Reasoning | Language understanding (6 categories, parameterized generators) | 30s | Proving AI comprehension |
+| Hybrid | Speed + Reasoning combined | 35s | Default — strongest proof |
+| Compute | Prime generation + hashing | 3-10s | High-value operations |
+
+**RTT-aware fairness:** Time limits adjust for network latency (max 5s cap).
+**Anti-replay:** Challenges deleted from storage on first verification attempt.
+**Anti-gaming:** Parameterized question generators; no static question bank.
+
+## 5. The Trusted Agent Protocol (TAP)
+
+Solving a challenge proves you are *a bot*. TAP proves you are *a specific, trusted bot*.
+
+Inspired by Visa's Trusted Agent Protocol (https://developer.visa.com/capabilities/trusted-agent-protocol/overview), BOTCHA's TAP provides:
+
+- **Persistent agent identity** — unique ID, name, operator metadata
+- **Cryptographic verification** — ECDSA P-256 / RSA-PSS public keys; HTTP Message Signatures (RFC 9421)
+- **Capability-based access control** — browse, search, compare, purchase, audit
+- **Intent-scoped sessions** — time-limited, validated against capabilities
+- **Trust levels** — basic, verified, enterprise
+
+### Verification Hierarchy
+
+| Layer | Proves | Mechanism |
+|-------|--------|-----------|
+| Anonymous | "I am a bot" | Speed challenge <500ms |
+| App-scoped | "I belong to this org" | Challenge + app_id |
+| Agent identity | "I am this specific bot" | Registered ID + capabilities |
+| Cryptographic | "I can prove it" | RFC 9421 signatures |
+| Dual auth | "Verified + proven" | Challenge + signature |
+| Intent-scoped | "I intend to do this now" | Validated session |
+
+## 6. Architecture
+
+- **Runtime:** Cloudflare Workers (300+ edge locations)
+- **Storage:** Workers KV with TTLs
+- **Tokens:** HMAC-SHA256 JWTs (5-min access, 1-hr refresh)
+- **TAP Signatures:** ECDSA P-256 or RSA-PSS SHA-256
+- **Rate Limits:** 100 challenges/hour/app (fail-open)
+
+## 7. Integration
+
+### Client SDKs
+
+\`\`\`typescript
+import { BotchaClient } from '@dupecom/botcha';
+const client = new BotchaClient();
+const response = await client.fetch('https://api.example.com/products');
+\`\`\`
+
+\`\`\`python
+from botcha import BotchaClient
+async with BotchaClient() as client:
+    response = await client.fetch("https://api.example.com/products")
+\`\`\`
+
+### Server-side Verification
+
+Express: \`@botcha/verify\` · FastAPI/Django: \`botcha-verify\` · Hono middleware included.
+
+### CLI
+
+\`\`\`bash
+npm install -g @dupecom/botcha-cli
+botcha init --email you@company.com
+botcha tap register --name "my-agent" --capabilities browse,search
+botcha tap session --action browse --resource products --duration 1h
+\`\`\`
+
+## 8. The Agent Infrastructure Stack
+
+\`\`\`
+Layer 3: Identity        TAP (BOTCHA)     Who agents are
+Layer 2: Communication   A2A (Google)     How agents talk
+Layer 1: Tools           MCP (Anthropic)  What agents access
+\`\`\`
+
+MCP gives agents tools. A2A lets agents communicate. TAP proves identity and scopes authorization.
+
+## 9. Use Cases
+
+- **E-commerce:** Agents register capabilities, create scoped purchase sessions, full audit trail.
+- **API access control:** Speed challenge gates endpoints; no API keys needed.
+- **Multi-agent systems:** Coordinator delegates to capability-scoped sub-agents.
+- **Compliance:** TAP audit logging records every agent interaction with intent and context.
+
+## 10. Roadmap
+
+**Shipped:** Challenge types, JWT tokens, multi-tenant apps, agent registry, TAP, dashboard, SDKs (TS/Python), CLI, LangChain, discovery standards.
+
+**Planned:** Delegation chains, capability attestation, agent reputation scoring, Agent SSO (cross-service verification), IETF RFC contribution.
+
+---
+
+Website: https://botcha.ai · GitHub: https://github.com/dupe-com/botcha · npm: @dupecom/botcha · PyPI: botcha
+`;
+}
 
 // OpenAPI spec - keeping this as a function to allow dynamic version
 export function getOpenApiSpec(version: string) {
