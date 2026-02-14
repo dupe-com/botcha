@@ -15,7 +15,7 @@ const program = new Command();
 program
   .name('botcha')
   .description('CLI tool for testing and debugging BOTCHA-protected endpoints')
-  .version('0.2.0');
+  .version('0.2.1');
 
 // Test command
 program

@@ -1,12 +1,12 @@
 {
   "name": "@dupecom/botcha-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI tool for testing and debugging BOTCHA-protected endpoints",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "botcha": "./bin/botcha.js"
+    "botcha": "bin/botcha.js"
   },
   "files": [
     "dist",
@@ -31,11 +31,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dupe-com/botcha"
+    "url": "git+https://github.com/dupe-com/botcha.git"
   },
   "homepage": "https://botcha.ai",
   "dependencies": {
-    "@dupecom/botcha": "^0.4.3",
+    "@dupecom/botcha": "^0.13.1",
     "chalk": "^5.3.0",
     "commander": "^12.1.0"
   },
