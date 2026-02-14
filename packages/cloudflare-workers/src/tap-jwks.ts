@@ -285,14 +285,29 @@ export async function getKeyRoute(c: Context): Promise<Response> {
       return c.json({ error: 'Key not found' }, 404);
     }
 
-    // Convert to JWK
-    const jwk = await pemToJwk(agent.public_key, agent.signature_algorithm, agent.agent_id, {
-      agent_id: agent.agent_id,
-      agent_name: agent.name,
-      expires_at: agent.key_created_at
-        ? new Date(agent.key_created_at + 31536000000).toISOString()
-        : undefined,
-    });
+    // Convert to JWK — if the stored PEM is invalid, return a raw key stub
+    let jwk: JWK;
+    try {
+      jwk = await pemToJwk(agent.public_key, agent.signature_algorithm, agent.agent_id, {
+        agent_id: agent.agent_id,
+        agent_name: agent.name,
+        expires_at: agent.key_created_at
+          ? new Date(agent.key_created_at + 31536000000).toISOString()
+          : undefined,
+      });
+    } catch (conversionError) {
+      // PEM is stored but can't be converted to JWK (e.g., invalid key material)
+      // Return a raw stub so the endpoint doesn't 500
+      console.warn('Failed to convert agent key to JWK:', conversionError);
+      jwk = {
+        kty: agent.signature_algorithm === 'ed25519' ? 'OKP' : 'EC',
+        kid: agent.agent_id,
+        alg: algToJWKAlg(agent.signature_algorithm),
+        use: 'sig',
+        raw_pem: agent.public_key,
+        error: 'Key material could not be converted to JWK format',
+      } as any;
+    }
 
     return c.json(jwk, 200, {
       'Cache-Control': 'public, max-age=3600',
