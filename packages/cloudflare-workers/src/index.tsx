@@ -195,6 +195,20 @@ function detectAcceptPreference(c: Context<{ Bindings: Bindings; Variables: Vari
   // Explicit JSON preference
   if (accept.includes('application/json')) return 'json';
 
+  // Social media crawlers need HTML for OG meta tag previews
+  // These contain "bot" in their UA but must get HTML, not JSON
+  const socialCrawlers = [
+    'twitterbot', 'slackbot', 'facebookexternalhit', 'facebot',
+    'linkedinbot', 'whatsapp', 'telegrambot', 'discordbot',
+    'applebot', 'pinterestbot', 'redditbot',
+    'embedly', 'quora link preview', 'outbrain',
+    'rogerbot', 'showyoubot', 'slurp',
+    'vkshare', 'tumblr', 'skypeuripreview',
+    'google-inspectiontool', 'petalbot',
+    'iframely', 'developers.google.com',
+  ];
+  if (socialCrawlers.some(s => userAgent.includes(s))) return 'html';
+
   // Known bot user agents → JSON
   const botSignals = ['curl', 'httpie', 'wget', 'python', 'node', 'axios', 'fetch', 'bot', 'anthropic', 'openai', 'claude', 'gpt'];
   if (botSignals.some(s => userAgent.includes(s))) return 'json';
