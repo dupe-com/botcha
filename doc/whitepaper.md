@@ -177,13 +177,23 @@ For stronger verification, agents can register a public key:
 ```
 {
   "public_key": "-----BEGIN PUBLIC KEY-----\n...",
-  "signature_algorithm": "ecdsa-p256-sha256"
+  "signature_algorithm": "ed25519"
 }
 ```
+
+Supported algorithms: `ed25519` (recommended by Visa), `ecdsa-p256-sha256`, and `rsa-pss-sha256`.
 
 ### Cryptographic request signing
 
 TAP agents sign requests using **HTTP Message Signatures (RFC 9421)**. This is the same standard used by Mastodon, Solid, and other decentralized protocols.
+
+BOTCHA supports three signature algorithms:
+
+| Algorithm | Type | Notes |
+|---|---|---|
+| `ed25519` | EdDSA (Curve25519) | **Visa recommended** — fastest, smallest keys (32 bytes), highest security margin |
+| `ecdsa-p256-sha256` | ECDSA (P-256) | Compact keys, widely supported, fast verification |
+| `rsa-pss-sha256` | RSA-PSS | Legacy compatibility — larger keys (2048+ bits) |
 
 A signed request includes:
 
@@ -191,11 +201,18 @@ A signed request includes:
 x-tap-agent-id: agent_6ddfd9f10cfd8dfc
 x-tap-intent: {"action":"browse","resource":"products"}
 x-tap-timestamp: 1706140800
-signature-input: sig1=("@method" "@path" "x-tap-agent-id");created=1706140800;alg="ecdsa-p256-sha256"
+signature-input: sig1=("@method" "@authority" "@path" "x-tap-agent-id");created=1706140800;expires=1706141100;nonce="abc123";tag="agent-browser-auth";alg="ed25519";keyid="key_xyz"
 signature: sig1=:BASE64_SIGNATURE:
 ```
 
-The server reconstructs the signature base from the covered headers and verifies it against the agent's registered public key. Signatures are valid for 5 minutes to prevent replay attacks.
+BOTCHA's RFC 9421 implementation includes the full set of derived components and parameters from the Visa TAP specification:
+
+- **Derived components:** `@method`, `@authority`, `@path` — the standard components for HTTP request identification.
+- **`expires` parameter** — Signatures are valid for a bounded window (default 8 minutes). Expired signatures are rejected.
+- **`nonce` parameter** — Each signature includes a unique nonce. BOTCHA stores nonces in KV with an 8-minute TTL to prevent replay attacks.
+- **`tag` parameter** — Declares the signature's purpose: `agent-browser-auth` for browsing or `agent-payer-auth` for payment flows.
+- **`keyid` parameter** — References the signing key, enabling key rotation without ambiguity.
+- **Clock skew tolerance** — A 30-second grace period accommodates minor time differences between agents and servers.
 
 ### Intent validation and scoped sessions
 
@@ -234,6 +251,70 @@ TAP provides layered assurance. Each layer adds stronger guarantees:
 | Cryptographic verification | "I can prove I am this bot" | HTTP Message Signatures (RFC 9421) |
 | Dual authentication | "I am a verified bot with a proven identity" | Challenge + signature (both must pass) |
 | Intent-scoped session | "I intend to do this specific thing right now" | Session with validated intent + capabilities |
+
+### Public key infrastructure (JWKS)
+
+TAP agents' public keys are discoverable via a standard **JSON Web Key Set (JWKS)** endpoint at `/.well-known/jwks`. This follows the same pattern used by OIDC providers and is the endpoint format specified by the Visa TAP specification.
+
+Any service can fetch an agent's public key to verify its signature without contacting BOTCHA at runtime — the keys are cached, public, and self-describing. BOTCHA supports both PEM and JWK key formats, with bidirectional conversion.
+
+Key rotation is supported via `POST /v1/agents/:id/tap/rotate-key`. When an agent's key is rotated, the old key is immediately invalidated and the new key is published to the JWKS endpoint.
+
+### Agentic Consumer Recognition (Layer 2)
+
+When an AI agent acts on behalf of a consumer — browsing products, comparing prices, or making purchases — the merchant needs to know who the consumer is without exposing their full identity. TAP Layer 2 solves this.
+
+The agent includes an `agenticConsumer` object in its request body containing:
+
+- **ID Token** — An OIDC-compatible JWT with obfuscated consumer identity claims (masked email, masked phone number). The token is cryptographically signed and verifiable against the issuer's JWKS.
+- **Contextual data** — Country code, postal code, IP address, and device fingerprint. This allows risk scoring without full PII exposure.
+- **Nonce linkage** — The consumer object's nonce is linked to the HTTP Message Signature's nonce, creating a cryptographic chain that prevents body substitution attacks.
+
+BOTCHA verifies Layer 2 objects via `POST /v1/verify/consumer`, checking nonce linkage, signature validity, and ID token authenticity.
+
+### Agentic Payment Container (Layer 3)
+
+When an agent makes a purchase, the payment credentials must be transmitted securely. TAP Layer 3 wraps payment data in a signed, verifiable container.
+
+The `agenticPaymentContainer` includes:
+
+- **Card metadata** — Last four digits, Payment Account Reference (PAR), and optional card art URL. Enough for display without exposing the full card number.
+- **Credential hash** — SHA-256 of PAN + expiry month + expiry year + CVV. Allows verification that the agent possesses valid credentials without transmitting them in cleartext.
+- **Encrypted payload** — Full payment credentials encrypted for the merchant's public key.
+- **Browsing IOU** — A lightweight payment promise for 402 micropayment flows (see below).
+
+BOTCHA verifies Layer 3 objects via `POST /v1/verify/payment`, checking signature validity, credential hash integrity, and nonce linkage.
+
+### 402 micropayments (Browsing IOU)
+
+The 402 status code ("Payment Required") has existed in HTTP since 1997 but was never widely adopted because there was no standard payment mechanism. TAP's Browsing IOU provides one.
+
+The flow:
+
+1. **Agent requests gated content.** The merchant returns `402 Payment Required` with an invoice (amount, currency, resource URI).
+2. **Agent issues a Browsing IOU.** The IOU is a signed promise to pay, referencing the invoice ID, amount, and the agent's key.
+3. **Merchant verifies the IOU.** BOTCHA's `POST /v1/invoices/:id/verify-iou` endpoint verifies the signature, matches the IOU to the invoice, and returns a time-limited access token.
+4. **Agent accesses the content.** The access token grants entry to the gated resource.
+
+BOTCHA provides invoice management endpoints (`POST /v1/invoices`, `GET /v1/invoices/:id`) and IOU verification (`POST /v1/invoices/:id/verify-iou`) to support this flow end-to-end.
+
+### CDN edge verification
+
+For merchants running on Cloudflare Workers, BOTCHA provides a drop-in Hono middleware that verifies TAP signatures at the CDN edge — before the request reaches the origin server.
+
+```typescript
+import { tapEdgeStrict } from '@dupecom/botcha';
+
+app.use('/api/*', tapEdgeStrict);
+```
+
+Three presets are available: `tapEdgeStrict` (require valid signature), `tapEdgeFlexible` (accept signature or challenge token), and `tapEdgeDev` (log but don't block). The middleware resolves agent keys from JWKS endpoints with in-memory caching.
+
+### Visa key federation
+
+BOTCHA can trust public keys from external JWKS endpoints, enabling interoperability with other TAP implementations. The federation resolver is pre-configured to trust keys from `https://mcp.visa.com/.well-known/jwks` at the highest trust level.
+
+Key resolution uses a three-tier cache: in-memory (fastest, per-isolate), KV storage (shared across Workers), and HTTP fetch (cold start). This ensures sub-millisecond key lookups for repeat verifications while staying current with key rotations.
 
 ---
 
@@ -275,7 +356,7 @@ All cryptographic operations use the **Web Crypto API**, which is available in C
 | Challenge answers | SHA-256 | Speed challenge hash computation |
 | Token signing | HMAC-SHA256 (HS256) | JWT access and refresh tokens |
 | Secret storage | SHA-256 | App secrets hashed before storage |
-| TAP signatures | ECDSA P-256 / RSA-PSS SHA-256 | HTTP Message Signature verification |
+| TAP signatures | Ed25519 / ECDSA P-256 / RSA-PSS SHA-256 | HTTP Message Signature verification |
 | Constant-time comparison | Character-by-character | App secret validation (prevents timing attacks) |
 
 ### Rate limiting
@@ -464,6 +545,7 @@ A financial services API needs to audit all AI agent interactions:
 | **Email verification and account recovery** | 6-digit codes, secret rotation, anti-enumeration |
 | **Agent Registry** | Persistent agent identities with names, operators, and versions |
 | **Trusted Agent Protocol (TAP)** | Cryptographic identity, capability scoping, intent-scoped sessions |
+| **TAP Full Spec (v0.16.0)** | Ed25519, RFC 9421 full compliance, JWKS, Layer 2 Consumer Recognition, Layer 3 Payment Container, 402 micropayments, CDN edge verification, Visa key federation |
 | **Dashboard** | Per-app analytics — challenge volume, success rates, performance, geographic distribution |
 | **TypeScript and Python SDKs** | Full-featured client libraries with auto-solve and token management |
 | **Server-side verification** | Express, Hono, FastAPI, and Django middleware |

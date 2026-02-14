@@ -1380,7 +1380,7 @@ export function getOpenApiSpec(version: string) {
                     "operator": { type: "string", description: "Operator/organization name" },
                     "version": { type: "string", description: "Agent version" },
                     "public_key": { type: "string", description: "PEM-encoded public key" },
-                    "signature_algorithm": { type: "string", enum: ["ecdsa-p256-sha256", "rsa-pss-sha256"], description: "Signature algorithm (required if public_key provided)" },
+                    "signature_algorithm": { type: "string", enum: ["ed25519", "ecdsa-p256-sha256", "rsa-pss-sha256"], description: "Signature algorithm (required if public_key provided)" },
                     "trust_level": { type: "string", enum: ["basic", "verified", "enterprise"], description: "Agent trust level (default: basic)" },
                     "capabilities": {
                       type: "array",

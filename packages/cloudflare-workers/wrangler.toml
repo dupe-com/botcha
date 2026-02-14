@@ -43,14 +43,12 @@ id = "268aa950ddec41e78d88e78526eaaa44"
 # Nonces KV namespace for TAP replay protection (8-min TTL)
 [[kv_namespaces]]
 binding = "NONCES"
-id = "tap-nonces-placeholder"
-preview_id = "tap-nonces-preview"
+id = "b449ba37133b4e59b3e29b72872f7289"
 
 # Invoices KV namespace for 402 micropayment flow
 [[kv_namespaces]]
 binding = "INVOICES"
-id = "tap-invoices-placeholder"
-preview_id = "tap-invoices-preview"
+id = "043e1f7ab0454962b1bcf2bda9280833"
 
 # Analytics Engine binding for usage tracking
 [[analytics_engine_datasets]]
