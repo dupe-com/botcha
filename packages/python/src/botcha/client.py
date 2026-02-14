@@ -15,6 +15,9 @@ from botcha.types import (
     RecoverAccountResponse,
     ResendVerificationResponse,
     RotateSecretResponse,
+    TAPAgentListResponse,
+    TAPAgentResponse,
+    TAPSessionResponse,
     TokenResponse,
     VerifyEmailResponse,
 )
@@ -498,6 +501,246 @@ class BotchaClient:
             rotated_at=data.get("rotated_at"),
             error=data.get("error"),
             message=data.get("message"),
+        )
+
+    # ============ TAP (TRUSTED AGENT PROTOCOL) ============
+
+    async def register_tap_agent(
+        self,
+        name: str,
+        operator: Optional[str] = None,
+        version: Optional[str] = None,
+        public_key: Optional[str] = None,
+        signature_algorithm: Optional[str] = None,
+        capabilities: Optional[list[dict]] = None,
+        trust_level: Optional[str] = None,
+        issuer: Optional[str] = None,
+    ) -> TAPAgentResponse:
+        """
+        Register an agent with TAP (Trusted Agent Protocol) capabilities.
+
+        Args:
+            name: Agent name (required).
+            operator: Agent operator/organization.
+            version: Agent version string.
+            public_key: PEM-encoded public key for cryptographic signing.
+            signature_algorithm: Signing algorithm ('ecdsa-p256-sha256' or 'rsa-pss-sha256').
+            capabilities: List of capability dicts with action, scope, restrictions.
+            trust_level: Trust level ('basic', 'verified', 'enterprise').
+            issuer: Who issued/verified this agent.
+
+        Returns:
+            TAPAgentResponse with agent_id and details.
+
+        Raises:
+            httpx.HTTPStatusError: If registration fails.
+
+        Example::
+
+            agent = await client.register_tap_agent(
+                name="my-shopping-agent",
+                operator="acme-corp",
+                capabilities=[{"action": "browse", "scope": ["products"]}],
+                trust_level="verified",
+            )
+            print(agent.agent_id)
+        """
+        url = f"{self.base_url}/v1/agents/register/tap"
+        if self.app_id:
+            url += f"?app_id={self.app_id}"
+
+        payload: dict = {"name": name}
+        if operator is not None:
+            payload["operator"] = operator
+        if version is not None:
+            payload["version"] = version
+        if public_key is not None:
+            payload["public_key"] = public_key
+        if signature_algorithm is not None:
+            payload["signature_algorithm"] = signature_algorithm
+        if capabilities is not None:
+            payload["capabilities"] = capabilities
+        if trust_level is not None:
+            payload["trust_level"] = trust_level
+        if issuer is not None:
+            payload["issuer"] = issuer
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        return TAPAgentResponse(
+            success=data.get("success", False),
+            agent_id=data["agent_id"],
+            app_id=data.get("app_id", ""),
+            name=data.get("name", name),
+            operator=data.get("operator"),
+            version=data.get("version"),
+            created_at=data.get("created_at", ""),
+            tap_enabled=data.get("tap_enabled", False),
+            trust_level=data.get("trust_level"),
+            capabilities=data.get("capabilities"),
+            signature_algorithm=data.get("signature_algorithm"),
+            issuer=data.get("issuer"),
+            has_public_key=data.get("has_public_key", False),
+            key_fingerprint=data.get("key_fingerprint"),
+        )
+
+    async def get_tap_agent(self, agent_id: str) -> TAPAgentResponse:
+        """
+        Get a TAP agent by ID.
+
+        Args:
+            agent_id: The agent ID to retrieve.
+
+        Returns:
+            TAPAgentResponse with agent details.
+
+        Raises:
+            httpx.HTTPStatusError: If agent not found.
+        """
+        response = await self._client.get(
+            f"{self.base_url}/v1/agents/{quote(agent_id, safe='')}/tap"
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        return TAPAgentResponse(
+            success=data.get("success", False),
+            agent_id=data.get("agent_id", agent_id),
+            app_id=data.get("app_id", ""),
+            name=data.get("name", ""),
+            operator=data.get("operator"),
+            version=data.get("version"),
+            created_at=data.get("created_at", ""),
+            tap_enabled=data.get("tap_enabled", False),
+            trust_level=data.get("trust_level"),
+            capabilities=data.get("capabilities"),
+            signature_algorithm=data.get("signature_algorithm"),
+            issuer=data.get("issuer"),
+            has_public_key=data.get("has_public_key", False),
+            key_fingerprint=data.get("key_fingerprint"),
+            last_verified_at=data.get("last_verified_at"),
+            public_key=data.get("public_key"),
+        )
+
+    async def list_tap_agents(self, tap_only: bool = False) -> TAPAgentListResponse:
+        """
+        List TAP agents for the current app.
+
+        Args:
+            tap_only: If True, only return TAP-enabled agents.
+
+        Returns:
+            TAPAgentListResponse with agents list and counts.
+
+        Raises:
+            httpx.HTTPStatusError: If listing fails.
+        """
+        url = f"{self.base_url}/v1/agents/tap"
+        params = {}
+        if self.app_id:
+            params["app_id"] = self.app_id
+        if tap_only:
+            params["tap_only"] = "true"
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        return TAPAgentListResponse(
+            success=data.get("success", False),
+            agents=data.get("agents", []),
+            count=data.get("count", 0),
+            tap_enabled_count=data.get("tap_enabled_count", 0),
+        )
+
+    async def create_tap_session(
+        self,
+        agent_id: str,
+        user_context: str,
+        intent: dict,
+    ) -> TAPSessionResponse:
+        """
+        Create a TAP session after agent verification.
+
+        Args:
+            agent_id: The registered TAP agent ID.
+            user_context: Anonymous hash of user ID.
+            intent: Intent dict with action, resource, scope, duration.
+
+        Returns:
+            TAPSessionResponse with session_id and expiry.
+
+        Raises:
+            httpx.HTTPStatusError: If session creation fails.
+
+        Example::
+
+            session = await client.create_tap_session(
+                agent_id="agent_abc123",
+                user_context="user-hash",
+                intent={"action": "browse", "resource": "products", "duration": 3600},
+            )
+            print(session.session_id, session.expires_at)
+        """
+        response = await self._client.post(
+            f"{self.base_url}/v1/sessions/tap",
+            json={
+                "agent_id": agent_id,
+                "user_context": user_context,
+                "intent": intent,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        return TAPSessionResponse(
+            success=data.get("success", False),
+            session_id=data["session_id"],
+            agent_id=data.get("agent_id", agent_id),
+            capabilities=data.get("capabilities"),
+            intent=data.get("intent"),
+            expires_at=data.get("expires_at", ""),
+        )
+
+    async def get_tap_session(self, session_id: str) -> TAPSessionResponse:
+        """
+        Get a TAP session by ID.
+
+        Args:
+            session_id: The session ID to retrieve.
+
+        Returns:
+            TAPSessionResponse with session details and time_remaining.
+
+        Raises:
+            httpx.HTTPStatusError: If session not found or expired.
+        """
+        response = await self._client.get(
+            f"{self.base_url}/v1/sessions/{quote(session_id, safe='')}/tap"
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        return TAPSessionResponse(
+            success=data.get("success", False),
+            session_id=data.get("session_id", session_id),
+            agent_id=data.get("agent_id", ""),
+            app_id=data.get("app_id", ""),
+            capabilities=data.get("capabilities"),
+            intent=data.get("intent"),
+            created_at=data.get("created_at", ""),
+            expires_at=data.get("expires_at", ""),
+            time_remaining=data.get("time_remaining"),
         )
 
     async def close(self) -> None:

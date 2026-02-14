@@ -89,3 +89,72 @@ class RotateSecretResponse:
     rotated_at: Optional[str] = None
     error: Optional[str] = None
     message: Optional[str] = None
+
+
+# ============ TAP (Trusted Agent Protocol) Types ============
+
+
+@dataclass
+class TAPCapability:
+    """TAP capability defining what actions an agent can perform."""
+
+    action: str  # browse, compare, purchase, audit, search
+    scope: Optional[list[str]] = None
+    restrictions: Optional[dict] = None
+
+
+@dataclass
+class TAPIntent:
+    """TAP intent declaring what an agent wants to do."""
+
+    action: str
+    resource: Optional[str] = None
+    scope: Optional[list[str]] = None
+    duration: Optional[int] = None
+
+
+@dataclass
+class TAPAgentResponse:
+    """Response from TAP agent registration or retrieval."""
+
+    success: bool
+    agent_id: str
+    app_id: str = ""
+    name: str = ""
+    operator: Optional[str] = None
+    version: Optional[str] = None
+    created_at: str = ""
+    tap_enabled: bool = False
+    trust_level: Optional[str] = None
+    capabilities: Optional[list[dict]] = None
+    signature_algorithm: Optional[str] = None
+    issuer: Optional[str] = None
+    has_public_key: bool = False
+    key_fingerprint: Optional[str] = None
+    last_verified_at: Optional[str] = None
+    public_key: Optional[str] = None
+
+
+@dataclass
+class TAPAgentListResponse:
+    """Response from listing TAP agents."""
+
+    success: bool
+    agents: list[dict] = field(default_factory=list)
+    count: int = 0
+    tap_enabled_count: int = 0
+
+
+@dataclass
+class TAPSessionResponse:
+    """Response from TAP session creation or retrieval."""
+
+    success: bool
+    session_id: str
+    agent_id: str = ""
+    app_id: str = ""
+    capabilities: Optional[list[dict]] = None
+    intent: Optional[dict] = None
+    created_at: str = ""
+    expires_at: str = ""
+    time_remaining: Optional[int] = None
