@@ -8,6 +8,7 @@ import { solveCommand } from './commands/solve.js';
 import { benchmarkCommand } from './commands/benchmark.js';
 import { headersCommand } from './commands/headers.js';
 import { discoverCommand } from './commands/discover.js';
+import tapCommand from './commands/tap.js';
 
 const program = new Command();
 
@@ -67,6 +68,51 @@ program
   .option('-v, --verbose', 'Show recommendations')
   .option('-q, --quiet', 'Minimal output')
   .action(discoverCommand);
+
+// TAP command (parent with subcommands)
+const tap = program
+  .command('tap')
+  .description('Trusted Agent Protocol (TAP) commands');
+
+tap.command('register')
+  .description('Register a TAP agent')
+  .requiredOption('--url <url>', 'BOTCHA service URL')
+  .requiredOption('--name <name>', 'Agent name')
+  .option('--operator <operator>', 'Agent operator/organization')
+  .option('--trust-level <level>', 'Trust level (basic, verified, enterprise)')
+  .option('--json', 'Output as JSON')
+  .option('-v, --verbose', 'Show detailed output')
+  .option('-q, --quiet', 'Minimal output')
+  .action(tapCommand.register);
+
+tap.command('get')
+  .description('Get TAP agent details')
+  .requiredOption('--url <url>', 'BOTCHA service URL')
+  .requiredOption('--agent-id <id>', 'Agent ID')
+  .option('--json', 'Output as JSON')
+  .option('-v, --verbose', 'Show detailed output')
+  .option('-q, --quiet', 'Minimal output')
+  .action(tapCommand.get);
+
+tap.command('list')
+  .description('List TAP agents')
+  .requiredOption('--url <url>', 'BOTCHA service URL')
+  .option('--tap-only', 'Only show TAP-enabled agents')
+  .option('--json', 'Output as JSON')
+  .option('-v, --verbose', 'Show detailed output')
+  .option('-q, --quiet', 'Minimal output')
+  .action(tapCommand.list);
+
+tap.command('session')
+  .description('Create TAP session')
+  .requiredOption('--url <url>', 'BOTCHA service URL')
+  .requiredOption('--agent-id <id>', 'Agent ID')
+  .requiredOption('--intent <json>', 'Intent as JSON string')
+  .option('--user-context <hash>', 'User context hash')
+  .option('--json', 'Output as JSON')
+  .option('-v, --verbose', 'Show detailed output')
+  .option('-q, --quiet', 'Minimal output')
+  .action(tapCommand.session);
 
 // Parse and execute
 program.parse();
