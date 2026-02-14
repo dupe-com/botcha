@@ -13,6 +13,7 @@ routes = [
   { pattern = "botcha.ai/badge/*", zone_name = "botcha.ai" },
   { pattern = "botcha.ai/gate", zone_name = "botcha.ai" },
   { pattern = "botcha.ai/health", zone_name = "botcha.ai" },
+  { pattern = "botcha.ai/showcase", zone_name = "botcha.ai" },
   { pattern = "botcha.ai/dashboard/*", zone_name = "botcha.ai" },
   { pattern = "botcha.ai/dashboard", zone_name = "botcha.ai" },
   # Discovery files for AI agents

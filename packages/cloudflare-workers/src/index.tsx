@@ -39,6 +39,7 @@ import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBot
 import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
+import { ShowcasePage } from './dashboard/showcase';
 import { createAgent, getAgent, listAgents } from './agents';
 import {
   registerTAPAgentRoute,
@@ -445,6 +446,12 @@ app.post('/gate', async (c) => {
 
   // Redirect to /go/:code which handles both gate codes and device codes
   return c.redirect(`/go/${code}`);
+});
+
+// ============ SHOWCASE PAGE ============
+app.get('/showcase', (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.14.0';
+  return c.html(<ShowcasePage version={version} />);
 });
 
 app.get('/health', (c) => {
