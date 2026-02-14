@@ -4,25 +4,10 @@ compatibility_date = "2025-01-30"
 compatibility_flags = ["nodejs_compat"]
 account_id = "82c70a74dfe2b9802a95ddac893a4da8"
 
-# Route API endpoints to the worker on main domain
+# Route ALL traffic to the worker — no more missing routes causing 522s
 routes = [
   { pattern = "botcha.ai", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/api/*", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/v1/*", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/agent-only", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/badge/*", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/gate", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/go/*", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/health", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/showcase", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/dashboard/*", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/dashboard", zone_name = "botcha.ai" },
-  # Discovery files for AI agents
-  { pattern = "botcha.ai/robots.txt", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/ai.txt", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/openapi.json", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/.well-known/*", zone_name = "botcha.ai" },
-  { pattern = "botcha.ai/sitemap.xml", zone_name = "botcha.ai" }
+  { pattern = "botcha.ai/*", zone_name = "botcha.ai" },
 ]
 
 # Environment variables
