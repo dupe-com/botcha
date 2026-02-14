@@ -90,7 +90,7 @@ app.route('/dashboard', dashboardRoutes);
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.13.0');
+  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.14.0');
   c.header('X-Botcha-Enabled', 'true');
   c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
@@ -204,7 +204,7 @@ function detectAcceptPreference(c: Context<{ Bindings: Bindings; Variables: Vari
 }
 
 app.get('/', async (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.13.0';
+  const version = c.env.BOTCHA_VERSION || '0.14.0';
   const preference = detectAcceptPreference(c);
   const baseUrl = new URL(c.req.url).origin;
 
@@ -432,7 +432,7 @@ The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the 
 // POST /gate — human enters short code (BOTCHA-XXXXXX) from their agent
 // The code maps to a JWT in KV. This structural separation means agents can't skip the handoff.
 app.post('/gate', async (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.11.0';
+  const version = c.env.BOTCHA_VERSION || '0.14.0';
   const body = await c.req.parseBody();
   const input = (body['code'] as string || '').trim().toUpperCase();
 
@@ -471,7 +471,7 @@ app.get('/ai.txt', (c) => {
 
 // OpenAPI spec
 app.get('/openapi.json', (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.13.0';
+  const version = c.env.BOTCHA_VERSION || '0.14.0';
   return c.json(getOpenApiSpec(version), 200, {
     'Cache-Control': 'public, max-age=3600',
   });

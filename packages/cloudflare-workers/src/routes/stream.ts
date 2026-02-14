@@ -91,7 +91,7 @@ function generateSessionId(): string {
  */
 app.get('/v1/challenge/stream', async (c: Context<{ Bindings: Bindings }>) => {
   const sessionId = generateSessionId();
-  const version = c.env.BOTCHA_VERSION || '0.11.0';
+  const version = c.env.BOTCHA_VERSION || '0.14.0';
 
   // Create session
   const session: StreamSession = {
