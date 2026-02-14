@@ -776,4 +776,430 @@ describe('BotchaClient', () => {
       await expect(client.rotateSecret()).rejects.toThrow('Authentication required');
     });
   });
+
+  // ============ JWKS & KEY MANAGEMENT ============
+
+  describe('getJWKS()', () => {
+    test('fetches JWKS from well-known endpoint', async () => {
+      const mockJWKS = {
+        keys: [
+          { kty: 'EC', kid: 'agent_abc123', alg: 'ES256', crv: 'P-256', x: 'x-val', y: 'y-val' },
+          { kty: 'OKP', kid: 'agent_def456', alg: 'EdDSA', crv: 'Ed25519', x: 'x-val' },
+        ],
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockJWKS),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.getJWKS();
+
+      expect(result.keys).toHaveLength(2);
+      expect(result.keys[0].kid).toBe('agent_abc123');
+      expect(result.keys[1].alg).toBe('EdDSA');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/.well-known/jwks');
+    });
+
+    test('includes app_id query param when set', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ keys: [] }),
+      });
+
+      const client = new BotchaClient({ appId: 'app_test123' });
+      await client.getJWKS();
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('app_id=app_test123');
+    });
+
+    test('explicit appId overrides client appId', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ keys: [] }),
+      });
+
+      const client = new BotchaClient({ appId: 'app_default' });
+      await client.getJWKS('app_override');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('app_id=app_override');
+      expect(call[0]).not.toContain('app_default');
+    });
+
+    test('throws on server error', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 500,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Internal error' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(client.getJWKS()).rejects.toThrow('Internal error');
+    });
+  });
+
+  describe('getKeyById()', () => {
+    test('fetches a specific key by ID', async () => {
+      const mockKey = {
+        kty: 'EC', kid: 'agent_abc123', alg: 'ES256', crv: 'P-256', x: 'x-val', y: 'y-val',
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockKey),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.getKeyById('agent_abc123');
+
+      expect(result.kid).toBe('agent_abc123');
+      expect(result.alg).toBe('ES256');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/keys/agent_abc123');
+    });
+
+    test('URL-encodes key IDs with special characters', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ kty: 'EC', kid: 'agent/special' }),
+      });
+
+      const client = new BotchaClient();
+      await client.getKeyById('agent/special');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/keys/agent%2Fspecial');
+    });
+
+    test('throws on 404', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 404,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Key not found' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(client.getKeyById('nonexistent')).rejects.toThrow('Key not found');
+    });
+  });
+
+  describe('rotateAgentKey()', () => {
+    test('posts key rotation request with Bearer token', async () => {
+      const mockAgent = {
+        success: true,
+        agent_id: 'agent_abc123',
+        public_key: '-----BEGIN PUBLIC KEY-----\nNEWKEY\n-----END PUBLIC KEY-----',
+        signature_algorithm: 'ecdsa-p256-sha256',
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockAgent),
+      });
+
+      const client = new BotchaClient();
+      (client as any).cachedToken = 'bearer-token-xyz';
+
+      const result = await client.rotateAgentKey('agent_abc123', {
+        public_key: '-----BEGIN PUBLIC KEY-----\nNEWKEY\n-----END PUBLIC KEY-----',
+        signature_algorithm: 'ecdsa-p256-sha256',
+        key_expires_at: '2027-01-01T00:00:00Z',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.agent_id).toBe('agent_abc123');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/agents/agent_abc123/tap/rotate-key');
+      expect(call[1].headers['Authorization']).toBe('Bearer bearer-token-xyz');
+
+      const body = JSON.parse(call[1].body);
+      expect(body.public_key).toContain('NEWKEY');
+      expect(body.signature_algorithm).toBe('ecdsa-p256-sha256');
+      expect(body.key_expires_at).toBe('2027-01-01T00:00:00Z');
+    });
+
+    test('works with Ed25519 algorithm', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          agent_id: 'agent_ed25519',
+          signature_algorithm: 'ed25519',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.rotateAgentKey('agent_ed25519', {
+        public_key: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo=',
+        signature_algorithm: 'ed25519',
+      });
+
+      expect(result.signature_algorithm).toBe('ed25519');
+    });
+
+    test('throws on 403', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 403,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Not authorized to rotate this key' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.rotateAgentKey('agent_other', {
+          public_key: 'key',
+          signature_algorithm: 'ecdsa-p256-sha256',
+        })
+      ).rejects.toThrow('Not authorized');
+    });
+  });
+
+  // ============ INVOICE & PAYMENT (402 Flow) ============
+
+  describe('createInvoice()', () => {
+    test('creates invoice with all required fields', async () => {
+      const mockInvoice = {
+        success: true,
+        invoice_id: 'inv_abc123',
+        resource_uri: 'https://example.com/premium',
+        amount: '500',
+        currency: 'USD',
+        card_acceptor_id: 'CAID_ABC',
+        status: 'pending',
+        expires_at: '2026-02-14T22:00:00Z',
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockInvoice),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.createInvoice({
+        resource_uri: 'https://example.com/premium',
+        amount: '500',
+        currency: 'USD',
+        card_acceptor_id: 'CAID_ABC',
+        description: 'Premium article',
+        ttl_seconds: 3600,
+      });
+
+      expect(result.invoice_id).toBe('inv_abc123');
+      expect(result.amount).toBe('500');
+      expect(result.status).toBe('pending');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/invoices');
+      expect(call[1].method).toBe('POST');
+
+      const body = JSON.parse(call[1].body);
+      expect(body.resource_uri).toBe('https://example.com/premium');
+      expect(body.card_acceptor_id).toBe('CAID_ABC');
+      expect(body.description).toBe('Premium article');
+      expect(body.ttl_seconds).toBe(3600);
+    });
+
+    test('attaches Bearer token when authenticated', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, invoice_id: 'inv_auth' }),
+      });
+
+      const client = new BotchaClient();
+      (client as any).cachedToken = 'my-token';
+
+      await client.createInvoice({
+        resource_uri: 'https://example.com/gated',
+        amount: '100',
+        currency: 'USD',
+        card_acceptor_id: 'CAID_XYZ',
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[1].headers['Authorization']).toBe('Bearer my-token');
+    });
+
+    test('throws on 400', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Missing required field: amount' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.createInvoice({
+          resource_uri: 'https://example.com',
+          amount: '',
+          currency: 'USD',
+          card_acceptor_id: 'CAID',
+        })
+      ).rejects.toThrow('Missing required field');
+    });
+  });
+
+  describe('getInvoice()', () => {
+    test('fetches invoice by ID', async () => {
+      const mockInvoice = {
+        invoice_id: 'inv_abc123',
+        status: 'pending',
+        amount: '500',
+        currency: 'USD',
+        resource_uri: 'https://example.com/premium',
+        expires_at: '2026-02-14T22:00:00Z',
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockInvoice),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.getInvoice('inv_abc123');
+
+      expect(result.invoice_id).toBe('inv_abc123');
+      expect(result.status).toBe('pending');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/invoices/inv_abc123');
+    });
+
+    test('URL-encodes invoice IDs', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ invoice_id: 'inv/special' }),
+      });
+
+      const client = new BotchaClient();
+      await client.getInvoice('inv/special');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/invoices/inv%2Fspecial');
+    });
+
+    test('throws on 404', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 404,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Invoice not found' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(client.getInvoice('nonexistent')).rejects.toThrow('Invoice not found');
+    });
+  });
+
+  describe('verifyBrowsingIOU()', () => {
+    test('verifies valid IOU and returns access token', async () => {
+      const mockResult = {
+        verified: true,
+        access_token: 'access_token_xyz',
+        expires_in: 3600,
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockResult),
+      });
+
+      const client = new BotchaClient();
+      const iou = {
+        invoiceId: 'inv_abc123',
+        amount: '500',
+        cardAcceptorId: 'CAID_ABC',
+        acquirerId: 'ACQ_XYZ',
+        uri: 'https://example.com/premium',
+        sequenceCounter: '1',
+        paymentService: 'agent-pay',
+        kid: 'agent_def456',
+        alg: 'ES256',
+        signature: 'base64-signature-here',
+      };
+
+      const result = await client.verifyBrowsingIOU('inv_abc123', iou);
+
+      expect(result.verified).toBe(true);
+      expect(result.access_token).toBe('access_token_xyz');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('/v1/invoices/inv_abc123/verify-iou');
+      expect(call[1].method).toBe('POST');
+
+      const body = JSON.parse(call[1].body);
+      expect(body.invoiceId).toBe('inv_abc123');
+      expect(body.amount).toBe('500');
+      expect(body.signature).toBe('base64-signature-here');
+    });
+
+    test('handles rejected IOU', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          verified: false,
+          error: 'Amount mismatch',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.verifyBrowsingIOU('inv_abc123', {
+        invoiceId: 'inv_abc123',
+        amount: '999',
+        cardAcceptorId: 'CAID_ABC',
+        acquirerId: 'ACQ_XYZ',
+        uri: 'https://example.com',
+        sequenceCounter: '1',
+        paymentService: 'agent-pay',
+        kid: 'agent_def456',
+        alg: 'ES256',
+        signature: 'bad-sig',
+      });
+
+      expect(result.verified).toBe(false);
+      expect(result.error).toBe('Amount mismatch');
+    });
+
+    test('throws on server error', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 500,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Internal server error' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.verifyBrowsingIOU('inv_abc123', {
+          invoiceId: 'inv_abc123',
+          amount: '500',
+          cardAcceptorId: 'CAID',
+          acquirerId: 'ACQ',
+          uri: 'https://example.com',
+          sequenceCounter: '1',
+          paymentService: 'agent-pay',
+          kid: 'agent_x',
+          alg: 'ES256',
+          signature: 'sig',
+        })
+      ).rejects.toThrow('Internal server error');
+    });
+  });
 });
