@@ -21,6 +21,16 @@ export type {
   ResendVerificationResponse,
   RecoverAccountResponse,
   RotateSecretResponse,
+  TAPAction,
+  TAPTrustLevel,
+  TAPSignatureAlgorithm,
+  TAPCapability,
+  TAPIntent,
+  RegisterTAPAgentOptions,
+  TAPAgentResponse,
+  TAPAgentListResponse,
+  CreateTAPSessionOptions,
+  TAPSessionResponse,
 } from './types.js';
 
 import type {
@@ -35,6 +45,11 @@ import type {
   ResendVerificationResponse,
   RecoverAccountResponse,
   RotateSecretResponse,
+  RegisterTAPAgentOptions,
+  TAPAgentResponse,
+  TAPAgentListResponse,
+  CreateTAPSessionOptions,
+  TAPSessionResponse,
 } from './types.js';
 
 // Export stream client
@@ -613,6 +628,174 @@ export class BotchaClient {
     }
 
     return await res.json() as RotateSecretResponse;
+  }
+
+  // ============ TAP (TRUSTED AGENT PROTOCOL) ============
+
+  /**
+   * Register an agent with TAP (Trusted Agent Protocol) capabilities.
+   * Enables cryptographic agent authentication with optional public key signing.
+   *
+   * @param options - Registration options including name, public key, capabilities
+   * @returns TAP agent details including agent_id
+   * @throws Error if registration fails
+   *
+   * @example
+   * ```typescript
+   * const agent = await client.registerTAPAgent({
+   *   name: 'my-shopping-agent',
+   *   operator: 'acme-corp',
+   *   capabilities: [{ action: 'browse', scope: ['products'] }],
+   *   trust_level: 'verified',
+   * });
+   * console.log(agent.agent_id);
+   * ```
+   */
+  async registerTAPAgent(options: RegisterTAPAgentOptions): Promise<TAPAgentResponse> {
+    const url = this.appId
+      ? `${this.baseUrl}/v1/agents/register/tap?app_id=${encodeURIComponent(this.appId)}`
+      : `${this.baseUrl}/v1/agents/register/tap`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': this.agentIdentity,
+    };
+
+    if (this.cachedToken) {
+      headers['Authorization'] = `Bearer ${this.cachedToken}`;
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(options),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        (body.message as string) || `TAP agent registration failed with status ${res.status}`
+      );
+    }
+
+    return await res.json() as TAPAgentResponse;
+  }
+
+  /**
+   * Get a TAP agent by ID.
+   *
+   * @param agentId - The agent ID to retrieve
+   * @returns TAP agent details
+   * @throws Error if agent not found
+   */
+  async getTAPAgent(agentId: string): Promise<TAPAgentResponse> {
+    const res = await fetch(`${this.baseUrl}/v1/agents/${encodeURIComponent(agentId)}/tap`, {
+      headers: { 'User-Agent': this.agentIdentity },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        (body.message as string) || `TAP agent retrieval failed with status ${res.status}`
+      );
+    }
+
+    return await res.json() as TAPAgentResponse;
+  }
+
+  /**
+   * List TAP agents for the current app.
+   *
+   * @param tapOnly - If true, only return TAP-enabled agents (default: false)
+   * @returns List of TAP agents with counts
+   * @throws Error if listing fails
+   */
+  async listTAPAgents(tapOnly: boolean = false): Promise<TAPAgentListResponse> {
+    let url = this.appId
+      ? `${this.baseUrl}/v1/agents/tap?app_id=${encodeURIComponent(this.appId)}`
+      : `${this.baseUrl}/v1/agents/tap`;
+
+    if (tapOnly) {
+      url += url.includes('?') ? '&tap_only=true' : '?tap_only=true';
+    }
+
+    const headers: Record<string, string> = {
+      'User-Agent': this.agentIdentity,
+    };
+
+    if (this.cachedToken) {
+      headers['Authorization'] = `Bearer ${this.cachedToken}`;
+    }
+
+    const res = await fetch(url, { headers });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        (body.message as string) || `TAP agent listing failed with status ${res.status}`
+      );
+    }
+
+    return await res.json() as TAPAgentListResponse;
+  }
+
+  /**
+   * Create a TAP session after agent verification.
+   *
+   * @param options - Session options including agent_id, user_context, and intent
+   * @returns TAP session details including session_id and expiry
+   * @throws Error if session creation fails
+   *
+   * @example
+   * ```typescript
+   * const session = await client.createTAPSession({
+   *   agent_id: 'agent_abc123',
+   *   user_context: 'user-hash',
+   *   intent: { action: 'browse', resource: 'products', duration: 3600 },
+   * });
+   * console.log(session.session_id, session.expires_at);
+   * ```
+   */
+  async createTAPSession(options: CreateTAPSessionOptions): Promise<TAPSessionResponse> {
+    const res = await fetch(`${this.baseUrl}/v1/sessions/tap`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': this.agentIdentity,
+      },
+      body: JSON.stringify(options),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        (body.message as string) || `TAP session creation failed with status ${res.status}`
+      );
+    }
+
+    return await res.json() as TAPSessionResponse;
+  }
+
+  /**
+   * Get a TAP session by ID.
+   *
+   * @param sessionId - The session ID to retrieve
+   * @returns TAP session details including time_remaining
+   * @throws Error if session not found or expired
+   */
+  async getTAPSession(sessionId: string): Promise<TAPSessionResponse> {
+    const res = await fetch(`${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/tap`, {
+      headers: { 'User-Agent': this.agentIdentity },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        (body.message as string) || `TAP session retrieval failed with status ${res.status}`
+      );
+    }
+
+    return await res.json() as TAPSessionResponse;
   }
 }
 

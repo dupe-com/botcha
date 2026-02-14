@@ -147,3 +147,81 @@ export interface RotateSecretResponse {
   error?: string;
   message?: string;
 }
+
+// ============ TAP (Trusted Agent Protocol) Types ============
+
+export type TAPAction = 'browse' | 'compare' | 'purchase' | 'audit' | 'search';
+export type TAPTrustLevel = 'basic' | 'verified' | 'enterprise';
+export type TAPSignatureAlgorithm = 'ecdsa-p256-sha256' | 'rsa-pss-sha256';
+
+export interface TAPCapability {
+  action: TAPAction;
+  scope?: string[];
+  restrictions?: {
+    max_amount?: number;
+    rate_limit?: number;
+    [key: string]: any;
+  };
+}
+
+export interface TAPIntent {
+  action: TAPAction;
+  resource?: string;
+  scope?: string[];
+  duration?: number;
+}
+
+export interface RegisterTAPAgentOptions {
+  name: string;
+  operator?: string;
+  version?: string;
+  public_key?: string;
+  signature_algorithm?: TAPSignatureAlgorithm;
+  capabilities?: TAPCapability[];
+  trust_level?: TAPTrustLevel;
+  issuer?: string;
+}
+
+export interface TAPAgentResponse {
+  success: boolean;
+  agent_id: string;
+  app_id: string;
+  name: string;
+  operator?: string;
+  version?: string;
+  created_at: string;
+  tap_enabled: boolean;
+  trust_level?: TAPTrustLevel;
+  capabilities?: TAPCapability[];
+  signature_algorithm?: TAPSignatureAlgorithm;
+  issuer?: string;
+  has_public_key: boolean;
+  key_fingerprint?: string;
+  last_verified_at?: string | null;
+  public_key?: string;
+}
+
+export interface TAPAgentListResponse {
+  success: boolean;
+  agents: TAPAgentResponse[];
+  count: number;
+  tap_enabled_count: number;
+}
+
+export interface CreateTAPSessionOptions {
+  agent_id: string;
+  user_context: string;
+  intent: TAPIntent;
+}
+
+export interface TAPSessionResponse {
+  success: boolean;
+  session_id: string;
+  agent_id: string;
+  app_id?: string;
+  capabilities?: TAPCapability[];
+  intent: TAPIntent;
+  created_at?: string;
+  expires_at: string;
+  time_remaining?: number;
+}
