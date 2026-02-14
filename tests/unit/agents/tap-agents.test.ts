@@ -164,7 +164,7 @@ describe('TAP Agents - Registration', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Invalid PEM public key format');
+      expect(result.error).toBe('Invalid public key format');
     });
 
     test('fails when public_key is too short', async () => {
@@ -175,7 +175,7 @@ describe('TAP Agents - Registration', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Invalid PEM public key format');
+      expect(result.error).toBe('Invalid public key format');
     });
 
     test('stores agent in KV at agent:{agent_id}', async () => {

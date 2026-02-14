@@ -19,8 +19,9 @@ import { Agent, KVNamespace, generateAgentId } from './agents.js';
 export interface TAPAgent extends Agent {
   // Cryptographic identity (optional for backward compatibility)
   public_key?: string;           // PEM-encoded public key
-  signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256';
+  signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256' | 'ed25519';
   key_created_at?: number;       // When the key was generated
+  key_expires_at?: number;       // When the key expires (epoch ms)
   
   // Capabilities and permissions
   capabilities?: TAPCapability[];
@@ -77,7 +78,7 @@ export async function registerTAPAgent(
     operator?: string;
     version?: string;
     public_key?: string;
-    signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256';
+    signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256' | 'ed25519';
     capabilities?: TAPCapability[];
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
@@ -113,8 +114,8 @@ export async function registerTAPAgent(
       }
       
       // Validate public key format
-      if (!isValidPEMPublicKey(agent.public_key)) {
-        return { success: false, error: 'Invalid PEM public key format' };
+      if (!isValidPublicKey(agent.public_key, agent.signature_algorithm)) {
+        return { success: false, error: 'Invalid public key format' };
       }
     }
 
@@ -288,10 +289,20 @@ function generateSessionId(): string {
     .join('');
 }
 
-function isValidPEMPublicKey(pemKey: string): boolean {
-  return pemKey.includes('BEGIN PUBLIC KEY') && 
-         pemKey.includes('END PUBLIC KEY') &&
-         pemKey.length > 100; // Basic sanity check
+function isValidPublicKey(key: string, algorithm?: string): boolean {
+  // PEM format
+  if (key.includes('BEGIN PUBLIC KEY') && key.includes('END PUBLIC KEY') && key.length > 100) {
+    return true;
+  }
+  // Raw Ed25519 key (32 bytes = ~44 base64 chars)
+  if (algorithm === 'ed25519') {
+    const stripped = key.replace(/[\s]/g, '');
+    try {
+      const decoded = atob(stripped.replace(/-/g, '+').replace(/_/g, '/'));
+      return decoded.length === 32;
+    } catch { return false; }
+  }
+  return false;
 }
 
 async function updateAppAgentIndex(

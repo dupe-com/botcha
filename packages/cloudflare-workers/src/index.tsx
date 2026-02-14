@@ -49,7 +49,14 @@ import {
   listTAPAgentsRoute,
   createTAPSessionRoute,
   getTAPSessionRoute,
+  rotateKeyRoute,
+  createInvoiceRoute,
+  getInvoiceRoute,
+  verifyIOURoute,
+  verifyConsumerRoute,
+  verifyPaymentRoute,
 } from './tap-routes.js';
+import { jwksRoute, getKeyRoute, listKeysRoute } from './tap-jwks.js';
 import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
@@ -66,6 +73,8 @@ type Bindings = {
   APPS: KVNamespace;
   AGENTS: KVNamespace;
   SESSIONS: KVNamespace;
+  NONCES: KVNamespace;
+  INVOICES: KVNamespace;
   ANALYTICS?: AnalyticsEngineDataset;
   JWT_SECRET: string;
   BOTCHA_VERSION: string;
@@ -93,7 +102,7 @@ app.route('/dashboard', dashboardRoutes);
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.15.0');
+  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.16.0');
   c.header('X-Botcha-Enabled', 'true');
   c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
@@ -208,7 +217,7 @@ function detectAcceptPreference(c: Context<{ Bindings: Bindings; Variables: Vari
 }
 
 app.get('/', async (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.15.0';
+  const version = c.env.BOTCHA_VERSION || '0.16.0';
   const preference = detectAcceptPreference(c);
   const baseUrl = new URL(c.req.url).origin;
 
@@ -427,7 +436,7 @@ The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the 
 // POST /gate — human enters short code (BOTCHA-XXXXXX) from their agent
 // The code maps to a JWT in KV. This structural separation means agents can't skip the handoff.
 app.post('/gate', async (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.15.0';
+  const version = c.env.BOTCHA_VERSION || '0.16.0';
   const body = await c.req.parseBody();
   const input = (body['code'] as string || '').trim().toUpperCase();
 
@@ -468,7 +477,7 @@ app.get('/showcase', (c) => {
 
 // ============ WHITEPAPER ============
 app.get('/whitepaper', (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.15.0';
+  const version = c.env.BOTCHA_VERSION || '0.16.0';
   const preference = detectAcceptPreference(c);
 
   // Markdown for agents
@@ -530,7 +539,7 @@ app.get('/ai.txt', (c) => {
 
 // OpenAPI spec
 app.get('/openapi.json', (c) => {
-  const version = c.env.BOTCHA_VERSION || '0.15.0';
+  const version = c.env.BOTCHA_VERSION || '0.16.0';
   return c.json(getOpenApiSpec(version), 200, {
     'Cache-Control': 'public, max-age=3600',
   });
@@ -1851,6 +1860,23 @@ app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 // TAP session management
 app.post('/v1/sessions/tap', createTAPSessionRoute);
 app.get('/v1/sessions/:id/tap', getTAPSessionRoute);
+
+// TAP Key Discovery (JWKS)
+app.get('/.well-known/jwks', jwksRoute);
+app.get('/v1/keys', listKeysRoute);
+app.get('/v1/keys/:keyId', getKeyRoute);
+
+// TAP Key Rotation
+app.post('/v1/agents/:id/tap/rotate-key', rotateKeyRoute);
+
+// TAP Invoice / 402 Micropayment Flow
+app.post('/v1/invoices', createInvoiceRoute);
+app.get('/v1/invoices/:id', getInvoiceRoute);
+app.post('/v1/invoices/:id/verify-iou', verifyIOURoute);
+
+// TAP Verification Utility Endpoints
+app.post('/v1/verify/consumer', verifyConsumerRoute);
+app.post('/v1/verify/payment', verifyPaymentRoute);
 
 // ============ AGENT REGISTRY API ============
 

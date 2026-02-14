@@ -88,6 +88,30 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | \`POST\` | \`/v1/sessions/tap\` | Create TAP session with intent validation |
 | \`GET\` | \`/v1/sessions/:id/tap\` | Get TAP session info |
 
+### TAP Full Spec — JWKS & Keys (v0.16.0)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/.well-known/jwks\` | JWK Set for app's TAP agents (Visa spec standard) |
+| \`GET\` | \`/v1/keys\` | List keys (supports ?keyID= for Visa compat) |
+| \`GET\` | \`/v1/keys/:keyId\` | Get specific key by ID |
+| \`POST\` | \`/v1/agents/:id/tap/rotate-key\` | Rotate agent's key pair |
+
+### TAP Full Spec — 402 Micropayments (v0.16.0)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`POST\` | \`/v1/invoices\` | Create invoice for gated content |
+| \`GET\` | \`/v1/invoices/:id\` | Get invoice details |
+| \`POST\` | \`/v1/invoices/:id/verify-iou\` | Verify Browsing IOU |
+
+### TAP Full Spec — Verification (v0.16.0)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`POST\` | \`/v1/verify/consumer\` | Verify Agentic Consumer (Layer 2) |
+| \`POST\` | \`/v1/verify/payment\` | Verify Agentic Payment Container (Layer 3) |
+
 ### Challenges
 
 | Method | Path | Description |
@@ -292,6 +316,7 @@ Feature: Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Mes
 Feature: TAP Capabilities (action + resource scoping for agent sessions)
 Feature: TAP Trust Levels (basic, verified, enterprise)
 Feature: TAP Showcase Homepage (botcha.ai — one of the first services to implement Visa's Trusted Agent Protocol)
+Feature: TAP Full Spec v0.16.0 — Ed25519, RFC 9421 full compliance, JWKS infrastructure, Layer 2 Consumer Recognition, Layer 3 Payment Container, 402 micropayments, CDN edge verification, Visa key federation
 
 # Endpoints
 # Challenge Endpoints
@@ -345,6 +370,21 @@ Endpoint: GET https://botcha.ai/v1/agents/:id/tap - Get TAP agent details (inclu
 Endpoint: GET https://botcha.ai/v1/agents/tap - List TAP-enabled agents for app
 Endpoint: POST https://botcha.ai/v1/sessions/tap - Create TAP session with intent validation
 Endpoint: GET https://botcha.ai/v1/sessions/:id/tap - Get TAP session info
+
+# TAP Full Spec — JWKS & Key Management (v0.16.0)
+Endpoint: GET https://botcha.ai/.well-known/jwks - JWK Set for app's TAP agents (Visa spec standard)
+Endpoint: GET https://botcha.ai/v1/keys - List keys (supports ?keyID= query for Visa compatibility)
+Endpoint: GET https://botcha.ai/v1/keys/:keyId - Get specific key by ID
+Endpoint: POST https://botcha.ai/v1/agents/:id/tap/rotate-key - Rotate agent's key pair
+
+# TAP Full Spec — 402 Micropayments (v0.16.0)
+Endpoint: POST https://botcha.ai/v1/invoices - Create invoice for gated content (402 flow)
+Endpoint: GET https://botcha.ai/v1/invoices/:id - Get invoice details
+Endpoint: POST https://botcha.ai/v1/invoices/:id/verify-iou - Verify Browsing IOU against invoice
+
+# TAP Full Spec — Consumer & Payment Verification (v0.16.0)
+Endpoint: POST https://botcha.ai/v1/verify/consumer - Verify Agentic Consumer object (Layer 2)
+Endpoint: POST https://botcha.ai/v1/verify/payment - Verify Agentic Payment Container (Layer 3)
 
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
@@ -416,7 +456,7 @@ Multi-Tenant-Token-Claim: Tokens include app_id claim when app_id provided
 # TRUSTED AGENT PROTOCOL (TAP)
 TAP-Description: Enterprise-grade cryptographic agent auth using HTTP Message Signatures (RFC 9421)
 TAP-Register: POST /v1/agents/register/tap with {name, public_key, signature_algorithm, capabilities, trust_level}
-TAP-Algorithms: ecdsa-p256-sha256, rsa-pss-sha256
+TAP-Algorithms: ed25519 (Visa recommended), ecdsa-p256-sha256, rsa-pss-sha256
 TAP-Trust-Levels: basic, verified, enterprise
 TAP-Capabilities: Array of {action, resource, constraints} — scoped access control
 TAP-Session-Create: POST /v1/sessions/tap with {agent_id, user_context, intent}
@@ -424,9 +464,21 @@ TAP-Session-Get: GET /v1/sessions/:id/tap — includes time_remaining
 TAP-Get-Agent: GET /v1/agents/:id/tap — includes public_key for verification
 TAP-List-Agents: GET /v1/agents/tap?app_id=...&tap_only=true
 TAP-Middleware-Modes: tap, signature-only, challenge-only, flexible
-TAP-SDK-TS: registerTAPAgent(options), getTAPAgent(agentId), listTAPAgents(tapOnly?), createTAPSession(options), getTAPSession(sessionId)
-TAP-SDK-Python: register_tap_agent(name, ...), get_tap_agent(agent_id), list_tap_agents(tap_only?), create_tap_session(agent_id, user_context, intent), get_tap_session(session_id)
+TAP-SDK-TS: registerTAPAgent(options), getTAPAgent(agentId), listTAPAgents(tapOnly?), createTAPSession(options), getTAPSession(sessionId), getJWKS(), getKeyById(keyId), rotateAgentKey(agentId), createInvoice(data), getInvoice(id), verifyBrowsingIOU(invoiceId, token)
+TAP-SDK-Python: register_tap_agent(name, ...), get_tap_agent(agent_id), list_tap_agents(tap_only?), create_tap_session(agent_id, user_context, intent), get_tap_session(session_id), get_jwks(), get_key_by_id(key_id), rotate_agent_key(agent_id), create_invoice(data), get_invoice(id), verify_browsing_iou(invoice_id, token)
 TAP-Middleware-Import: import { createTAPVerifyMiddleware } from '@dupecom/botcha/middleware'
+
+# TAP FULL SPEC v0.16.0
+TAP-RFC-9421: Full compliance — @authority, @path, expires, nonce, tag params
+TAP-Nonce-Replay: 8-minute TTL nonce-based replay protection
+TAP-Tags: agent-browser-auth (browsing), agent-payer-auth (payment)
+TAP-Layer-2: Agentic Consumer Recognition — OIDC ID tokens, obfuscated identity, contextual data
+TAP-Layer-3: Agentic Payment Container — card metadata, credential hash, encrypted payload, Browsing IOU
+TAP-JWKS: GET /.well-known/jwks — JWK Set endpoint for key discovery
+TAP-Key-Rotation: POST /v1/agents/:id/tap/rotate-key — rotate keys, invalidate old
+TAP-402-Flow: POST /v1/invoices → GET /v1/invoices/:id → POST /v1/invoices/:id/verify-iou
+TAP-Edge-Verify: createTAPEdgeMiddleware for Cloudflare Workers CDN edge verification
+TAP-Visa-Federation: Trust keys from https://mcp.visa.com/.well-known/jwks (3-tier cache: memory → KV → HTTP)
 
 # EMBEDDED CHALLENGE (for bots visiting HTML pages)
 Embedded-Challenge: <script type="application/botcha+json">
@@ -1453,6 +1505,258 @@ export function getOpenApiSpec(version: string) {
           responses: {
             "200": { description: "TAP session details with time remaining" },
             "404": { description: "Session not found or expired" }
+          }
+        }
+      },
+      "/.well-known/jwks": {
+        get: {
+          summary: "Get JWK Set (Visa TAP spec standard)",
+          description: "Retrieve the JWK Set containing public keys for all TAP agents registered in your app. Follows Visa TAP specification standard.",
+          operationId: "getJWKS",
+          responses: {
+            "200": {
+              description: "JWK Set with array of keys",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      "keys": {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            "kty": { type: "string", description: "Key type (EC, RSA, OKP)" },
+                            "kid": { type: "string", description: "Key ID" },
+                            "use": { type: "string", description: "Public key use (sig)" },
+                            "alg": { type: "string", description: "Algorithm (ES256, RS256, EdDSA)" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/v1/keys": {
+        get: {
+          summary: "List keys or get key by ID",
+          description: "List all keys or get a specific key using ?keyID= query parameter (Visa compatibility).",
+          operationId: "getKeys",
+          parameters: [
+            {
+              name: "keyID",
+              in: "query",
+              schema: { type: "string" },
+              description: "Optional key ID for Visa TAP compatibility"
+            }
+          ],
+          responses: {
+            "200": { description: "Key list or specific key" }
+          }
+        }
+      },
+      "/v1/keys/{keyId}": {
+        get: {
+          summary: "Get key by ID",
+          description: "Retrieve a specific public key by key ID.",
+          operationId: "getKeyById",
+          parameters: [
+            {
+              name: "keyId",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": { description: "Public key details" },
+            "404": { description: "Key not found" }
+          }
+        }
+      },
+      "/v1/agents/{id}/tap/rotate-key": {
+        post: {
+          summary: "Rotate agent key pair",
+          description: "Generate a new key pair for the agent and invalidate the old one.",
+          operationId: "rotateAgentKey",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "algorithm": {
+                      type: "string",
+                      enum: ["ed25519", "ecdsa-p256-sha256", "rsa-pss-sha256"],
+                      description: "Algorithm for new key (default: ed25519)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Key rotated successfully" }
+          }
+        }
+      },
+      "/v1/invoices": {
+        post: {
+          summary: "Create invoice for 402 micropayment",
+          description: "Create an invoice for gated content. Used with Browsing IOU flow.",
+          operationId: "createInvoice",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["amount", "currency", "description"],
+                  properties: {
+                    "amount": { type: "integer", description: "Amount in cents" },
+                    "currency": { type: "string", description: "Currency code (USD, EUR, etc.)" },
+                    "description": { type: "string" },
+                    "metadata": { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "Invoice created" }
+          }
+        }
+      },
+      "/v1/invoices/{id}": {
+        get: {
+          summary: "Get invoice details",
+          operationId: "getInvoice",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": { description: "Invoice details" },
+            "404": { description: "Invoice not found" }
+          }
+        }
+      },
+      "/v1/invoices/{id}/verify-iou": {
+        post: {
+          summary: "Verify Browsing IOU",
+          description: "Verify a Browsing IOU (payment intent token) against an invoice.",
+          operationId: "verifyBrowsingIOU",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["iou_token"],
+                  properties: {
+                    "iou_token": { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "IOU verified" },
+            "400": { description: "Invalid IOU" }
+          }
+        }
+      },
+      "/v1/verify/consumer": {
+        post: {
+          summary: "Verify Agentic Consumer object (Layer 2)",
+          description: "Verify an agenticConsumer object including ID token, contextual data, and signature chain.",
+          operationId: "verifyConsumer",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agenticConsumer", "signature"],
+                  properties: {
+                    "agenticConsumer": {
+                      type: "object",
+                      properties: {
+                        "idToken": { type: "string", description: "OIDC ID token" },
+                        "country": { type: "string" },
+                        "postalCode": { type: "string" },
+                        "ipAddress": { type: "string" },
+                        "nonce": { type: "string" }
+                      }
+                    },
+                    "signature": { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Consumer verified" },
+            "400": { description: "Invalid consumer object" }
+          }
+        }
+      },
+      "/v1/verify/payment": {
+        post: {
+          summary: "Verify Agentic Payment Container (Layer 3)",
+          description: "Verify an agenticPaymentContainer object including card metadata, credential hash, and encrypted payload.",
+          operationId: "verifyPayment",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agenticPaymentContainer", "signature"],
+                  properties: {
+                    "agenticPaymentContainer": {
+                      type: "object",
+                      properties: {
+                        "lastFour": { type: "string" },
+                        "par": { type: "string", description: "Payment Account Reference" },
+                        "credentialHash": { type: "string" },
+                        "encryptedPayload": { type: "string" },
+                        "nonce": { type: "string" }
+                      }
+                    },
+                    "signature": { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Payment verified" },
+            "400": { description: "Invalid payment container" }
           }
         }
       }

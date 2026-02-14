@@ -362,14 +362,20 @@ curl -X POST "https://botcha.ai/v1/agents/register?app_id=app_abc123" \
 
 ## 🔏 Trusted Agent Protocol (TAP)
 
-BOTCHA v0.12.0 introduces the **Trusted Agent Protocol** — enterprise-grade cryptographic agent authentication using HTTP Message Signatures (RFC 9421).
+BOTCHA v0.16.0 implements the **complete Visa Trusted Agent Protocol** — enterprise-grade cryptographic agent authentication using HTTP Message Signatures (RFC 9421) with full Layer 2 (Consumer Recognition) and Layer 3 (Payment Container) support.
 
 ### Why TAP?
 
 - **Cryptographic Identity**: Agents register public keys and sign requests — no more shared secrets
+- **RFC 9421 Full Compliance**: Ed25519 (Visa recommended), ECDSA P-256, RSA-PSS with `@authority`, `@path`, `expires`, `nonce`, `tag` support
+- **Consumer Recognition (Layer 2)**: OIDC ID tokens with obfuscated consumer identity, contextual data
+- **Payment Container (Layer 3)**: Card metadata, credential hash verification, encrypted payment payloads, Browsing IOUs
 - **Capability Scoping**: Define exactly what an agent can do (`read:invoices`, `write:transfers`)
 - **Intent Verification**: Every session requires a declared intent that's validated against capabilities
 - **Trust Levels**: `basic`, `verified`, `enterprise` — different access tiers for different agents
+- **JWKS Infrastructure**: `/.well-known/jwks` for key discovery, Visa key federation
+- **402 Micropayments**: Invoice creation and Browsing IOU verification for gated content
+- **CDN Edge Verify**: Drop-in Cloudflare Workers middleware for merchant sites
 
 ### Registering a TAP Agent
 
@@ -417,6 +423,15 @@ curl -X POST https://botcha.ai/v1/sessions/tap \
 | `GET /v1/agents/tap` | List TAP-enabled agents for app |
 | `POST /v1/sessions/tap` | Create TAP session with intent validation |
 | `GET /v1/sessions/:id/tap` | Get TAP session info |
+| `GET /.well-known/jwks` | JWK Set for app's TAP agents (Visa spec standard) |
+| `GET /v1/keys` | List keys (supports ?keyID= for Visa compat) |
+| `GET /v1/keys/:keyId` | Get specific key by ID |
+| `POST /v1/agents/:id/tap/rotate-key` | Rotate agent's key pair |
+| `POST /v1/invoices` | Create invoice for gated content (402 flow) |
+| `GET /v1/invoices/:id` | Get invoice details |
+| `POST /v1/invoices/:id/verify-iou` | Verify Browsing IOU against invoice |
+| `POST /v1/verify/consumer` | Verify Agentic Consumer object (Layer 2) |
+| `POST /v1/verify/payment` | Verify Agentic Payment Container (Layer 3) |
 
 ### TAP SDK Methods
 
@@ -441,6 +456,16 @@ const session = await client.createTAPSession({
   user_context: 'user-hash',
   intent: { action: 'browse', resource: 'products', duration: 3600 },
 });
+
+// Get JWKS for key discovery
+const jwks = await client.getJWKS();
+
+// Rotate agent key
+await client.rotateAgentKey(agent.agent_id);
+
+// 402 Micropayment flow
+const invoice = await client.createInvoice({ amount: 100, description: 'Premium content' });
+await client.verifyBrowsingIOU(invoice.id, iouToken);
 ```
 
 **Python:**
@@ -461,6 +486,16 @@ async with BotchaClient(app_id="app_abc123") as client:
         user_context="user-hash",
         intent={"action": "browse", "resource": "products", "duration": 3600},
     )
+    
+    # Get JWKS for key discovery
+    jwks = await client.get_jwks()
+    
+    # Rotate agent key
+    await client.rotate_agent_key(agent.agent_id)
+    
+    # 402 Micropayment flow
+    invoice = await client.create_invoice({"amount": 100, "description": "Premium content"})
+    await client.verify_browsing_iou(invoice.id, iou_token)
 ```
 
 ### Express Middleware (Verification Modes)
@@ -478,7 +513,7 @@ app.use('/api', createTAPVerifyMiddleware({ mode: 'flexible', secret: process.en
 app.use('/api', createTAPVerifyMiddleware({ mode: 'challenge-only', secret: process.env.BOTCHA_SECRET }));
 ```
 
-> **Supported algorithms:** `ecdsa-p256-sha256`, `rsa-pss-sha256`. See [ROADMAP.md](./ROADMAP.md) for details.
+> **Supported algorithms:** `ed25519` (Visa recommended), `ecdsa-p256-sha256`, `rsa-pss-sha256`. See [ROADMAP.md](./ROADMAP.md) for details.
 
 ## 🔄 SSE Streaming Flow (AI-Native)
 
@@ -557,7 +592,7 @@ BOTCHA is designed to be auto-discoverable by AI agents through multiple standar
 All responses include these headers for agent discovery:
 
 ```http
-X-Botcha-Version: 0.15.0
+X-Botcha-Version: 0.16.0
 X-Botcha-Enabled: true
 X-Botcha-Methods: hybrid-challenge,speed-challenge,reasoning-challenge,standard-challenge
 X-Botcha-Docs: https://botcha.ai/openapi.json

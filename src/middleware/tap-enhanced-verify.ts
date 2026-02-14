@@ -68,7 +68,7 @@ const defaultTAPOptions: TAPBotchaOptions = {
   auditLogging: false,
   trustedIssuers: ['openclaw.ai', 'anthropic.com', 'openai.com'],
   maxSessionDuration: 3600,
-  signatureAlgorithms: ['ecdsa-p256-sha256', 'rsa-pss-sha256'],
+  signatureAlgorithms: ['ecdsa-p256-sha256', 'rsa-pss-sha256', 'ed25519'],
   requireCapabilities: []
 };
 

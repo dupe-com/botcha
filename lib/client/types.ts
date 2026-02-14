@@ -152,7 +152,8 @@ export interface RotateSecretResponse {
 
 export type TAPAction = 'browse' | 'compare' | 'purchase' | 'audit' | 'search';
 export type TAPTrustLevel = 'basic' | 'verified' | 'enterprise';
-export type TAPSignatureAlgorithm = 'ecdsa-p256-sha256' | 'rsa-pss-sha256';
+export type TAPSignatureAlgorithm = 'ecdsa-p256-sha256' | 'rsa-pss-sha256' | 'ed25519';
+export type TAPTag = 'agent-browser-auth' | 'agent-payer-auth';
 
 export interface TAPCapability {
   action: TAPAction;
@@ -180,6 +181,7 @@ export interface RegisterTAPAgentOptions {
   capabilities?: TAPCapability[];
   trust_level?: TAPTrustLevel;
   issuer?: string;
+  key_expires_at?: string;  // ISO 8601 expiration date
 }
 
 export interface TAPAgentResponse {
@@ -198,6 +200,7 @@ export interface TAPAgentResponse {
   has_public_key: boolean;
   key_fingerprint?: string;
   last_verified_at?: string | null;
+  key_expires_at?: string | null;
   public_key?: string;
 }
 
@@ -224,4 +227,124 @@ export interface TAPSessionResponse {
   created_at?: string;
   expires_at: string;
   time_remaining?: number;
+}
+
+// ============ JWK / JWKS Types ============
+
+export interface JWK {
+  kty: string;
+  kid: string;
+  use: string;
+  alg: string;
+  n?: string;
+  e?: string;
+  crv?: string;
+  x?: string;
+  y?: string;
+  agent_id?: string;
+  agent_name?: string;
+  expires_at?: string;
+}
+
+export interface JWKSet {
+  keys: JWK[];
+}
+
+// ============ Agentic Consumer Recognition Types ============
+
+export interface ContextualData {
+  countryCode?: string;
+  zip?: string;
+  ipAddress?: string;
+  deviceData?: Record<string, any>;
+}
+
+export interface IDTokenClaims {
+  iss: string;
+  sub: string;
+  aud: string | string[];
+  exp: number;
+  iat: number;
+  jti?: string;
+  auth_time?: number;
+  amr?: string[];
+  phone_number?: string;
+  phone_number_verified?: boolean;
+  phone_number_mask?: string;
+  email?: string;
+  email_verified?: boolean;
+  email_mask?: string;
+}
+
+export interface AgenticConsumerResult {
+  verified: boolean;
+  nonceLinked: boolean;
+  signatureValid: boolean;
+  idTokenValid?: boolean;
+  idTokenClaims?: IDTokenClaims;
+  contextualData?: ContextualData;
+  error?: string;
+}
+
+// ============ Agentic Payment Types ============
+
+export interface CardMetadata {
+  lastFour: string;
+  paymentAccountReference: string;
+  shortDescription?: string;
+  cardData?: Array<{
+    contentType: string;
+    content: { mimeType: string; width: number; height: number };
+  }>;
+}
+
+export interface CredentialHash {
+  hash: string;
+  algorithm: string;
+}
+
+export interface BrowsingIOU {
+  invoiceId: string;
+  amount: string;
+  cardAcceptorId: string;
+  acquirerId: string;
+  uri: string;
+  sequenceCounter: string;
+  paymentService: string;
+  kid: string;
+  alg: string;
+  signature: string;
+}
+
+// ============ Invoice Types (402 Flow) ============
+
+export interface CreateInvoiceOptions {
+  resource_uri: string;
+  amount: string;
+  currency: string;
+  card_acceptor_id: string;
+  description?: string;
+  ttl_seconds?: number;
+}
+
+export interface InvoiceResponse {
+  success: boolean;
+  invoice_id: string;
+  app_id: string;
+  resource_uri: string;
+  amount: string;
+  currency: string;
+  card_acceptor_id: string;
+  description?: string;
+  created_at: string;
+  expires_at: string;
+  status: 'pending' | 'fulfilled' | 'expired';
+}
+
+export interface VerifyIOUResponse {
+  success: boolean;
+  verified: boolean;
+  access_token?: string;
+  expires_at?: string;
+  error?: string;
 }

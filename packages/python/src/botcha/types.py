@@ -1,7 +1,7 @@
 """Type definitions for BOTCHA SDK."""
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List, Dict, Any, Union
 
 
 @dataclass
@@ -158,3 +158,145 @@ class TAPSessionResponse:
     created_at: str = ""
     expires_at: str = ""
     time_remaining: Optional[int] = None
+
+
+# ============ JWK / JWKS Types ============
+
+
+@dataclass
+class JWK:
+    """JSON Web Key"""
+
+    kty: str
+    kid: str
+    use: str
+    alg: str
+    n: Optional[str] = None
+    e: Optional[str] = None
+    crv: Optional[str] = None
+    x: Optional[str] = None
+    y: Optional[str] = None
+    agent_id: Optional[str] = None
+    agent_name: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+@dataclass
+class JWKSet:
+    """JSON Web Key Set"""
+
+    keys: List[JWK]
+
+
+# ============ Agentic Consumer Recognition Types ============
+
+
+@dataclass
+class ContextualData:
+    """Consumer contextual data (TAP Layer 2)"""
+
+    country_code: Optional[str] = None
+    zip: Optional[str] = None
+    ip_address: Optional[str] = None
+    device_data: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class IDTokenClaims:
+    """OIDC ID Token claims"""
+
+    iss: str = ""
+    sub: str = ""
+    aud: Union[str, List[str]] = ""
+    exp: int = 0
+    iat: int = 0
+    jti: Optional[str] = None
+    auth_time: Optional[int] = None
+    amr: Optional[List[str]] = None
+    phone_number: Optional[str] = None
+    phone_number_verified: Optional[bool] = None
+    phone_number_mask: Optional[str] = None
+    email: Optional[str] = None
+    email_verified: Optional[bool] = None
+    email_mask: Optional[str] = None
+
+
+@dataclass
+class AgenticConsumerResult:
+    """Result from agentic consumer verification"""
+
+    verified: bool
+    nonce_linked: bool
+    signature_valid: bool
+    id_token_valid: Optional[bool] = None
+    id_token_claims: Optional[IDTokenClaims] = None
+    contextual_data: Optional[ContextualData] = None
+    error: Optional[str] = None
+
+
+# ============ Agentic Payment Types ============
+
+
+@dataclass
+class CardMetadata:
+    """Card metadata from Agentic Payment Container"""
+
+    last_four: str = ""
+    payment_account_reference: str = ""
+    short_description: Optional[str] = None
+    card_data: Optional[List[Dict[str, Any]]] = None
+
+
+@dataclass
+class CredentialHash:
+    """Credential hash for payment verification"""
+
+    hash: str = ""
+    algorithm: str = ""
+
+
+@dataclass
+class BrowsingIOU:
+    """Browsing IOU for 402 micropayment flow"""
+
+    invoice_id: str = ""
+    amount: str = ""
+    card_acceptor_id: str = ""
+    acquirer_id: str = ""
+    uri: str = ""
+    sequence_counter: str = ""
+    payment_service: str = ""
+    kid: str = ""
+    alg: str = ""
+    signature: str = ""
+
+
+# ============ Invoice Types (402 Flow) ============
+
+
+@dataclass
+class InvoiceResponse:
+    """Invoice details for 402 flow"""
+
+    success: bool = False
+    invoice_id: str = ""
+    app_id: str = ""
+    resource_uri: str = ""
+    amount: str = ""
+    currency: str = ""
+    card_acceptor_id: str = ""
+    description: Optional[str] = None
+    created_at: str = ""
+    expires_at: str = ""
+    status: str = "pending"
+
+
+@dataclass
+class VerifyIOUResponse:
+    """IOU verification result"""
+
+    success: bool = False
+    verified: bool = False
+    access_token: Optional[str] = None
+    expires_at: Optional[str] = None
+    error: Optional[str] = None

@@ -743,6 +743,159 @@ class BotchaClient:
             time_remaining=data.get("time_remaining"),
         )
 
+    # ============ JWKS & KEY MANAGEMENT ============
+
+    async def get_jwks(self, app_id: Optional[str] = None) -> dict:
+        """Get the JWK Set for an app's TAP agents.
+
+        Fetches from /.well-known/jwks endpoint.
+
+        Args:
+            app_id: Optional app ID (uses default if not specified)
+
+        Returns:
+            JWK Set with keys array
+        """
+        params = {}
+        effective_app_id = app_id or self.app_id
+        if effective_app_id:
+            params["app_id"] = effective_app_id
+
+        response = await self._client.get(
+            f"{self.base_url}/.well-known/jwks", params=params
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_key_by_id(self, key_id: str) -> dict:
+        """Get a specific public key by key ID.
+
+        Args:
+            key_id: The key identifier
+
+        Returns:
+            JWK object with key data
+        """
+        response = await self._client.get(
+            f"{self.base_url}/v1/keys/{quote(key_id, safe='')}"
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def rotate_agent_key(
+        self,
+        agent_id: str,
+        public_key: str,
+        signature_algorithm: str,
+        key_expires_at: Optional[str] = None,
+    ) -> dict:
+        """Rotate an agent's key pair.
+
+        Args:
+            agent_id: The agent ID
+            public_key: New PEM-encoded public key
+            signature_algorithm: Algorithm (ecdsa-p256-sha256, rsa-pss-sha256, ed25519)
+            key_expires_at: Optional ISO 8601 expiration date
+
+        Returns:
+            Updated agent response
+        """
+        body: dict = {
+            "public_key": public_key,
+            "signature_algorithm": signature_algorithm,
+        }
+        if key_expires_at:
+            body["key_expires_at"] = key_expires_at
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(
+            f"{self.base_url}/v1/agents/{quote(agent_id, safe='')}/tap/rotate-key",
+            json=body,
+            headers=headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # ============ INVOICE & PAYMENT (402 Flow) ============
+
+    async def create_invoice(
+        self,
+        resource_uri: str,
+        amount: str,
+        currency: str,
+        card_acceptor_id: str,
+        description: Optional[str] = None,
+        ttl_seconds: Optional[int] = None,
+    ) -> dict:
+        """Create an invoice for gated content (402 micropayment flow).
+
+        Args:
+            resource_uri: URI of the gated resource
+            amount: Payment amount
+            currency: Currency code (e.g., 'USD')
+            card_acceptor_id: Merchant's card acceptor ID
+            description: Optional description
+            ttl_seconds: Optional TTL in seconds (default: 3600)
+
+        Returns:
+            Invoice details with invoice_id
+        """
+        body: dict = {
+            "resource_uri": resource_uri,
+            "amount": amount,
+            "currency": currency,
+            "card_acceptor_id": card_acceptor_id,
+        }
+        if description:
+            body["description"] = description
+        if ttl_seconds:
+            body["ttl_seconds"] = ttl_seconds
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(
+            f"{self.base_url}/v1/invoices", json=body, headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_invoice(self, invoice_id: str) -> dict:
+        """Get an invoice by ID.
+
+        Args:
+            invoice_id: The invoice ID
+
+        Returns:
+            Invoice details
+        """
+        response = await self._client.get(
+            f"{self.base_url}/v1/invoices/{quote(invoice_id, safe='')}"
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def verify_browsing_iou(self, invoice_id: str, iou: dict) -> dict:
+        """Verify a Browsing IOU against an invoice.
+
+        Args:
+            invoice_id: The invoice ID to verify against
+            iou: The Browsing IOU object
+
+        Returns:
+            Verification result with access_token if successful
+        """
+        response = await self._client.post(
+            f"{self.base_url}/v1/invoices/{quote(invoice_id, safe='')}/verify-iou",
+            json=iou,
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def close(self) -> None:
         """Close the underlying HTTP client and clear cached tokens."""
         self._token = None

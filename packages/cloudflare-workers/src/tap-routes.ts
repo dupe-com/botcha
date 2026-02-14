@@ -20,6 +20,19 @@ import {
 import { 
   parseTAPIntent
 } from './tap-verify.js';
+import { 
+  createInvoice, 
+  getInvoice, 
+  verifyPaymentContainer, 
+  verifyBrowsingIOU, 
+  build402Response,
+  fulfillInvoice,
+  parsePaymentContainer
+} from './tap-payment.js';
+import { 
+  parseAgenticConsumer, 
+  verifyAgenticConsumer 
+} from './tap-consumer.js';
 
 // ============ VALIDATION HELPERS ============
 
@@ -66,7 +79,7 @@ function validateTAPRegistration(body: any): {
     operator?: string;
     version?: string;
     public_key?: string;
-    signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256';
+    signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256' | 'ed25519';
     capabilities?: TAPCapability[];
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
@@ -83,13 +96,16 @@ function validateTAPRegistration(body: any): {
       return { valid: false, error: 'signature_algorithm required when public_key provided' };
     }
     
-    const validAlgorithms = ['ecdsa-p256-sha256', 'rsa-pss-sha256'];
+    const validAlgorithms = ['ecdsa-p256-sha256', 'rsa-pss-sha256', 'ed25519'];
     if (!validAlgorithms.includes(body.signature_algorithm)) {
       return { valid: false, error: `Unsupported algorithm. Supported: ${validAlgorithms.join(', ')}` };
     }
     
-    if (!body.public_key.includes('BEGIN PUBLIC KEY')) {
-      return { valid: false, error: 'Invalid PEM public key format' };
+    // PEM format or raw Ed25519 key (32-byte base64)
+    const isPEM = body.public_key.includes('BEGIN PUBLIC KEY');
+    const isRawEd25519 = body.signature_algorithm === 'ed25519' && !isPEM;
+    if (!isPEM && !isRawEd25519) {
+      return { valid: false, error: 'Invalid public key format. Provide PEM or raw Ed25519 base64 key.' };
     }
   }
   
@@ -463,6 +479,318 @@ export async function getTAPSessionRoute(c: Context) {
   }
 }
 
+// ============ TAP KEY ROTATION ============
+
+/**
+ * POST /v1/agents/:id/tap/rotate-key
+ * Rotate an agent's public key
+ */
+export async function rotateKeyRoute(c: Context) {
+  try {
+    const agentId = c.req.param('id');
+    if (!agentId) {
+      return c.json({ success: false, error: 'MISSING_AGENT_ID', message: 'Agent ID is required' }, 400);
+    }
+    
+    const appAccess = await validateAppAccess(c, true);
+    if (!appAccess.valid) {
+      return c.json({ success: false, error: appAccess.error, message: 'Authentication required' }, (appAccess.status || 401) as 401);
+    }
+    
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.public_key || !body.signature_algorithm) {
+      return c.json({ success: false, error: 'MISSING_FIELDS', message: 'public_key and signature_algorithm are required' }, 400);
+    }
+    
+    // Validate algorithm
+    const validAlgorithms = ['ecdsa-p256-sha256', 'rsa-pss-sha256', 'ed25519'];
+    if (!validAlgorithms.includes(body.signature_algorithm)) {
+      return c.json({ success: false, error: 'INVALID_ALGORITHM', message: `Unsupported algorithm. Supported: ${validAlgorithms.join(', ')}` }, 400);
+    }
+    
+    // Get existing agent
+    const agentResult = await getTAPAgent(c.env.AGENTS, agentId);
+    if (!agentResult.success || !agentResult.agent) {
+      return c.json({ success: false, error: 'AGENT_NOT_FOUND', message: 'Agent not found' }, 404);
+    }
+    
+    const agent = agentResult.agent;
+    
+    // Verify agent belongs to this app
+    if (agent.app_id !== appAccess.appId) {
+      return c.json({ success: false, error: 'UNAUTHORIZED', message: 'Agent does not belong to this app' }, 403);
+    }
+    
+    // Update agent with new key
+    agent.public_key = body.public_key;
+    agent.signature_algorithm = body.signature_algorithm;
+    agent.key_created_at = Date.now();
+    agent.key_expires_at = body.key_expires_at ? new Date(body.key_expires_at).getTime() : undefined;
+    agent.tap_enabled = true;
+    
+    await c.env.AGENTS.put(`agent:${agentId}`, JSON.stringify(agent));
+    
+    return c.json({
+      success: true,
+      agent_id: agent.agent_id,
+      message: 'Key rotated successfully',
+      has_public_key: true,
+      signature_algorithm: agent.signature_algorithm,
+      key_created_at: new Date(agent.key_created_at).toISOString(),
+      key_expires_at: agent.key_expires_at ? new Date(agent.key_expires_at).toISOString() : null,
+      key_fingerprint: agent.public_key ? await generateKeyFingerprint(agent.public_key) : undefined
+    });
+    
+  } catch (error) {
+    console.error('Key rotation error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
+// ============ TAP INVOICE ROUTES (402 FLOW) ============
+
+/**
+ * POST /v1/invoices
+ * Create an invoice for gated content
+ */
+export async function createInvoiceRoute(c: Context) {
+  try {
+    const appAccess = await validateAppAccess(c, true);
+    if (!appAccess.valid) {
+      return c.json({ success: false, error: appAccess.error, message: 'Authentication required' }, (appAccess.status || 401) as 401);
+    }
+    
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.resource_uri || !body.amount || !body.currency || !body.card_acceptor_id) {
+      return c.json({
+        success: false,
+        error: 'MISSING_FIELDS',
+        message: 'resource_uri, amount, currency, and card_acceptor_id are required'
+      }, 400);
+    }
+    
+    const result = await createInvoice(c.env.INVOICES, appAccess.appId!, {
+      resource_uri: body.resource_uri,
+      amount: body.amount,
+      currency: body.currency,
+      card_acceptor_id: body.card_acceptor_id,
+      description: body.description,
+      ttl_seconds: body.ttl_seconds,
+    });
+    
+    if (!result.success) {
+      return c.json({ success: false, error: 'INVOICE_CREATION_FAILED', message: result.error }, 500);
+    }
+    
+    return c.json({
+      success: true,
+      ...result.invoice,
+      created_at: new Date(result.invoice!.created_at).toISOString(),
+      expires_at: new Date(result.invoice!.expires_at).toISOString(),
+    }, 201);
+    
+  } catch (error) {
+    console.error('Invoice creation error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
+/**
+ * GET /v1/invoices/:id
+ * Get invoice details
+ */
+export async function getInvoiceRoute(c: Context) {
+  try {
+    const invoiceId = c.req.param('id');
+    if (!invoiceId) {
+      return c.json({ success: false, error: 'MISSING_INVOICE_ID', message: 'Invoice ID is required' }, 400);
+    }
+    
+    const result = await getInvoice(c.env.INVOICES, invoiceId);
+    if (!result.success) {
+      return c.json({ success: false, error: 'INVOICE_NOT_FOUND', message: result.error || 'Invoice not found' }, 404);
+    }
+    
+    return c.json({
+      success: true,
+      ...result.invoice,
+      created_at: new Date(result.invoice!.created_at).toISOString(),
+      expires_at: new Date(result.invoice!.expires_at).toISOString(),
+    });
+    
+  } catch (error) {
+    console.error('Invoice retrieval error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
+/**
+ * POST /v1/invoices/:id/verify-iou
+ * Verify a Browsing IOU against an invoice
+ */
+export async function verifyIOURoute(c: Context) {
+  try {
+    const invoiceId = c.req.param('id');
+    if (!invoiceId) {
+      return c.json({ success: false, error: 'MISSING_INVOICE_ID', message: 'Invoice ID is required' }, 400);
+    }
+    
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.browsingIOU) {
+      return c.json({ success: false, error: 'MISSING_IOU', message: 'browsingIOU object is required' }, 400);
+    }
+    
+    // Get the invoice
+    const invoiceResult = await getInvoice(c.env.INVOICES, invoiceId);
+    if (!invoiceResult.success || !invoiceResult.invoice) {
+      return c.json({ success: false, error: 'INVOICE_NOT_FOUND', message: 'Invoice not found or expired' }, 404);
+    }
+    
+    // Get the agent's public key for signature verification
+    const agentKeyId = body.browsingIOU.kid;
+    if (!agentKeyId) {
+      return c.json({ success: false, error: 'MISSING_KEY_ID', message: 'browsingIOU must include kid' }, 400);
+    }
+    
+    // For now, try to find the key in our agent registry
+    // Future: also check federated sources
+    let publicKey: string | null = null;
+    const agentIndex = await c.env.AGENTS.get(`app_agents:${invoiceResult.invoice.app_id}`, 'text');
+    if (agentIndex) {
+      const agentIds = JSON.parse(agentIndex) as string[];
+      for (const agentId of agentIds) {
+        const agentData = await c.env.AGENTS.get(`agent:${agentId}`, 'text');
+        if (agentData) {
+          const agent = JSON.parse(agentData);
+          if (agent.public_key) {
+            publicKey = agent.public_key;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!publicKey) {
+      return c.json({ success: false, error: 'KEY_NOT_FOUND', message: 'Could not resolve public key for verification' }, 404);
+    }
+    
+    // Verify the IOU
+    const iouResult = await verifyBrowsingIOU(
+      body.browsingIOU,
+      invoiceResult.invoice,
+      publicKey,
+      body.browsingIOU.alg || 'ES256'
+    );
+    
+    if (!iouResult.valid) {
+      return c.json({ success: false, verified: false, error: iouResult.error }, 400);
+    }
+    
+    // Fulfill the invoice
+    const fulfillResult = await fulfillInvoice(c.env.INVOICES, invoiceId, body.browsingIOU);
+    
+    return c.json({
+      success: true,
+      verified: true,
+      access_token: fulfillResult.access_token,
+      expires_at: fulfillResult.access_token ? new Date(Date.now() + 300000).toISOString() : undefined,
+    });
+    
+  } catch (error) {
+    console.error('IOU verification error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
+// ============ TAP VERIFICATION UTILITY ROUTES ============
+
+/**
+ * POST /v1/verify/consumer
+ * Verify an Agentic Consumer Recognition Object (utility endpoint)
+ */
+export async function verifyConsumerRoute(c: Context) {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    
+    const consumer = parseAgenticConsumer(body);
+    if (!consumer) {
+      return c.json({ success: false, error: 'INVALID_CONSUMER_OBJECT', message: 'Invalid or missing agenticConsumer object' }, 400);
+    }
+    
+    // Need header nonce and public key for full verification
+    const headerNonce = body.headerNonce || c.req.header('x-tap-nonce');
+    const publicKey = body.publicKey;
+    const algorithm = body.algorithm || consumer.alg;
+    
+    if (!publicKey) {
+      return c.json({
+        success: true,
+        parsed: true,
+        verified: false,
+        message: 'Consumer object parsed but publicKey required for signature verification',
+        contextualData: consumer.contextualData,
+        hasIdToken: Boolean(consumer.idToken),
+        nonceLinked: headerNonce ? consumer.nonce === headerNonce : null,
+      });
+    }
+    
+    const result = await verifyAgenticConsumer(consumer, headerNonce || '', publicKey, algorithm);
+    
+    return c.json({
+      success: true,
+      ...result,
+    });
+    
+  } catch (error) {
+    console.error('Consumer verification error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
+/**
+ * POST /v1/verify/payment
+ * Verify an Agentic Payment Container (utility endpoint)
+ */
+export async function verifyPaymentRoute(c: Context) {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    
+    const container = parsePaymentContainer(body);
+    if (!container) {
+      return c.json({ success: false, error: 'INVALID_PAYMENT_CONTAINER', message: 'Invalid or missing agenticPaymentContainer object' }, 400);
+    }
+    
+    const headerNonce = body.headerNonce || c.req.header('x-tap-nonce');
+    const publicKey = body.publicKey;
+    const algorithm = body.algorithm || container.alg;
+    
+    if (!publicKey) {
+      return c.json({
+        success: true,
+        parsed: true,
+        verified: false,
+        message: 'Payment container parsed but publicKey required for signature verification',
+        nonceLinked: headerNonce ? container.nonce === headerNonce : null,
+        hasCardMetadata: Boolean(container.cardMetadata),
+        hasCredentialHash: Boolean(container.credentialHash),
+        hasPayload: Boolean(container.payload),
+        hasBrowsingIOU: Boolean(container.browsingIOU),
+      });
+    }
+    
+    const result = await verifyPaymentContainer(container, headerNonce || '', publicKey, algorithm);
+    
+    return c.json({
+      success: true,
+      ...result,
+    });
+    
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
 // ============ UTILITY FUNCTIONS ============
 
 async function generateKeyFingerprint(publicKey: string): Promise<string> {
@@ -479,5 +807,11 @@ export default {
   getTAPAgentRoute,
   listTAPAgentsRoute,
   createTAPSessionRoute,
-  getTAPSessionRoute
+  getTAPSessionRoute,
+  rotateKeyRoute,
+  createInvoiceRoute,
+  getInvoiceRoute,
+  verifyIOURoute,
+  verifyConsumerRoute,
+  verifyPaymentRoute,
 };

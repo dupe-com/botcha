@@ -31,6 +31,12 @@ export type {
   TAPAgentListResponse,
   CreateTAPSessionOptions,
   TAPSessionResponse,
+  JWK,
+  JWKSet,
+  CreateInvoiceOptions,
+  InvoiceResponse,
+  BrowsingIOU,
+  VerifyIOUResponse,
 } from './types.js';
 
 import type {
@@ -50,6 +56,13 @@ import type {
   TAPAgentListResponse,
   CreateTAPSessionOptions,
   TAPSessionResponse,
+  TAPSignatureAlgorithm,
+  JWK,
+  JWKSet,
+  CreateInvoiceOptions,
+  InvoiceResponse,
+  BrowsingIOU,
+  VerifyIOUResponse,
 } from './types.js';
 
 // Export stream client
@@ -796,6 +809,173 @@ export class BotchaClient {
     }
 
     return await res.json() as TAPSessionResponse;
+  }
+
+  /**
+   * Helper method for making authenticated requests to the BOTCHA API
+   */
+  private async request(method: string, path: string, body?: any): Promise<any> {
+    const headers: Record<string, string> = {
+      'User-Agent': this.agentIdentity,
+    };
+
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    if (this.cachedToken) {
+      headers['Authorization'] = `Bearer ${this.cachedToken}`;
+    }
+
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error(
+        (errorBody.message as string) || `Request failed with status ${res.status}`
+      );
+    }
+
+    return await res.json();
+  }
+
+  // ============ JWKS & KEY MANAGEMENT ============
+
+  /**
+   * Get the JWK Set for an app's TAP agents.
+   * Fetches from /.well-known/jwks endpoint.
+   *
+   * @param appId - Optional app ID (uses client's appId if not specified)
+   * @returns JWK Set with keys array
+   * @throws Error if request fails
+   *
+   * @example
+   * ```typescript
+   * const jwks = await client.getJWKS();
+   * console.log(jwks.keys); // Array of JWK objects
+   * ```
+   */
+  async getJWKS(appId?: string): Promise<JWKSet> {
+    const params = appId ? `?app_id=${encodeURIComponent(appId)}` : this.appId ? `?app_id=${encodeURIComponent(this.appId)}` : '';
+    return await this.request('GET', `/.well-known/jwks${params}`) as JWKSet;
+  }
+
+  /**
+   * Get a specific public key by key ID.
+   *
+   * @param keyId - The key identifier (agent_id)
+   * @returns JWK object with key data
+   * @throws Error if key not found
+   *
+   * @example
+   * ```typescript
+   * const key = await client.getKeyById('agent_abc123');
+   * console.log(key.kid, key.alg);
+   * ```
+   */
+  async getKeyById(keyId: string): Promise<JWK> {
+    return await this.request('GET', `/v1/keys/${encodeURIComponent(keyId)}`) as JWK;
+  }
+
+  /**
+   * Rotate an agent's key pair.
+   *
+   * @param agentId - The agent ID
+   * @param options - Key rotation options including public_key and signature_algorithm
+   * @returns Updated agent response
+   * @throws Error if rotation fails
+   *
+   * @example
+   * ```typescript
+   * const agent = await client.rotateAgentKey('agent_abc123', {
+   *   public_key: '-----BEGIN PUBLIC KEY-----...',
+   *   signature_algorithm: 'ecdsa-p256-sha256',
+   *   key_expires_at: '2027-01-01T00:00:00Z',
+   * });
+   * ```
+   */
+  async rotateAgentKey(agentId: string, options: {
+    public_key: string;
+    signature_algorithm: TAPSignatureAlgorithm;
+    key_expires_at?: string;
+  }): Promise<TAPAgentResponse> {
+    return await this.request('POST', `/v1/agents/${encodeURIComponent(agentId)}/tap/rotate-key`, options) as TAPAgentResponse;
+  }
+
+  // ============ INVOICE & PAYMENT (402 Flow) ============
+
+  /**
+   * Create an invoice for gated content (402 micropayment flow).
+   *
+   * @param options - Invoice options including resource_uri, amount, currency, card_acceptor_id
+   * @returns Invoice details with invoice_id
+   * @throws Error if creation fails
+   *
+   * @example
+   * ```typescript
+   * const invoice = await client.createInvoice({
+   *   resource_uri: 'https://example.com/premium-content',
+   *   amount: '500',
+   *   currency: 'USD',
+   *   card_acceptor_id: 'CAID_ABC123',
+   *   description: 'Premium article access',
+   *   ttl_seconds: 3600,
+   * });
+   * console.log(invoice.invoice_id);
+   * ```
+   */
+  async createInvoice(options: CreateInvoiceOptions): Promise<InvoiceResponse> {
+    return await this.request('POST', '/v1/invoices', options) as InvoiceResponse;
+  }
+
+  /**
+   * Get an invoice by ID.
+   *
+   * @param invoiceId - The invoice ID
+   * @returns Invoice details including status and expiry
+   * @throws Error if invoice not found
+   *
+   * @example
+   * ```typescript
+   * const invoice = await client.getInvoice('inv_abc123');
+   * console.log(invoice.status, invoice.amount);
+   * ```
+   */
+  async getInvoice(invoiceId: string): Promise<InvoiceResponse> {
+    return await this.request('GET', `/v1/invoices/${encodeURIComponent(invoiceId)}`) as InvoiceResponse;
+  }
+
+  /**
+   * Verify a Browsing IOU against an invoice.
+   *
+   * @param invoiceId - The invoice ID to verify against
+   * @param iou - The Browsing IOU object with signature
+   * @returns Verification result with access_token if successful
+   * @throws Error if verification fails
+   *
+   * @example
+   * ```typescript
+   * const result = await client.verifyBrowsingIOU('inv_abc123', {
+   *   invoiceId: 'inv_abc123',
+   *   amount: '500',
+   *   cardAcceptorId: 'CAID_ABC123',
+   *   acquirerId: 'ACQ_XYZ',
+   *   uri: 'https://example.com/premium-content',
+   *   sequenceCounter: '1',
+   *   paymentService: 'agent-pay',
+   *   kid: 'agent_def456',
+   *   alg: 'ES256',
+   *   signature: 'base64-signature...',
+   * });
+   * console.log(result.verified, result.access_token);
+   * ```
+   */
+  async verifyBrowsingIOU(invoiceId: string, iou: BrowsingIOU): Promise<VerifyIOUResponse> {
+    return await this.request('POST', `/v1/invoices/${encodeURIComponent(invoiceId)}/verify-iou`, iou) as VerifyIOUResponse;
   }
 }
 

@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.15.0)
+## Current Status (v0.16.0)
 
 ### Shipped
 
@@ -46,8 +46,8 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - `human_link` field in `/v1/token/verify` response (primary human handoff mechanism)
 
 #### SDKs & Integration
-- `@dupecom/botcha` npm package (v0.13.1) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`)
-- `botcha` PyPI package (v0.4.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`)
+- `@dupecom/botcha` npm package (v0.16.0) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`, `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`)
+- `botcha` PyPI package (v0.5.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`)
 - `@botcha/verify` npm package (v0.1.0) — Server-side verification (Express/Hono)
 - `botcha-verify` PyPI package (v0.1.0) — Server-side verification (FastAPI/Django)
 - Express middleware (`botcha.verify()`)
@@ -178,6 +178,73 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - Express middleware: `createTAPVerifyMiddleware` via `@dupecom/botcha/middleware`
 - Express middleware with verification modes: `tap`, `signature-only`, `challenge-only`, `flexible`
 - KV storage: `SESSIONS` namespace for TAP sessions, `AGENTS` namespace for TAP agent data
+**Effort:** Large
+
+### ✅ TAP Full Spec Alignment — SHIPPED (v0.16.0)
+**What:** Full Visa TAP specification implementation with RFC 9421 compliance, consumer recognition (Layer 2), payment container (Layer 3), JWKS infrastructure, 402 micropayment flow, CDN edge verification, and Visa key federation.
+**Status:** Built and tested. BOTCHA now implements the complete Visa Trusted Agent Protocol spec across all three layers.
+**Implementation:**
+
+**Layer 1: RFC 9421 Full Compliance**
+- Ed25519 algorithm support (Visa's recommended algorithm, alongside existing ECDSA P-256 + RSA-PSS)
+- `@authority` + `@path` signature components (TAP standard derived components)
+- `expires`, `nonce`, `tag` params in Signature-Input header
+- Tags: `agent-browser-auth` (browsing) and `agent-payer-auth` (payment)
+- Nonce-based replay protection with KV-backed 8-minute TTL
+- Backward compatible with existing `sig1`/`@method` format
+
+**Layer 2: Agentic Consumer Recognition**
+- `agenticConsumer` JSON body object parsing + verification
+- ID Token (OIDC JWT) with obfuscated consumer identity claims
+- Contextual data (country, postal code, IP address, device fingerprint)
+- Nonce-linked signature chain (body signature linked to header via shared nonce)
+- `POST /v1/verify/consumer` utility endpoint for consumer object verification
+
+**Layer 3: Agentic Payment Container**
+- `agenticPaymentContainer` JSON body object parsing + verification
+- Card metadata (lastFour, PAR, card art URL)
+- Credential hash verification (SHA-256 of PAN + expiry + CVV)
+- Encrypted payment payload support
+- Browsing IOU for 402 micropayments
+- `POST /v1/verify/payment` utility endpoint for payment object verification
+
+**Public Key Infrastructure**
+- `GET /.well-known/jwks` — JWK Set endpoint for agent key discovery (Visa TAP spec standard)
+- `GET /v1/keys` + `GET /v1/keys/:keyId` — individual key lookup with ?keyID= query support
+- JWK format support (alongside PEM)
+- Key expiration and rotation (`POST /v1/agents/:id/tap/rotate-key`)
+
+**402 Micropayment / Browsing IOU Flow**
+- `POST /v1/invoices` — create invoice for gated content
+- `GET /v1/invoices/:id` — get invoice details
+- `POST /v1/invoices/:id/verify-iou` — verify Browsing IOU against invoice
+
+**CDN Edge Verification**
+- `createTAPEdgeMiddleware` — Hono middleware for Cloudflare Workers edge verification
+- Presets: `tapEdgeStrict`, `tapEdgeFlexible`, `tapEdgeDev`
+- Drop-in for any Cloudflare Worker merchant site
+
+**Visa Key Store Federation**
+- Fetches and trusts keys from external JWKS endpoints
+- Pre-configured for `https://mcp.visa.com/.well-known/jwks`
+- 3-tier caching: memory → KV → HTTP
+- Trust levels: high (Visa), medium, low
+
+**New Endpoints (11 total):**
+- `GET /.well-known/jwks` — JWK Set for app's TAP agents
+- `GET /v1/keys` — List keys (supports ?keyID= for Visa compat)
+- `GET /v1/keys/:keyId` — Get specific key by ID
+- `POST /v1/agents/:id/tap/rotate-key` — Rotate agent's key pair
+- `POST /v1/invoices` — Create invoice for gated content
+- `GET /v1/invoices/:id` — Get invoice details
+- `POST /v1/invoices/:id/verify-iou` — Verify Browsing IOU
+- `POST /v1/verify/consumer` — Verify Agentic Consumer object
+- `POST /v1/verify/payment` — Verify Agentic Payment Container
+
+**SDK Methods (6 per language):**
+- TypeScript: `getJWKS()`, `getKeyById()`, `rotateAgentKey()`, `createInvoice()`, `getInvoice()`, `verifyBrowsingIOU()`
+- Python: `get_jwks()`, `get_key_by_id()`, `rotate_agent_key()`, `create_invoice()`, `get_invoice()`, `verify_browsing_iou()`
+
 **Effort:** Large
 
 ---

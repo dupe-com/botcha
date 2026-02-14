@@ -12,7 +12,7 @@ routes = [
 
 # Environment variables
 [vars]
-BOTCHA_VERSION = "0.15.0"
+BOTCHA_VERSION = "0.16.0"
 # JWT_SECRET is stored securely via: wrangler secret put JWT_SECRET
 
 # KV namespace for challenge storage
@@ -39,6 +39,18 @@ id = "8107336e9e8c418b895c4134a53037fd"
 [[kv_namespaces]]
 binding = "SESSIONS"
 id = "268aa950ddec41e78d88e78526eaaa44"
+
+# Nonces KV namespace for TAP replay protection (8-min TTL)
+[[kv_namespaces]]
+binding = "NONCES"
+id = "tap-nonces-placeholder"
+preview_id = "tap-nonces-preview"
+
+# Invoices KV namespace for 402 micropayment flow
+[[kv_namespaces]]
+binding = "INVOICES"
+id = "tap-invoices-placeholder"
+preview_id = "tap-invoices-preview"
 
 # Analytics Engine binding for usage tracking
 [[analytics_engine_datasets]]

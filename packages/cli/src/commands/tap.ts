@@ -45,6 +45,29 @@ export interface StatusOptions extends TAPOptions {
   sessionId?: string;
 }
 
+export interface RotateKeyOptions extends TAPOptions {
+  agentId?: string;
+  publicKey: string;
+  algorithm: string;
+  keyExpiresAt?: string;
+}
+
+export interface InvoiceCreateOptions extends TAPOptions {
+  resource: string;
+  amount: string;
+  currency: string;
+  cardAcceptorId: string;
+}
+
+export interface InvoiceGetOptions extends TAPOptions {
+  invoiceId: string;
+}
+
+export interface InvoiceVerifyOptions extends TAPOptions {
+  invoiceId: string;
+  iouFile: string;
+}
+
 // ============ HELPERS ============
 
 function buildUrl(baseUrl: string, path: string, appId?: string): string {
@@ -362,6 +385,298 @@ export async function sessionCommand(options: SessionOptions): Promise<void> {
   }
 }
 
+// ============ JWKS ============
+
+export async function jwksCommand(options: TAPOptions): Promise<void> {
+  const output = new Output(options);
+  const startTime = Date.now();
+
+  try {
+    const { url, appId } = resolveConfig(options, output, { url: true });
+
+    output.debug('Fetching JWKS...');
+
+    const baseUrl = new URL(url).origin;
+    const endpoint = buildUrl(baseUrl, '/.well-known/jwks', appId);
+
+    const response = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
+    const data: any = await response.json();
+    const responseTime = Date.now() - startTime;
+
+    if (!response.ok) {
+      if (options.json) {
+        output.json({ success: false, error: data.error, message: data.message, status: response.status });
+      } else {
+        output.error(`JWKS fetch failed: ${data.message || response.statusText}`);
+      }
+      process.exit(1);
+    }
+
+    if (options.json) {
+      output.json({ success: true, ...data, responseTimeMs: responseTime });
+    } else {
+      output.success(`JWKS retrieved in ${responseTime}ms!`);
+      console.log('\n' + JSON.stringify(data, null, 2));
+    }
+  } catch (error) {
+    handleError(output, options, 'JWKS fetch failed', error);
+  }
+}
+
+// ============ ROTATE KEY ============
+
+export async function rotateKeyCommand(options: RotateKeyOptions): Promise<void> {
+  const output = new Output(options);
+  const startTime = Date.now();
+
+  try {
+    if (!options.publicKey) {
+      output.error('--public-key is required');
+      process.exit(1);
+    }
+    if (!options.algorithm) {
+      output.error('--algorithm is required (ecdsa-p256-sha256, rsa-pss-sha256, ed25519)');
+      process.exit(1);
+    }
+
+    const { url, agentId } = resolveConfig(options, output, { url: true, agentId: true });
+
+    output.debug(`Rotating key for agent ${agentId}...`);
+
+    // Read public key from file if it looks like a path
+    let publicKeyValue = options.publicKey;
+    if (publicKeyValue.startsWith('/') || publicKeyValue.startsWith('./') || publicKeyValue.endsWith('.pem')) {
+      try {
+        const fs = await import('fs/promises');
+        publicKeyValue = await fs.readFile(publicKeyValue, 'utf-8');
+        output.debug(`Read public key from file: ${options.publicKey}`);
+      } catch (err) {
+        output.error(`Failed to read public key file: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+    }
+
+    const baseUrl = new URL(url).origin;
+    const endpoint = buildUrl(baseUrl, `/v1/agents/${encodeURIComponent(agentId!)}/tap/rotate-key`);
+
+    const body: any = {
+      public_key: publicKeyValue,
+      algorithm: options.algorithm
+    };
+
+    if (options.keyExpiresAt) {
+      body.key_expires_at = options.keyExpiresAt;
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const data: any = await response.json();
+    const responseTime = Date.now() - startTime;
+
+    if (!response.ok) {
+      if (options.json) {
+        output.json({ success: false, error: data.error, message: data.message, status: response.status });
+      } else {
+        output.error(`Key rotation failed: ${data.message || response.statusText}`);
+      }
+      process.exit(1);
+    }
+
+    if (options.json) {
+      output.json({ success: true, ...data, responseTimeMs: responseTime });
+    } else {
+      output.success(`Key rotated in ${responseTime}ms!`);
+      output.section('Agent ID', data.agent_id);
+      output.section('Algorithm', data.signature_algorithm);
+      if (data.key_expires_at) output.section('Key Expires', data.key_expires_at);
+      if (data.key_rotated_at) output.section('Rotated At', data.key_rotated_at);
+    }
+  } catch (error) {
+    handleError(output, options, 'Key rotation failed', error);
+  }
+}
+
+// ============ INVOICE CREATE ============
+
+export async function invoiceCreateCommand(options: InvoiceCreateOptions): Promise<void> {
+  const output = new Output(options);
+  const startTime = Date.now();
+
+  try {
+    if (!options.resource || !options.amount || !options.currency || !options.cardAcceptorId) {
+      output.error('--resource, --amount, --currency, and --card-acceptor-id are required');
+      process.exit(1);
+    }
+
+    const { url, appId } = resolveConfig(options, output, { url: true, appId: true });
+
+    output.debug('Creating invoice...');
+
+    const baseUrl = new URL(url).origin;
+    const endpoint = buildUrl(baseUrl, '/v1/tap/invoices', appId);
+
+    const body = {
+      resource: options.resource,
+      amount: options.amount,
+      currency: options.currency,
+      card_acceptor_id: options.cardAcceptorId
+    };
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const data: any = await response.json();
+    const responseTime = Date.now() - startTime;
+
+    if (!response.ok) {
+      if (options.json) {
+        output.json({ success: false, error: data.error, message: data.message, status: response.status });
+      } else {
+        output.error(`Invoice creation failed: ${data.message || response.statusText}`);
+      }
+      process.exit(1);
+    }
+
+    if (options.json) {
+      output.json({ success: true, ...data, responseTimeMs: responseTime });
+    } else {
+      output.success(`Invoice created in ${responseTime}ms!`);
+      output.section('Invoice ID', data.invoice_id);
+      output.section('Resource', data.resource);
+      output.section('Amount', `${data.amount} ${data.currency}`);
+      output.section('Status', data.status);
+      if (data.expires_at) output.section('Expires', data.expires_at);
+    }
+  } catch (error) {
+    handleError(output, options, 'Invoice creation failed', error);
+  }
+}
+
+// ============ INVOICE GET ============
+
+export async function invoiceGetCommand(options: InvoiceGetOptions): Promise<void> {
+  const output = new Output(options);
+  const startTime = Date.now();
+
+  try {
+    if (!options.invoiceId) {
+      output.error('--invoice-id is required');
+      process.exit(1);
+    }
+
+    const { url, appId } = resolveConfig(options, output, { url: true });
+
+    output.debug(`Getting invoice ${options.invoiceId}...`);
+
+    const baseUrl = new URL(url).origin;
+    const endpoint = buildUrl(baseUrl, `/v1/tap/invoices/${encodeURIComponent(options.invoiceId)}`, appId);
+
+    const response = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
+    const data: any = await response.json();
+    const responseTime = Date.now() - startTime;
+
+    if (!response.ok) {
+      if (options.json) {
+        output.json({ success: false, error: data.error, message: data.message, status: response.status });
+      } else {
+        output.error(`Invoice not found: ${data.message || response.statusText}`);
+      }
+      process.exit(1);
+    }
+
+    if (options.json) {
+      output.json({ success: true, ...data, responseTimeMs: responseTime });
+    } else {
+      output.success(`Invoice retrieved in ${responseTime}ms!`);
+      output.section('Invoice ID', data.invoice_id);
+      output.section('Resource', data.resource);
+      output.section('Amount', `${data.amount} ${data.currency}`);
+      output.section('Status', data.status);
+      if (data.card_acceptor_id) output.section('Card Acceptor', data.card_acceptor_id);
+      if (data.created_at) output.section('Created', data.created_at);
+      if (data.expires_at) output.section('Expires', data.expires_at);
+      if (options.verbose) {
+        console.log('\n' + JSON.stringify(data, null, 2));
+      }
+    }
+  } catch (error) {
+    handleError(output, options, 'Invoice get failed', error);
+  }
+}
+
+// ============ INVOICE VERIFY ============
+
+export async function invoiceVerifyCommand(options: InvoiceVerifyOptions): Promise<void> {
+  const output = new Output(options);
+  const startTime = Date.now();
+
+  try {
+    if (!options.invoiceId || !options.iouFile) {
+      output.error('--invoice-id and --iou-file are required');
+      process.exit(1);
+    }
+
+    const { url, appId } = resolveConfig(options, output, { url: true });
+
+    output.debug(`Verifying invoice ${options.invoiceId}...`);
+
+    // Read IOU file
+    let iouData: any;
+    try {
+      const fs = await import('fs/promises');
+      const iouContent = await fs.readFile(options.iouFile, 'utf-8');
+      iouData = JSON.parse(iouContent);
+    } catch (err) {
+      output.error(`Failed to read IOU file: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+
+    const baseUrl = new URL(url).origin;
+    const endpoint = buildUrl(baseUrl, `/v1/tap/invoices/${encodeURIComponent(options.invoiceId)}/verify`, appId);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ iou: iouData }),
+    });
+
+    const data: any = await response.json();
+    const responseTime = Date.now() - startTime;
+
+    if (!response.ok) {
+      if (options.json) {
+        output.json({ success: false, error: data.error, message: data.message, status: response.status });
+      } else {
+        output.error(`Invoice verification failed: ${data.message || response.statusText}`);
+      }
+      process.exit(1);
+    }
+
+    if (options.json) {
+      output.json({ success: true, ...data, responseTimeMs: responseTime });
+    } else {
+      output.success(`Invoice verified in ${responseTime}ms!`);
+      output.section('Valid', data.valid ? 'YES' : 'NO');
+      output.section('Invoice ID', data.invoice_id);
+      if (data.amount_matched !== undefined) output.section('Amount Match', data.amount_matched ? 'YES' : 'NO');
+      if (data.signature_valid !== undefined) output.section('Signature Valid', data.signature_valid ? 'YES' : 'NO');
+      if (data.error) output.section('Error', data.error);
+      if (options.verbose) {
+        console.log('\n' + JSON.stringify(data, null, 2));
+      }
+    }
+  } catch (error) {
+    handleError(output, options, 'Invoice verification failed', error);
+  }
+}
+
 // ============ STATUS ============
 
 export async function statusCommand(options: StatusOptions): Promise<void> {
@@ -478,4 +793,9 @@ export default {
   list: listCommand,
   session: sessionCommand,
   status: statusCommand,
+  jwks: jwksCommand,
+  rotateKey: rotateKeyCommand,
+  invoiceCreate: invoiceCreateCommand,
+  invoiceGet: invoiceGetCommand,
+  invoiceVerify: invoiceVerifyCommand,
 };

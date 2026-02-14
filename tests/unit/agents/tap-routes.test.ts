@@ -251,7 +251,7 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
 
     expect(response.status).toBe(400);
     expect(data.success).toBe(false);
-    expect(data.message).toContain('Invalid PEM public key format');
+    expect(data.message).toContain('Invalid public key format');
   });
 
   test('should return 400 when capabilities is not an array', async () => {

@@ -6,7 +6,7 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.15.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.16.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
 | [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.5.0 | Python SDK on PyPI |
 | [`@botcha/verify`](../packages/verify/) | 0.1.0 | Server-side verification (Express/Hono middleware) |
@@ -25,6 +25,7 @@ The client SDK allows AI agents to:
 8. ✅ App creation with email verification (SDK methods)
 9. ✅ Account recovery and secret rotation (SDK methods)
 10. ✅ TAP (Trusted Agent Protocol) — cryptographic agent auth with public keys and capability-scoped sessions (SDK: `registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`)
+11. ✅ TAP Full Spec (v0.16.0) — Ed25519, JWKS, Consumer Recognition (Layer 2), Payment Container (Layer 3), 402 micropayments, CDN edge verify, Visa key federation (SDK: `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`)
 
 ## Implemented API
 
@@ -560,6 +561,12 @@ The Python SDK mirrors the TypeScript API:
 - `list_tap_agents(tap_only?)` → List TAP agents for app
 - `create_tap_session(agent_id, user_context, intent)` → Create TAP session
 - `get_tap_session(session_id)` → Get TAP session details
+- `get_jwks()` → Get JWK Set for app's TAP agents
+- `get_key_by_id(key_id)` → Get specific public key by ID
+- `rotate_agent_key(agent_id, algorithm?)` → Rotate agent's key pair
+- `create_invoice(invoice_data)` → Create 402 micropayment invoice
+- `get_invoice(invoice_id)` → Get invoice details
+- `verify_browsing_iou(invoice_id, iou_token)` → Verify Browsing IOU
 - `close()` - Close client and clear cached tokens
 
 **Constructor parameters:**
@@ -818,6 +825,7 @@ app.use('/api', createTAPVerifyMiddleware({
 
 | Algorithm | Key Type | Usage |
 |-----------|----------|-------|
+| `ed25519` | Ed25519 | **Visa recommended** — fastest, smallest keys, highest security |
 | `ecdsa-p256-sha256` | ECDSA P-256 | Recommended — compact keys, fast verification |
 | `rsa-pss-sha256` | RSA-PSS | Legacy compatibility — larger keys |
 
@@ -828,6 +836,250 @@ app.use('/api', createTAPVerifyMiddleware({
 | `basic` | Default. Agent registered without public key. |
 | `verified` | Agent registered with public key. |
 | `enterprise` | Agent with verified organizational identity. |
+
+## TAP Full Spec — JWKS & Key Management (v0.16.0+)
+
+BOTCHA v0.16.0 adds full Visa TAP specification support including JWKS endpoints, key rotation, and federated key trust.
+
+### Get JWKS (JWK Set)
+
+Retrieve the JWK Set for all TAP agents registered in your app. This endpoint follows the Visa TAP spec standard at `/.well-known/jwks`.
+
+```bash
+curl https://botcha.ai/.well-known/jwks
+```
+
+**TypeScript:**
+```typescript
+const client = new BotchaClient({ appId: 'app_abc123' });
+const jwks = await client.getJWKS();
+console.log(jwks.keys); // Array of JWK objects
+```
+
+**Python:**
+```python
+async with BotchaClient(app_id="app_abc123") as client:
+    jwks = await client.get_jwks()
+    print(jwks.keys)
+```
+
+### Get Key by ID
+
+Retrieve a specific public key by key ID. Supports `?keyID=` query parameter for Visa compatibility.
+
+```bash
+# Standard path parameter
+curl https://botcha.ai/v1/keys/key_abc123
+
+# Visa-compatible query parameter
+curl "https://botcha.ai/v1/keys?keyID=key_abc123"
+```
+
+**TypeScript:**
+```typescript
+const key = await client.getKeyById('key_abc123');
+console.log(key.public_key); // PEM-encoded public key
+```
+
+**Python:**
+```python
+key = await client.get_key_by_id("key_abc123")
+print(key.public_key)
+```
+
+### Rotate Agent Key
+
+Rotate an agent's public/private key pair. Generates a new Ed25519 or ECDSA key, updates the agent record, and invalidates the old key.
+
+```bash
+curl -X POST "https://botcha.ai/v1/agents/agent_abc123/tap/rotate-key?app_id=app_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"algorithm": "ed25519"}'
+```
+
+**TypeScript:**
+```typescript
+const rotated = await client.rotateAgentKey('agent_abc123', { algorithm: 'ed25519' });
+console.log(rotated.new_key_id);
+console.log(rotated.public_key); // Save this!
+```
+
+**Python:**
+```python
+rotated = await client.rotate_agent_key("agent_abc123", algorithm="ed25519")
+print(rotated.new_key_id)
+print(rotated.public_key)
+```
+
+## TAP Full Spec — 402 Micropayments (v0.16.0+)
+
+BOTCHA v0.16.0 implements the Browsing IOU flow for 402 Payment Required micropayment challenges.
+
+### Create Invoice
+
+Create an invoice for gated content. The invoice can be used with a Browsing IOU to verify payment intent.
+
+```bash
+curl -X POST "https://botcha.ai/v1/invoices?app_id=app_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 100,
+    "currency": "USD",
+    "description": "Premium API access",
+    "metadata": {"resource": "/api/premium"}
+  }'
+```
+
+**Response:**
+```json
+{
+  "invoice_id": "inv_abc123",
+  "amount": 100,
+  "currency": "USD",
+  "status": "pending",
+  "created_at": "2026-02-14T12:00:00Z"
+}
+```
+
+**TypeScript:**
+```typescript
+const invoice = await client.createInvoice({
+  amount: 100,
+  currency: 'USD',
+  description: 'Premium API access',
+  metadata: { resource: '/api/premium' }
+});
+console.log(invoice.invoice_id);
+```
+
+**Python:**
+```python
+invoice = await client.create_invoice({
+    "amount": 100,
+    "currency": "USD",
+    "description": "Premium API access",
+    "metadata": {"resource": "/api/premium"}
+})
+print(invoice.invoice_id)
+```
+
+### Get Invoice
+
+Retrieve invoice details by ID.
+
+```bash
+curl https://botcha.ai/v1/invoices/inv_abc123
+```
+
+**TypeScript:**
+```typescript
+const invoice = await client.getInvoice('inv_abc123');
+console.log(invoice.status); // pending, paid, expired
+```
+
+**Python:**
+```python
+invoice = await client.get_invoice("inv_abc123")
+print(invoice.status)
+```
+
+### Verify Browsing IOU
+
+Verify a Browsing IOU (payment intent token) against an invoice. Used in 402 Payment Required flows where the agent promises to pay.
+
+```bash
+curl -X POST https://botcha.ai/v1/invoices/inv_abc123/verify-iou \
+  -H "Content-Type: application/json" \
+  -d '{"iou_token": "eyJ..."}'
+```
+
+**Response:**
+```json
+{
+  "verified": true,
+  "invoice_id": "inv_abc123",
+  "amount": 100,
+  "agent_id": "agent_xyz789",
+  "expires_at": "2026-02-14T13:00:00Z"
+}
+```
+
+**TypeScript:**
+```typescript
+const verified = await client.verifyBrowsingIOU('inv_abc123', iouToken);
+if (verified.verified) {
+  console.log('Payment intent verified, grant access');
+}
+```
+
+**Python:**
+```python
+verified = await client.verify_browsing_iou("inv_abc123", iou_token)
+if verified.verified:
+    print("Payment intent verified, grant access")
+```
+
+## TAP Full Spec — Consumer & Payment Verification (v0.16.0+)
+
+BOTCHA v0.16.0 adds Layer 2 (Agentic Consumer Recognition) and Layer 3 (Agentic Payment Container) verification utilities.
+
+### Verify Agentic Consumer (Layer 2)
+
+Verify an `agenticConsumer` object including ID token, contextual data, and signature chain.
+
+```bash
+curl -X POST https://botcha.ai/v1/verify/consumer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agenticConsumer": {
+      "idToken": "eyJ...",
+      "country": "US",
+      "postalCode": "12345",
+      "ipAddress": "203.0.113.42",
+      "nonce": "abc123"
+    },
+    "signature": "..."
+  }'
+```
+
+**Response:**
+```json
+{
+  "verified": true,
+  "consumer_id": "consumer_obfuscated_hash",
+  "country": "US",
+  "trust_score": 0.95
+}
+```
+
+### Verify Agentic Payment Container (Layer 3)
+
+Verify an `agenticPaymentContainer` object including card metadata, credential hash, and encrypted payload.
+
+```bash
+curl -X POST https://botcha.ai/v1/verify/payment \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agenticPaymentContainer": {
+      "lastFour": "1234",
+      "par": "Q1J4AwSWD4Dx6q1DTo0MB21XDAV76",
+      "credentialHash": "abc...",
+      "encryptedPayload": "...",
+      "nonce": "xyz789"
+    },
+    "signature": "..."
+  }'
+```
+
+**Response:**
+```json
+{
+  "verified": true,
+  "card_type": "visa",
+  "credential_valid": true,
+  "par": "Q1J4AwSWD4Dx6q1DTo0MB21XDAV76"
+}
+```
 
 ## Future: Go SDK
 
