@@ -10,8 +10,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["lib/**/*", "src/**/*"],
+  "include": ["lib/**/*", "src/**/*", "packages/**/*"],
   "exclude": ["node_modules", "dist"]
 }

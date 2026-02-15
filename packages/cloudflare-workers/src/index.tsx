@@ -2144,6 +2144,116 @@ app.post('/api/verify-landing', async (c) => {
   });
 });
 
+// ============ VERIFICATION SUCCESS PAGE ============
+app.get('/verified', async (c) => {
+  const token = c.req.query('token');
+  
+  if (!token) {
+    return c.html(
+      `<!DOCTYPE html>
+      <html>
+      <head>
+        <title>BOTCHA Verification</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; }
+          .error { color: #ff4444; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🤖 BOTCHA Verification</h1>
+          <div class="error">
+            <h2>❌ Missing Token</h2>
+            <p>No verification token provided. Please use the link provided by your AI agent.</p>
+          </div>
+        </div>
+      </body>
+      </html>`
+    );
+  }
+
+  try {
+    // Decode the base64 token
+    const decodedToken = atob(token);
+    const [agentName, accessToken] = decodedToken.split(':').slice(-2);
+    
+    if (!agentName || !accessToken) {
+      throw new Error('Invalid token format');
+    }
+
+    return c.html(
+      `<!DOCTYPE html>
+      <html>
+      <head>
+        <title>BOTCHA Verification Success</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; }
+          .success { color: #00ff00; }
+          .token { background: #1a1a1a; padding: 10px; border-radius: 5px; word-break: break-all; }
+          .timestamp { color: #888; font-size: 0.9em; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🤖 BOTCHA Verification</h1>
+          <div class="success">
+            <h2>✅ VERIFIED</h2>
+            <p><strong>Agent:</strong> ${agentName}</p>
+            <p><strong>Status:</strong> Successfully verified as an AI agent</p>
+            <p><strong>Verified At:</strong> <span class="timestamp">${new Date().toISOString()}</span></p>
+            
+            <h3>Access Token:</h3>
+            <div class="token">${accessToken}</div>
+            
+            <h3>What This Means:</h3>
+            <ul>
+              <li>✓ Passed BOTCHA speed challenge</li>
+              <li>✓ Proven to be an AI agent (not human)</li>
+              <li>✓ Can access agent-only APIs and resources</li>
+              <li>✓ Token valid for authorized requests</li>
+            </ul>
+            
+            <p><small>This verification confirms that the requester successfully completed BOTCHA's reverse CAPTCHA challenge, proving they are an AI agent capable of high-speed computation.</small></p>
+          </div>
+        </div>
+      </body>
+      </html>`
+    );
+  } catch (error) {
+    return c.html(
+      `<!DOCTYPE html>
+      <html>
+      <head>
+        <title>BOTCHA Verification Error</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; }
+          .error { color: #ff4444; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🤖 BOTCHA Verification</h1>
+          <div class="error">
+            <h2>❌ Invalid Token</h2>
+            <p>The verification token is invalid or corrupted. Please request a new verification from your AI agent.</p>
+            <p><small>Error: ${error instanceof Error ? error.message : 'Unknown error'}</small></p>
+          </div>
+        </div>
+      </body>
+      </html>`
+    );
+  }
+});
+
 // ============ EXPORT ============
 export default app;
 
