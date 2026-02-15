@@ -52,6 +52,7 @@ export interface TAPBotchaOptions {
   // Storage (for Cloudflare Workers integration)
   agentsKV?: any;                 // KV namespace for agents
   sessionsKV?: any;               // KV namespace for sessions
+  noncesKV?: any;                 // KV namespace for nonce replay protection
 }
 
 const defaultTAPOptions: TAPBotchaOptions = {
@@ -185,7 +186,7 @@ async function performFullTAPVerification(
   const agent = agentResult.agent;
   
   // Verify cryptographic signature
-  const cryptoResult = await verifyCryptographicSignature(req, agent);
+  const cryptoResult = await verifyCryptographicSignature(req, agent, opts);
   
   // Verify computational challenge
   const challengeResult = await verifyComputationalChallenge(req);
@@ -266,7 +267,7 @@ async function performSignatureOnlyVerification(
   }
   
   // Verify signature
-  const cryptoResult = await verifyCryptographicSignature(req, agentResult.agent);
+  const cryptoResult = await verifyCryptographicSignature(req, agentResult.agent, opts);
   
   return {
     verified: cryptoResult.valid,
@@ -340,7 +341,8 @@ async function handleVerificationFallback(
 
 async function verifyCryptographicSignature(
   req: Request,
-  agent: TAPAgent
+  agent: TAPAgent,
+  opts: TAPBotchaOptions
 ): Promise<{ valid: boolean; error?: string }> {
   if (!agent.public_key || !agent.signature_algorithm) {
     return { valid: false, error: 'Agent has no cryptographic key configured' };
@@ -356,7 +358,8 @@ async function verifyCryptographicSignature(
   return await verifyHTTPMessageSignature(
     verificationRequest,
     agent.public_key,
-    agent.signature_algorithm
+    agent.signature_algorithm,
+    opts.noncesKV || null
   );
 }
 

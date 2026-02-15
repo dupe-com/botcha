@@ -13,7 +13,7 @@
  */
 
 import type { Context } from 'hono';
-import { extractBearerToken, verifyToken } from './auth.js';
+import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
 import {
   issueAttestation,
   getAttestation,
@@ -26,6 +26,19 @@ import {
 
 // ============ VALIDATION HELPERS ============
 
+function getVerificationPublicKey(env: any) {
+  const rawSigningKey = env?.JWT_SIGNING_KEY;
+  if (!rawSigningKey) return undefined;
+
+  try {
+    const signingKey = JSON.parse(rawSigningKey) as ES256SigningKeyJWK;
+    return getSigningPublicKeyJWK(signingKey);
+  } catch {
+    console.error('Failed to parse JWT_SIGNING_KEY for attestation route verification');
+    return undefined;
+  }
+}
+
 async function validateAppAccess(c: Context, requireAuth: boolean = true): Promise<{
   valid: boolean;
   appId?: string;
@@ -33,25 +46,32 @@ async function validateAppAccess(c: Context, requireAuth: boolean = true): Promi
   status?: number;
 }> {
   const queryAppId = c.req.query('app_id');
-  
-  let jwtAppId: string | undefined;
   const authHeader = c.req.header('authorization');
   const token = extractBearerToken(authHeader);
-  
-  if (token) {
-    const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
-    if (result.valid && result.payload) {
-      jwtAppId = (result.payload as any).app_id;
+
+  if (!token) {
+    if (!requireAuth) {
+      return { valid: true, appId: queryAppId };
     }
+    return { valid: false, error: 'UNAUTHORIZED', status: 401 };
   }
-  
-  const appId = queryAppId || jwtAppId;
-  
-  if (requireAuth && !appId) {
-    return { valid: false, error: 'MISSING_APP_ID', status: 401 };
+
+  const publicKey = getVerificationPublicKey(c.env);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+  if (!result.valid || !result.payload) {
+    return { valid: false, error: 'INVALID_TOKEN', status: 401 };
   }
-  
-  return { valid: true, appId };
+
+  const jwtAppId = (result.payload as any).app_id as string | undefined;
+  if (!jwtAppId) {
+    return { valid: false, error: 'MISSING_APP_ID', status: 403 };
+  }
+
+  if (queryAppId && queryAppId !== jwtAppId) {
+    return { valid: false, error: 'APP_ID_MISMATCH', status: 403 };
+  }
+
+  return { valid: true, appId: jwtAppId };
 }
 
 // ============ ROUTE HANDLERS ============

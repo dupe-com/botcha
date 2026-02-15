@@ -89,6 +89,11 @@ const TEST_SESSION_ID = 'session_test12345678';
 describe('TAP Routes - registerTAPAgentRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(extractBearerToken).mockReturnValue('mock-jwt-token');
+    vi.mocked(verifyToken).mockResolvedValue({
+      valid: true,
+      payload: { app_id: TEST_APP_ID } as any,
+    });
   });
 
   test('should register agent successfully with query param app_id', async () => {
@@ -183,7 +188,7 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
 
     expect(response.status).toBe(401);
     expect(data.success).toBe(false);
-    expect(data.error).toBe('MISSING_APP_ID');
+    expect(data.error).toBe('UNAUTHORIZED');
   });
 
   test('should return 400 when name is missing', async () => {
@@ -395,6 +400,11 @@ describe('TAP Routes - getTAPAgentRoute', () => {
 describe('TAP Routes - listTAPAgentsRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(extractBearerToken).mockReturnValue('mock-jwt-token');
+    vi.mocked(verifyToken).mockResolvedValue({
+      valid: true,
+      payload: { app_id: TEST_APP_ID } as any,
+    });
   });
 
   test('should list all agents for app successfully', async () => {
@@ -496,7 +506,7 @@ describe('TAP Routes - listTAPAgentsRoute', () => {
 
     expect(response.status).toBe(401);
     expect(data.success).toBe(false);
-    expect(data.error).toBe('MISSING_APP_ID');
+    expect(data.error).toBe('UNAUTHORIZED');
   });
 
   test('should authenticate with JWT token', async () => {

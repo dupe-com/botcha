@@ -65,7 +65,16 @@ export function botchaVerify(options: BotchaVerifyOptions): MiddlewareHandler<{ 
             error: 'Missing Authorization header with Bearer token',
             clientIp: getClientIp(c),
           });
-          return;
+          if (c.finalized) {
+            return;
+          }
+          return c.json(
+            {
+              error: 'Unauthorized',
+              message: 'Missing Authorization header with Bearer token',
+            },
+            401
+          );
         }
         return c.json(
           {
@@ -89,7 +98,16 @@ export function botchaVerify(options: BotchaVerifyOptions): MiddlewareHandler<{ 
             error: result.error || 'Token verification failed',
             clientIp,
           });
-          return;
+          if (c.finalized) {
+            return;
+          }
+          return c.json(
+            {
+              error: 'Unauthorized',
+              message: result.error || 'Token verification failed',
+            },
+            401
+          );
         }
         return c.json(
           {
@@ -112,7 +130,16 @@ export function botchaVerify(options: BotchaVerifyOptions): MiddlewareHandler<{ 
           error: errorMessage,
           clientIp: getClientIp(c),
         });
-        return;
+        if (c.finalized) {
+          return;
+        }
+        return c.json(
+          {
+            error: 'Internal Server Error',
+            message: 'Failed to verify token',
+          },
+          500
+        );
       }
 
       return c.json(

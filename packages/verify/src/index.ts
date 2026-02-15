@@ -17,18 +17,38 @@ export type { BotchaTokenPayload, BotchaVerifyOptions, VerificationResult, Verif
  * createRemoteJWKSet already handles internal caching and rotation,
  * so we just avoid re-creating the function on every call.
  */
-const jwksCache = new Map<string, (protectedHeader?: JWSHeaderParameters, token?: FlattenedJWSInput) => Promise<KeyLike | Uint8Array>>();
+type JwksResolver = (
+  protectedHeader?: JWSHeaderParameters,
+  token?: FlattenedJWSInput
+) => Promise<KeyLike | Uint8Array>;
+
+type JwksCacheEntry = {
+  resolver: JwksResolver;
+  expiresAt: number;
+};
+
+const DEFAULT_JWKS_CACHE_TTL_SECONDS = 3600;
+const jwksCache = new Map<string, JwksCacheEntry>();
 
 /**
  * Get or create a cached JWKS key set function for the given URL.
  */
-function getJWKS(jwksUrl: string): (protectedHeader?: JWSHeaderParameters, token?: FlattenedJWSInput) => Promise<KeyLike | Uint8Array> {
-  let jwks = jwksCache.get(jwksUrl);
-  if (!jwks) {
-    jwks = createRemoteJWKSet(new URL(jwksUrl));
-    jwksCache.set(jwksUrl, jwks);
+function getJWKS(jwksUrl: string, jwksCacheTtl?: number): JwksResolver {
+  const ttlSeconds = Math.max(1, jwksCacheTtl ?? DEFAULT_JWKS_CACHE_TTL_SECONDS);
+  const now = Date.now();
+  const cached = jwksCache.get(jwksUrl);
+
+  if (cached && cached.expiresAt > now) {
+    return cached.resolver;
   }
-  return jwks;
+
+  const resolver = createRemoteJWKSet(new URL(jwksUrl));
+  jwksCache.set(jwksUrl, {
+    resolver,
+    expiresAt: now + ttlSeconds * 1000,
+  });
+
+  return resolver;
 }
 
 /**
@@ -70,13 +90,13 @@ export async function verifyBotchaToken(
     if (options.jwksUrl && options.secret) {
       // Both provided: try JWKS first, fall back to secret
       try {
-        payload = (await verifyWithJWKS(token, options.jwksUrl)).payload;
+        payload = (await verifyWithJWKS(token, options.jwksUrl, options.jwksCacheTtl)).payload;
       } catch {
         payload = (await verifyWithSecret(token, options.secret)).payload;
       }
     } else if (options.jwksUrl) {
       // JWKS-only mode
-      const result = await verifyWithJWKS(token, options.jwksUrl);
+      const result = await verifyWithJWKS(token, options.jwksUrl, options.jwksCacheTtl);
       payload = result.payload;
 
       // Validate issuer when using JWKS mode
@@ -167,8 +187,12 @@ export async function verifyBotchaToken(
  * Verify token using JWKS (asymmetric, ES256).
  * Accepts both ES256 and HS256 tokens to support the migration period.
  */
-async function verifyWithJWKS(token: string, jwksUrl: string): Promise<JWTVerifyResult> {
-  const jwks = getJWKS(jwksUrl);
+async function verifyWithJWKS(
+  token: string,
+  jwksUrl: string,
+  jwksCacheTtl?: number
+): Promise<JWTVerifyResult> {
+  const jwks = getJWKS(jwksUrl, jwksCacheTtl);
   return jwtVerify(token, jwks, {
     algorithms: ['ES256', 'HS256'],
   });

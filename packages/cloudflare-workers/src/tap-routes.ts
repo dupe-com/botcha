@@ -6,7 +6,7 @@
  */
 
 import type { Context } from 'hono';
-import { extractBearerToken, verifyToken } from './auth.js';
+import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
 import { 
   registerTAPAgent, 
   getTAPAgent, 
@@ -36,40 +36,69 @@ import {
 
 // ============ VALIDATION HELPERS ============
 
+function getVerificationPublicKey(env: any) {
+  const rawSigningKey = env?.JWT_SIGNING_KEY;
+  if (!rawSigningKey) return undefined;
+
+  try {
+    const signingKey = JSON.parse(rawSigningKey) as ES256SigningKeyJWK;
+    return getSigningPublicKeyJWK(signingKey);
+  } catch {
+    console.error('Failed to parse JWT_SIGNING_KEY for TAP verification');
+    return undefined;
+  }
+}
+
 async function validateAppAccess(c: Context, requireAuth: boolean = true): Promise<{
   valid: boolean;
   appId?: string;
   error?: string;
   status?: number;
 }> {
-  // Extract app_id from query param or JWT
   const queryAppId = c.req.query('app_id');
-  
-  // Try to get from JWT Bearer token
-  let jwtAppId: string | undefined;
   const authHeader = c.req.header('authorization');
   const token = extractBearerToken(authHeader);
-  
-  if (token) {
-    const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
-    if (result.valid && result.payload) {
-      jwtAppId = (result.payload as any).app_id;
+
+  if (!token) {
+    if (!requireAuth) {
+      return { valid: true, appId: queryAppId };
     }
-  }
-  
-  const appId = queryAppId || jwtAppId;
-  
-  if (requireAuth && !appId) {
+
     return {
       valid: false,
-      error: 'MISSING_APP_ID',
+      error: 'UNAUTHORIZED',
       status: 401
     };
   }
-  
-  // TODO: Validate app exists (integrate with existing app validation)
-  
-  return { valid: true, appId };
+
+  const publicKey = getVerificationPublicKey(c.env);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+  if (!result.valid || !result.payload) {
+    return {
+      valid: false,
+      error: 'INVALID_TOKEN',
+      status: 401
+    };
+  }
+
+  const jwtAppId = (result.payload as any).app_id as string | undefined;
+  if (!jwtAppId) {
+    return {
+      valid: false,
+      error: 'MISSING_APP_ID',
+      status: 403
+    };
+  }
+
+  if (queryAppId && queryAppId !== jwtAppId) {
+    return {
+      valid: false,
+      error: 'APP_ID_MISMATCH',
+      status: 403
+    };
+  }
+
+  return { valid: true, appId: jwtAppId };
 }
 
 function validateTAPRegistration(body: any): {
@@ -652,25 +681,22 @@ export async function verifyIOURoute(c: Context) {
       return c.json({ success: false, error: 'MISSING_KEY_ID', message: 'browsingIOU must include kid' }, 400);
     }
     
-    // For now, try to find the key in our agent registry
-    // Future: also check federated sources
-    let publicKey: string | null = null;
-    const agentIndex = await c.env.AGENTS.get(`app_agents:${invoiceResult.invoice.app_id}`, 'text');
-    if (agentIndex) {
-      const agentIds = JSON.parse(agentIndex) as string[];
-      for (const agentId of agentIds) {
-        const agentData = await c.env.AGENTS.get(`agent:${agentId}`, 'text');
-        if (agentData) {
-          const agent = JSON.parse(agentData);
-          if (agent.public_key) {
-            publicKey = agent.public_key;
-            break;
-          }
-        }
-      }
+    // Resolve key by kid (agent/key identifier) and enforce same-app ownership.
+    const agentData = await c.env.AGENTS.get(`agent:${agentKeyId}`, 'text');
+    if (!agentData) {
+      return c.json({ success: false, error: 'KEY_NOT_FOUND', message: `No TAP key found for kid: ${agentKeyId}` }, 404);
     }
-    
-    if (!publicKey) {
+
+    const agent = JSON.parse(agentData);
+    if (agent.app_id !== invoiceResult.invoice.app_id) {
+      return c.json({
+        success: false,
+        error: 'KEY_APP_MISMATCH',
+        message: 'Key does not belong to the app that issued this invoice',
+      }, 403);
+    }
+
+    if (!agent.public_key) {
       return c.json({ success: false, error: 'KEY_NOT_FOUND', message: 'Could not resolve public key for verification' }, 404);
     }
     
@@ -678,8 +704,8 @@ export async function verifyIOURoute(c: Context) {
     const iouResult = await verifyBrowsingIOU(
       body.browsingIOU,
       invoiceResult.invoice,
-      publicKey,
-      body.browsingIOU.alg || 'ES256'
+      agent.public_key,
+      body.browsingIOU.alg || agent.signature_algorithm || 'ES256'
     );
     
     if (!iouResult.valid) {
@@ -688,6 +714,14 @@ export async function verifyIOURoute(c: Context) {
     
     // Fulfill the invoice
     const fulfillResult = await fulfillInvoice(c.env.INVOICES, invoiceId, body.browsingIOU);
+    if (!fulfillResult.success || !fulfillResult.access_token) {
+      return c.json({
+        success: false,
+        verified: true,
+        error: 'INVOICE_FULFILLMENT_FAILED',
+        message: fulfillResult.error || 'Invoice could not be fulfilled',
+      }, 502);
+    }
     
     return c.json({
       success: true,

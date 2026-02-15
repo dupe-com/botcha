@@ -176,7 +176,13 @@ async function validateAppId(
   try {
     const app = await getApp(appsKV, appId);
     if (!app) {
-      return { valid: false, error: `App not found: ${appId}` };
+      return {
+        valid: false,
+        error: `App not found: ${appId}. ` +
+          `app_id is OPTIONAL — remove it to get a token without an app. ` +
+          `To register an app: POST https://botcha.ai/v1/apps with {"email": "you@example.com", "name": "My App"}. ` +
+          `App IDs look like: app_a1b2c3d4e5f6a7b8`
+      };
     }
     return { valid: true };
   } catch (error) {
@@ -228,6 +234,76 @@ async function requireJWT(c: Context<{ Bindings: Bindings; Variables: Variables 
   // Store payload in context for route handlers
   c.set('tokenPayload', result.payload);
   await next();
+}
+
+// Resolve app_id from authenticated JWT and enforce optional query consistency.
+async function resolveAuthenticatedAppId(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>
+): Promise<{
+  ok: boolean;
+  appId?: string;
+  error?: string;
+  message?: string;
+  status: number;
+}> {
+  const authHeader = c.req.header('authorization');
+  const token = extractBearerToken(authHeader);
+
+  if (!token) {
+    return {
+      ok: false,
+      error: 'UNAUTHORIZED',
+      message: 'Missing Bearer token. Use POST /v1/token/verify to get a token.',
+      status: 401,
+    };
+  }
+
+  const publicKey = getPublicKey(c.env);
+  const verification = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+  if (!verification.valid || !verification.payload) {
+    return {
+      ok: false,
+      error: 'INVALID_TOKEN',
+      message: verification.error || 'Token is invalid or expired',
+      status: 401,
+    };
+  }
+
+  const jwtAppId = verification.payload.app_id;
+  if (!jwtAppId) {
+    return {
+      ok: false,
+      error: 'MISSING_APP_ID',
+      message: 'Token is missing app_id claim. Request a token scoped to your app.',
+      status: 403,
+    };
+  }
+
+  const queryAppId = c.req.query('app_id');
+  if (queryAppId && queryAppId !== jwtAppId) {
+    return {
+      ok: false,
+      error: 'APP_ID_MISMATCH',
+      message: 'Query app_id does not match token app_id.',
+      status: 403,
+    };
+  }
+
+  const validation = await validateAppId(jwtAppId, c.env.APPS);
+  if (!validation.valid) {
+    return {
+      ok: false,
+      error: 'INVALID_APP_ID',
+      message: validation.error || 'Invalid app_id',
+      status: 400,
+    };
+  }
+
+  return {
+    ok: true,
+    appId: jwtAppId,
+    status: 200,
+  };
 }
 
 // ============ ROOT & INFO ============
@@ -306,10 +382,11 @@ app.get('/', async (c) => {
       status: 'unverified',
       message: 'Verify yourself to see the full API documentation.',
       verify: {
-        step1: `GET ${baseUrl}/v1/token — receive a speed challenge (5 SHA-256 hashes)`,
+        step1: `GET ${baseUrl}/v1/token — receive a speed challenge (5 SHA-256 hashes). No app_id needed.`,
         step2: 'Solve: compute SHA-256 of each number, return first 8 hex chars',
         step3: `POST ${baseUrl}/v1/token/verify {"id":"<challenge_id>","answers":["hash1","hash2",...]}`,
         step4: `Revisit: GET ${baseUrl}/ with header Authorization: Bearer <access_token>`,
+        note: 'app_id is OPTIONAL. You can get tokens without registering an app. To register one for production use: POST /v1/apps {"email":"you@example.com","name":"My App"}',
       },
       human_handoff: {
         note: 'After verifying, the response includes a human_link. Give it to your human to open in their browser.',
@@ -332,12 +409,15 @@ app.get('/', async (c) => {
 
 ## Verify Yourself
 
-1. \`GET ${baseUrl}/v1/token\` — receive a speed challenge (5 SHA-256 hashes)
+1. \`GET ${baseUrl}/v1/token\` — receive a speed challenge (5 SHA-256 hashes). **No app_id needed.**
 2. Solve: compute SHA-256 of each number, return first 8 hex chars
 3. \`POST ${baseUrl}/v1/token/verify {"id":"<challenge_id>","answers":["hash1","hash2",...]}\`
 4. Revisit: \`GET ${baseUrl}/\` with header \`Authorization: Bearer <access_token>\`
 
 You have 500ms. Only a bot can do this.
+
+> **Note:** \`app_id\` is optional. You can get tokens without registering an app.
+> To register for production: \`POST /v1/apps {"email":"you@example.com","name":"My App"}\`
 
 ## Human Handoff
 
@@ -948,8 +1028,27 @@ app.post('/v1/token/verify', async (c) => {
   // Get client IP from request headers
   const clientIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown';
 
+  // Enforce challenge-bound app_id; never allow app_id override from request body.
+  const challengeAppId = result.app_id;
+  if (typeof app_id === 'string') {
+    if (!challengeAppId) {
+      return c.json({
+        success: false,
+        error: 'APP_ID_NOT_ALLOWED',
+        message: 'This challenge was issued without app_id. Request /v1/token?app_id=... first.',
+      }, 400);
+    }
+
+    if (app_id !== challengeAppId) {
+      return c.json({
+        success: false,
+        error: 'APP_ID_MISMATCH',
+        message: 'Provided app_id does not match the app_id bound to this challenge.',
+      }, 403);
+    }
+  }
+
   // Generate JWT tokens (access + refresh)
-  // Prefer app_id from request body, fall back to challenge's app_id (returned by verifySpeedChallenge)
   const signingKey = getSigningKey(c.env);
   const tokenResult = await generateToken(
     id, 
@@ -959,7 +1058,7 @@ app.post('/v1/token/verify', async (c) => {
     {
       aud: audience,
       clientIp: bind_ip ? clientIp : undefined,
-      app_id: app_id || result.app_id,
+      app_id: challengeAppId,
     },
     signingKey
   );
@@ -1774,7 +1873,6 @@ app.get('/v1/apps/:id', async (c) => {
       ...(app.name && { name: app.name }),
       created_at: new Date(app.created_at).toISOString(),
       rate_limit: app.rate_limit,
-      email: app.email,
       email_verified: app.email_verified,
     },
   });
@@ -1911,26 +2009,31 @@ app.post('/v1/apps/:id/rotate-secret', async (c) => {
     }, 401);
   }
 
-  // Verify the session token includes this app_id
-  const { jwtVerify, createLocalJWKSet } = await import('jose');
-  try {
-    const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-    const { payload } = await jwtVerify(authToken, secret);
-    const tokenAppId = (payload as any).app_id;
-
-    if (tokenAppId !== app_id) {
-      return c.json({
-        success: false,
-        error: 'FORBIDDEN',
-        message: 'Session token does not match the requested app_id',
-      }, 403);
-    }
-  } catch {
+  // Verify dashboard session token includes this app_id.
+  const publicKey = getPublicKey(c.env);
+  const verification = await verifyToken(authToken, c.env.JWT_SECRET, c.env, undefined, publicKey);
+  if (!verification.valid || !verification.payload) {
     return c.json({
       success: false,
       error: 'INVALID_TOKEN',
       message: 'Invalid or expired session token',
     }, 401);
+  }
+
+  if (verification.payload.sub !== 'dashboard-session') {
+    return c.json({
+      success: false,
+      error: 'FORBIDDEN',
+      message: 'Dashboard session token required for secret rotation.',
+    }, 403);
+  }
+
+  if (verification.payload.app_id !== app_id) {
+    return c.json({
+      success: false,
+      error: 'FORBIDDEN',
+      message: 'Session token does not match the requested app_id',
+    }, 403);
   }
 
   const appData = await getApp(c.env.APPS, app_id);
@@ -2015,41 +2118,15 @@ app.post('/v1/verify/attestation', verifyAttestationRoute);
 // Register a new agent
 app.post('/v1/agents/register', async (c) => {
   try {
-    // Extract app_id from query param or JWT
-    const queryAppId = c.req.query('app_id');
-    
-    // Try to get from JWT Bearer token
-    let jwtAppId: string | undefined;
-    const authHeader = c.req.header('authorization');
-    const token = extractBearerToken(authHeader);
-    
-    if (token) {
-      const regPublicKey = getPublicKey(c.env);
-      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, regPublicKey);
-      if (result.valid && result.payload) {
-        jwtAppId = (result.payload as any).app_id;
-      }
-    }
-    
-    const app_id = queryAppId || jwtAppId;
-    
-    if (!app_id) {
+    const appAccess = await resolveAuthenticatedAppId(c);
+    if (!appAccess.ok) {
       return c.json({
         success: false,
-        error: 'MISSING_APP_ID',
-        message: 'app_id is required. Provide it as a query parameter (?app_id=...) or in the JWT token.',
-      }, 401);
+        error: appAccess.error,
+        message: appAccess.message,
+      }, appAccess.status as 401 | 403 | 400);
     }
-    
-    // Validate app_id exists
-    const validation = await validateAppId(app_id, c.env.APPS);
-    if (!validation.valid) {
-      return c.json({
-        success: false,
-        error: 'INVALID_APP_ID',
-        message: validation.error || 'Invalid app_id',
-      }, 400);
-    }
+    const app_id = appAccess.appId!;
     
     // Parse request body
     const body = await c.req.json<{ name?: string; operator?: string; version?: string }>().catch(() => ({} as { name?: string; operator?: string; version?: string }));
@@ -2136,41 +2213,15 @@ app.get('/v1/agents/:id', async (c) => {
 // List all agents for an app
 app.get('/v1/agents', async (c) => {
   try {
-    // Extract app_id from query param or JWT
-    const queryAppId = c.req.query('app_id');
-    
-    // Try to get from JWT Bearer token
-    let jwtAppId: string | undefined;
-    const authHeader = c.req.header('authorization');
-    const token = extractBearerToken(authHeader);
-    
-    if (token) {
-      const listPublicKey = getPublicKey(c.env);
-      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, listPublicKey);
-      if (result.valid && result.payload) {
-        jwtAppId = (result.payload as any).app_id;
-      }
-    }
-    
-    const app_id = queryAppId || jwtAppId;
-    
-    if (!app_id) {
+    const appAccess = await resolveAuthenticatedAppId(c);
+    if (!appAccess.ok) {
       return c.json({
         success: false,
-        error: 'MISSING_APP_ID',
-        message: 'app_id is required. Provide it as a query parameter (?app_id=...) or in the JWT token.',
-      }, 401);
+        error: appAccess.error,
+        message: appAccess.message,
+      }, appAccess.status as 401 | 403 | 400);
     }
-    
-    // Validate app_id exists
-    const validation = await validateAppId(app_id, c.env.APPS);
-    if (!validation.valid) {
-      return c.json({
-        success: false,
-        error: 'INVALID_APP_ID',
-        message: validation.error || 'Invalid app_id',
-      }, 400);
-    }
+    const app_id = appAccess.appId!;
     
     // Get all agents for this app
     const agents = await listAgents(c.env.AGENTS, app_id);

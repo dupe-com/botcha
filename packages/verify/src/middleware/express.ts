@@ -68,6 +68,12 @@ export function botchaVerify(options: BotchaVerifyOptions) {
             error: 'Missing Authorization header with Bearer token',
             clientIp: getClientIp(req),
           });
+          if (!res.headersSent && !res.writableEnded) {
+            res.status(401).json({
+              error: 'Unauthorized',
+              message: 'Missing Authorization header with Bearer token',
+            });
+          }
           return;
         }
         res.status(401).json({
@@ -90,6 +96,12 @@ export function botchaVerify(options: BotchaVerifyOptions) {
             error: result.error || 'Token verification failed',
             clientIp,
           });
+          if (!res.headersSent && !res.writableEnded) {
+            res.status(401).json({
+              error: 'Unauthorized',
+              message: result.error || 'Token verification failed',
+            });
+          }
           return;
         }
         res.status(401).json({
@@ -111,6 +123,12 @@ export function botchaVerify(options: BotchaVerifyOptions) {
           error: errorMessage,
           clientIp: getClientIp(req),
         });
+        if (!res.headersSent && !res.writableEnded) {
+          res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to verify token',
+          });
+        }
         return;
       }
 

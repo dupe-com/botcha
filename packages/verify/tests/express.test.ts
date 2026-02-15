@@ -324,7 +324,7 @@ describe('Express botchaVerify middleware', () => {
           error: 'Missing Authorization header with Bearer token',
         })
       );
-      expect(res.status).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -344,7 +344,7 @@ describe('Express botchaVerify middleware', () => {
         token: 'invalid-token',
         error: expect.any(String),
       });
-      expect(res.status).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
     });
 
     it('should call custom onError handler with client IP context', async () => {
@@ -360,6 +360,7 @@ describe('Express botchaVerify middleware', () => {
 
       expect(onError).toHaveBeenCalledOnce();
       expect(onError.mock.calls[0][1].clientIp).toBe('203.0.113.1');
+      expect(res.status).toHaveBeenCalledWith(401);
     });
   });
 

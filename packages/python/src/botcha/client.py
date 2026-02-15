@@ -90,6 +90,32 @@ class BotchaClient:
         """
         return solve_botcha(problems)
 
+    def _parse_time_limit_ms(self, value: Any) -> int:
+        """Parse challenge time limit from int/float or '<number>ms' formats."""
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized.endswith("ms"):
+                normalized = normalized[:-2]
+            return int(normalized)
+        raise ValueError(f"Unsupported time limit format: {value!r}")
+
+    def _extract_problem_numbers(self, problems: Any) -> list[int]:
+        """Normalize problem lists from either ints or {'num': ...} objects."""
+        if not isinstance(problems, list):
+            raise ValueError("Challenge problems must be a list")
+
+        normalized: list[int] = []
+        for problem in problems:
+            if isinstance(problem, dict):
+                if "num" not in problem:
+                    raise ValueError("Problem object is missing 'num' field")
+                normalized.append(int(problem["num"]))
+            else:
+                normalized.append(int(problem))
+        return normalized
+
     async def get_token(self) -> str:
         """
         Acquire or return cached JWT access token.
@@ -121,11 +147,14 @@ class BotchaClient:
         challenge_response.raise_for_status()
         challenge_data = challenge_response.json()
 
-        # Parse challenge
+        # Parse challenge (supports both legacy and current response formats)
+        challenge_payload = challenge_data.get("challenge", challenge_data)
         challenge = ChallengeResponse(
-            id=challenge_data["id"],
-            problems=challenge_data["problems"],
-            time_limit=challenge_data["timeLimit"],
+            id=challenge_payload["id"],
+            problems=self._extract_problem_numbers(challenge_payload["problems"]),
+            time_limit=self._parse_time_limit_ms(
+                challenge_payload.get("timeLimit", challenge_payload.get("time_limit_ms"))
+            ),
         )
 
         # Step 2: Solve challenge
@@ -146,10 +175,14 @@ class BotchaClient:
         verify_data = verify_response.json()
 
         # Parse token response
+        access_token = verify_data.get("access_token") or verify_data.get("token")
+        if not access_token:
+            raise ValueError("Token verification response did not include access_token or token")
+
         token_response = TokenResponse(
-            verified=verify_data["verified"],
-            token=verify_data["token"],
-            solve_time_ms=verify_data["solveTimeMs"],
+            verified=verify_data.get("verified", verify_data.get("success", False)),
+            token=access_token,
+            solve_time_ms=verify_data.get("solveTimeMs", 0),
         )
 
         # Cache the access token
@@ -302,7 +335,9 @@ class BotchaClient:
                 if "challenge" in body and "problems" in body["challenge"]:
                     # Solve inline challenge
                     challenge = body["challenge"]
-                    solutions = self.solve(challenge["problems"])
+                    solutions = self.solve(
+                        self._extract_problem_numbers(challenge["problems"])
+                    )
 
                     # Retry with challenge headers
                     headers["X-Botcha-Challenge-Id"] = challenge["id"]
