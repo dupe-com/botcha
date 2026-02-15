@@ -37,7 +37,7 @@ import {
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { OG_IMAGE_BASE64 } from './og-image';
-import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode } from './apps';
+import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
@@ -303,6 +303,60 @@ async function resolveAuthenticatedAppId(
     ok: true,
     appId: jwtAppId,
     status: 200,
+  };
+}
+
+// Authorize app management actions using either app_secret or a dashboard session token.
+async function authorizeAppManagement(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  appId: string,
+  appSecretFromBody?: string
+): Promise<{
+  authorized: boolean;
+  error?: string;
+  message?: string;
+  status: number;
+}> {
+  const headerAppSecret = c.req.header('x-app-secret');
+  const appSecret = appSecretFromBody?.trim() || headerAppSecret?.trim();
+
+  // App-secret proof (works immediately after app creation and outside dashboard).
+  if (appSecret) {
+    const valid = await validateAppSecret(c.env.APPS, appId, appSecret);
+    if (valid) {
+      return { authorized: true, status: 200 };
+    }
+  }
+
+  // Dashboard session proof (Bearer token or cookie).
+  const authHeader = c.req.header('authorization');
+  const bearerToken = extractBearerToken(authHeader);
+  const cookieHeader = c.req.header('cookie') || '';
+  const sessionCookie = cookieHeader
+    .split(';')
+    .find((part) => part.trim().startsWith('botcha_session='))
+    ?.split('=')[1]
+    ?.trim();
+  const authToken = bearerToken || sessionCookie;
+
+  if (authToken) {
+    const publicKey = getPublicKey(c.env);
+    const verification = await verifyToken(authToken, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    if (
+      verification.valid &&
+      verification.payload &&
+      verification.payload.sub === 'dashboard-session' &&
+      verification.payload.app_id === appId
+    ) {
+      return { authorized: true, status: 200 };
+    }
+  }
+
+  return {
+    authorized: false,
+    error: 'UNAUTHORIZED',
+    message: 'Authentication required. Provide app_secret or a dashboard session token.',
+    status: 401,
   };
 }
 
@@ -1812,15 +1866,12 @@ app.post('/v1/apps', async (c) => {
 
     const result = await createApp(c.env.APPS, email, trimmedName || undefined);
 
-    // Generate a fresh verification code and send email
-    const regen = await regenerateVerificationCode(c.env.APPS, result.app_id);
-    if (regen) {
-      const template = verificationEmail(regen.code);
-      await sendEmail((c.env as any).RESEND_API_KEY, {
-        ...template,
-        to: email,
-      });
-    }
+    // Send verification email with the code returned from createApp
+    const template = verificationEmail(result.verification_code);
+    await sendEmail((c.env as any).RESEND_API_KEY, {
+      ...template,
+      to: email,
+    });
 
     return c.json({
       success: true,
@@ -1883,8 +1934,8 @@ app.get('/v1/apps/:id', async (c) => {
 // Verify email with 6-digit code
 app.post('/v1/apps/:id/verify-email', async (c) => {
   const app_id = c.req.param('id');
-  const body = await c.req.json<{ code?: string }>().catch(() => ({} as { code?: string }));
-  const { code } = body;
+  const body = await c.req.json<{ code?: string; app_secret?: string }>().catch(() => ({} as { code?: string; app_secret?: string }));
+  const { code, app_secret } = body;
 
   if (!code || typeof code !== 'string') {
     return c.json({
@@ -1892,6 +1943,15 @@ app.post('/v1/apps/:id/verify-email', async (c) => {
       error: 'MISSING_CODE',
       message: 'Provide { "code": "123456" } in the request body',
     }, 400);
+  }
+
+  const auth = await authorizeAppManagement(c, app_id, app_secret);
+  if (!auth.authorized) {
+    return c.json({
+      success: false,
+      error: auth.error,
+      message: auth.message,
+    }, auth.status as 401);
   }
 
   const result = await verifyEmailCode(c.env.APPS, app_id, code);
@@ -1914,6 +1974,17 @@ app.post('/v1/apps/:id/verify-email', async (c) => {
 // Resend verification email
 app.post('/v1/apps/:id/resend-verification', async (c) => {
   const app_id = c.req.param('id');
+  const body = await c.req.json<{ app_secret?: string }>().catch(() => ({} as { app_secret?: string }));
+
+  const auth = await authorizeAppManagement(c, app_id, body.app_secret);
+  if (!auth.authorized) {
+    return c.json({
+      success: false,
+      error: auth.error,
+      message: auth.message,
+    }, auth.status as 401);
+  }
+
   const appData = await getApp(c.env.APPS, app_id);
 
   if (!appData) {

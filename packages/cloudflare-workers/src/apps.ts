@@ -45,6 +45,7 @@ export interface CreateAppResult {
   email: string;
   email_verified: boolean;
   verification_required: boolean;
+  verification_code: string; // 6-digit code (only returned at creation time)
 }
 
 /**
@@ -171,15 +172,15 @@ export async function createApp(kv: KVNamespace, email: string, name?: string): 
     email,
     email_verified: false,
     verification_required: true,
+    verification_code: verificationCode, // ONLY returned at creation time!
   };
 }
 
 /**
- * Get the plaintext verification code for an app (internal use only — for sending via email).
+ * Regenerate a new verification code for an app.
  * 
- * This is a separate step because createApp returns the code hash, not the plaintext.
- * Instead, we generate and return code in createApp flow; this function regenerates
- * a new code for resend scenarios.
+ * Used for resend scenarios when the user needs a fresh code.
+ * Returns null if the app doesn't exist or email is already verified.
  */
 export async function regenerateVerificationCode(
   kv: KVNamespace,
