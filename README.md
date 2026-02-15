@@ -21,7 +21,7 @@
 📄 **Whitepaper:** [botcha.ai/whitepaper](https://botcha.ai/whitepaper)  
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
 🐍 **PyPI:** [botcha](https://pypi.org/project/botcha/)  
-🔐 **Verify:** [@botcha/verify](./packages/verify/) (TS) · [botcha-verify](./packages/python-verify/) (Python)  
+🔐 **Verify:** [@dupecom/botcha-verify](./packages/verify/) (TS) · [botcha-verify](./packages/python-verify/) (Python)  
 🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
 
 ## Why?
@@ -930,11 +930,11 @@ If you're building an API that accepts BOTCHA tokens from agents, use the verifi
 ### TypeScript (Express / Hono)
 
 ```bash
-npm install @botcha/verify
+npm install @dupecom/botcha-verify
 ```
 
 ```typescript
-import { botchaVerify } from '@botcha/verify/express';
+import { botchaVerify } from '@dupecom/botcha-verify/express';
 
 app.use('/api', botchaVerify({
   secret: process.env.BOTCHA_SECRET!,
@@ -965,7 +965,7 @@ async def get_data(token = Depends(botcha)):
     return {"solve_time": token.solve_time}
 ```
 
-> **Docs:** See [`@botcha/verify` README](./packages/verify/README.md) and [`botcha-verify` README](./packages/python-verify/README.md) for full API reference, Hono middleware, Django middleware, revocation checking, and custom error handlers.
+> **Docs:** See [`@dupecom/botcha-verify` README](./packages/verify/README.md) and [`botcha-verify` README](./packages/python-verify/README.md) for full API reference, Hono middleware, Django middleware, revocation checking, and custom error handlers.
 
 ## Client SDK (for AI Agents)
 

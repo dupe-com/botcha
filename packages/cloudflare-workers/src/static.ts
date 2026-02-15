@@ -201,7 +201,7 @@ Formula: \`timeout = 500ms + (2 × RTT) + 100ms buffer\`
 |----------|---------|---------|
 | npm | \`@dupecom/botcha\` | \`npm install @dupecom/botcha\` |
 | PyPI | \`botcha\` | \`pip install botcha\` |
-| Verify (TS) | \`@botcha/verify\` | \`npm install @botcha/verify\` |
+| Verify (TS) | \`@dupecom/botcha-verify\` | \`npm install @dupecom/botcha-verify\` |
 | Verify (Python) | \`botcha-verify\` | \`pip install botcha-verify\` |
 | TAP middleware | \`@dupecom/botcha/middleware\` | \`import { createTAPVerifyMiddleware } from '@dupecom/botcha/middleware'\` |
 
@@ -318,6 +318,7 @@ API-Format: OpenAPI 3.1.0
 
 # Documentation
 Docs: https://botcha.ai
+Docs: https://botcha.ai/docs
 Docs: https://botcha.ai/whitepaper
 Docs: https://github.com/dupe-com/botcha#readme
 Docs: https://www.npmjs.com/package/@dupecom/botcha
@@ -334,7 +335,7 @@ Feature: Token Rotation (5-minute access tokens + 1-hour refresh tokens)
 Feature: Audience Claims (tokens scoped to specific services)
 Feature: Client IP Binding (optional token-to-IP binding)
 Feature: Token Revocation (invalidate tokens before expiry)
-Feature: Server-Side Verification SDK (@botcha/verify for TS, botcha-verify for Python)
+Feature: Server-Side Verification SDK (@dupecom/botcha-verify for TS, botcha-verify for Python)
 Feature: Multi-Tenant API Keys (per-app isolation, rate limiting, and token scoping)
 Feature: Per-App Metrics Dashboard (server-rendered at /dashboard, htmx-powered)
 Feature: Email-Tied App Creation (email required, 6-digit verification, account recovery)
@@ -447,7 +448,7 @@ Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
 # Usage
 Install-NPM: npm install @dupecom/botcha
 Install-Python: pip install botcha
-Verify-NPM: npm install @botcha/verify
+Verify-NPM: npm install @dupecom/botcha-verify
 Verify-Python: pip install botcha-verify
 License: MIT
 
@@ -598,6 +599,11 @@ export const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
+  <url>
+    <loc>https://botcha.ai/docs</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
 </urlset>
 `;
 
@@ -709,7 +715,7 @@ async with BotchaClient() as client:
 
 ### Server-side Verification
 
-Express: \`@botcha/verify\` · FastAPI/Django: \`botcha-verify\` · Hono middleware included.
+Express: \`@dupecom/botcha-verify\` · FastAPI/Django: \`botcha-verify\` · Hono middleware included.
 
 ### CLI
 
@@ -768,7 +774,7 @@ export function getOpenApiSpec(version: string) {
       "x-sdk": {
         npm: "@dupecom/botcha",
         python: "botcha (pip install botcha)",
-        verify_npm: "@botcha/verify (server-side verification)",
+        verify_npm: "@dupecom/botcha-verify (server-side verification)",
         verify_python: "botcha-verify (pip install botcha-verify)"
       }
     },

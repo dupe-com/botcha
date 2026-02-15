@@ -99,6 +99,8 @@ export const GlobalFooter: FC<{ version?: string }> = ({ version = '0.15.0' }) =
           <span class="global-footer-sep">&middot;</span>
           <a href="https://botcha.ai">botcha.ai</a>
           <span class="global-footer-sep">&middot;</span>
+          <a href="/docs">Docs</a>
+          <span class="global-footer-sep">&middot;</span>
           <a href="/whitepaper">Whitepaper</a>
           <span class="global-footer-sep">&middot;</span>
           <a href="/openapi.json">OpenAPI</a>

@@ -30,7 +30,7 @@ declare global {
  * @example
  * ```typescript
  * import express from 'express';
- * import { botchaVerify } from '@botcha/verify/express';
+ * import { botchaVerify } from '@dupecom/botcha-verify/express';
  * 
  * const app = express();
  * 

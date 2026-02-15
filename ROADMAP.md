@@ -47,8 +47,8 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 #### SDKs & Integration
 - `@dupecom/botcha` npm package (v0.18.0) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`, `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`, `createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`, `issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`, `getReputation`, `recordReputationEvent`, `listReputationEvents`, `resetReputation`)
-- `botcha` PyPI package (v0.7.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`, `create_delegation`, `get_delegation`, `list_delegations`, `revoke_delegation`, `verify_delegation_chain`, `issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`, `get_reputation`, `record_reputation_event`, `list_reputation_events`, `reset_reputation`)
-- `@botcha/verify` npm package (v0.1.0) — Server-side verification (Express/Hono)
+- `botcha` PyPI package (v0.18.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`, `create_delegation`, `get_delegation`, `list_delegations`, `revoke_delegation`, `verify_delegation_chain`, `issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`, `get_reputation`, `record_reputation_event`, `list_reputation_events`, `reset_reputation`)
+- `@dupecom/botcha-verify` npm package (v0.1.0) — Server-side verification (Express/Hono)
 - `botcha-verify` PyPI package (v0.1.0) — Server-side verification (FastAPI/Django)
 - Express middleware (`botcha.verify()`)
 - TypeScript client SDK (BotchaClient, BotchaStreamClient) — createApp, verifyEmail, recoverAccount, rotateSecret
@@ -106,9 +106,9 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 **Effort:** Large
 
 ### ✅ Server-side verification SDK — SHIPPED (v0.1.0)
-**What:** `npm install @botcha/verify` / `pip install botcha-verify` — one-line middleware for any app to verify incoming BOTCHA tokens.
+**What:** `npm install @dupecom/botcha-verify` / `pip install botcha-verify` — one-line middleware for any app to verify incoming BOTCHA tokens.
 **Status:** Built and tested. TypeScript: 58 tests (Express + Hono middleware). Python: 30 tests (FastAPI + Django middleware). Both verify JWT signature, expiry, type, audience, client IP binding, and revocation.
-**Packages:** `@botcha/verify` (npm) · `botcha-verify` (PyPI)
+**Packages:** `@dupecom/botcha-verify` (npm) · `botcha-verify` (PyPI)
 
 ### ✅ Email-Tied App Creation & Recovery — SHIPPED (v0.10.0)
 **What:** Email required at app creation. Verification via 6-digit code. Account recovery via email. Secret rotation with notification.

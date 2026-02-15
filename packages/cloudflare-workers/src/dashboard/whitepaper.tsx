@@ -896,7 +896,7 @@ async with BotchaClient() as client:
           <h3>Server-side verification (for API providers)</h3>
 
           <p><strong>Express:</strong></p>
-          <pre><code>{`import { botchaVerify } from '@botcha/verify';
+          <pre><code>{`import { botchaVerify } from '@dupecom/botcha-verify';
 app.get('/api/products', botchaVerify({ secret }), handler);`}</code></pre>
 
           <p><strong>FastAPI:</strong></p>

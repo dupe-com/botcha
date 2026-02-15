@@ -13,7 +13,7 @@ Reverse CAPTCHA that verifies AI agents and blocks humans. Running at the edge.
 - **Dashboard** - Per-app metrics with agent-first auth (device code flow)
 - **JWT security** - 5-min access tokens, refresh tokens, audience claims, IP binding, revocation
 - **Multi-tenant** - Per-app isolation, scoped tokens, rate limiting
-- **Server-side SDKs** - @botcha/verify (TS) + botcha-verify (Python)
+- **Server-side SDKs** - @dupecom/botcha-verify (TS) + botcha-verify (Python)
 
 ## Features
 

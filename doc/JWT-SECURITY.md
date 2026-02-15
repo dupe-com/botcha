@@ -243,15 +243,15 @@ The `jti` enables:
 
 For API providers that accept BOTCHA tokens from agents, use the verification SDKs instead of implementing JWT verification manually:
 
-### TypeScript (`@botcha/verify`)
+### TypeScript (`@dupecom/botcha-verify`)
 
 ```bash
-npm install @botcha/verify
+npm install @dupecom/botcha-verify
 ```
 
 ```typescript
 // Express middleware — one line
-import { botchaVerify } from '@botcha/verify/express';
+import { botchaVerify } from '@dupecom/botcha-verify/express';
 
 app.use('/api', botchaVerify({
   secret: process.env.BOTCHA_SECRET!,
@@ -269,14 +269,14 @@ app.get('/api/data', (req, res) => {
 Also available for Hono:
 
 ```typescript
-import { botchaVerify } from '@botcha/verify/hono';
+import { botchaVerify } from '@dupecom/botcha-verify/hono';
 app.use('/api/*', botchaVerify({ secret: env.BOTCHA_SECRET }));
 ```
 
 Or standalone (any framework):
 
 ```typescript
-import { verifyBotchaToken } from '@botcha/verify';
+import { verifyBotchaToken } from '@dupecom/botcha-verify';
 const result = await verifyBotchaToken(token, { secret, audience, clientIp });
 ```
 
@@ -301,7 +301,7 @@ BOTCHA_SECRET = 'your-secret'
 BOTCHA_PROTECTED_PATHS = ['/api/']
 ```
 
-> **Full docs:** [`@botcha/verify` README](../packages/verify/README.md) · [`botcha-verify` README](../packages/python-verify/README.md)
+> **Full docs:** [`@dupecom/botcha-verify` README](../packages/verify/README.md) · [`botcha-verify` README](../packages/python-verify/README.md)
 
 ---
 

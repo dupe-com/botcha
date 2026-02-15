@@ -1,15 +1,15 @@
-# @botcha/verify
+# @dupecom/botcha-verify
 
 Server-side verification middleware for BOTCHA JWT tokens.
 
 ## Installation
 
 ```bash
-npm install @botcha/verify
+npm install @dupecom/botcha-verify
 # or
-yarn add @botcha/verify
+yarn add @dupecom/botcha-verify
 # or
-bun add @botcha/verify
+bun add @dupecom/botcha-verify
 ```
 
 ## Features
@@ -28,7 +28,7 @@ bun add @botcha/verify
 ### Standalone Verification
 
 ```typescript
-import { verifyBotchaToken } from '@botcha/verify';
+import { verifyBotchaToken } from '@dupecom/botcha-verify';
 
 const result = await verifyBotchaToken(token, {
   secret: process.env.BOTCHA_SECRET!,
@@ -48,7 +48,7 @@ if (result.valid) {
 
 ```typescript
 import express from 'express';
-import { botchaVerify } from '@botcha/verify/express';
+import { botchaVerify } from '@dupecom/botcha-verify/express';
 
 const app = express();
 
@@ -71,8 +71,8 @@ app.get('/api/protected', (req, res) => {
 
 ```typescript
 import { Hono } from 'hono';
-import { botchaVerify } from '@botcha/verify/hono';
-import type { BotchaTokenPayload } from '@botcha/verify';
+import { botchaVerify } from '@dupecom/botcha-verify/hono';
+import type { BotchaTokenPayload } from '@dupecom/botcha-verify';
 
 const app = new Hono<{ Variables: { botcha: BotchaTokenPayload } }>();
 
@@ -178,7 +178,7 @@ app.use('/api', botchaVerify({
 Implement custom revocation checking:
 
 ```typescript
-import { verifyBotchaToken } from '@botcha/verify';
+import { verifyBotchaToken } from '@dupecom/botcha-verify';
 
 const result = await verifyBotchaToken(token, {
   secret: process.env.BOTCHA_SECRET!,
@@ -214,4 +214,4 @@ MIT
 
 - [Documentation](https://botcha.ai)
 - [GitHub](https://github.com/dupe-com/botcha)
-- [NPM](https://www.npmjs.com/package/@botcha/verify)
+- [NPM](https://www.npmjs.com/package/@dupecom/botcha-verify)

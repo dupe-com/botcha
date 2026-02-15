@@ -26,7 +26,7 @@ type BotchaVariables = {
  * @example
  * ```typescript
  * import { Hono } from 'hono';
- * import { botchaVerify } from '@botcha/verify/hono';
+ * import { botchaVerify } from '@dupecom/botcha-verify/hono';
  * 
  * const app = new Hono<{ Variables: { botcha: BotchaTokenPayload } }>();
  * 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "botcha"
-version = "0.7.0"
+version = "0.18.0"
 description = "BOTCHA Python SDK - Reverse CAPTCHA for AI agents. Challenges, JWT tokens, app management, and Trusted Agent Protocol (TAP)."
 readme = "README.md"
 requires-python = ">=3.9"

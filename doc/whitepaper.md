@@ -426,9 +426,9 @@ Both SDKs handle the full lifecycle: challenge acquisition, solving, token cachi
 
 ### Server-side verification (for API providers)
 
-**Express middleware** (`@botcha/verify`):
+**Express middleware** (`@dupecom/botcha-verify`):
 ```typescript
-import { botchaVerify } from '@botcha/verify';
+import { botchaVerify } from '@dupecom/botcha-verify';
 
 app.get('/api/products', botchaVerify({ secret: process.env.BOTCHA_SECRET }), handler);
 ```

@@ -9,6 +9,8 @@ import { benchmarkCommand } from './commands/benchmark.js';
 import { headersCommand } from './commands/headers.js';
 import { discoverCommand } from './commands/discover.js';
 import { initCommand } from './commands/init.js';
+import { tokenCommand } from './commands/token.js';
+import { curlCommand } from './commands/curl.js';
 import tapCommand from './commands/tap.js';
 
 const program = new Command();
@@ -16,7 +18,7 @@ const program = new Command();
 program
   .name('botcha')
   .description('CLI tool for testing and debugging BOTCHA-protected endpoints')
-  .version('0.3.0');
+  .version('0.4.0');
 
 // Init command (one-time setup)
 program
@@ -80,6 +82,34 @@ program
   .option('-v, --verbose', 'Show recommendations')
   .option('-q, --quiet', 'Minimal output')
   .action(discoverCommand);
+
+// Token command — get a JWT token for use with curl or other tools
+program
+  .command('token')
+  .description('Get a BOTCHA JWT token (pipe-friendly: prints raw token by default)')
+  .option('--url <url>', 'BOTCHA service URL (default: from config or https://botcha.ai)')
+  .option('--app-id <id>', 'App ID (default: from config)')
+  .option('--type <type>', 'Challenge type (speed, reasoning, hybrid)', 'hybrid')
+  .option('--json', 'Output as JSON with metadata')
+  .option('-v, --verbose', 'Show challenge details and expiry')
+  .option('-q, --quiet', 'Minimal output')
+  .action(tokenCommand);
+
+// Curl command — authenticated curl with automatic BOTCHA token
+program
+  .command('curl <targetUrl>')
+  .description('Make an authenticated curl request with automatic BOTCHA token')
+  .option('--url <url>', 'BOTCHA service URL (default: from config or https://botcha.ai)')
+  .option('--app-id <id>', 'App ID (default: from config)')
+  .option('--type <type>', 'Challenge type (speed, reasoning, hybrid)', 'hybrid')
+  .option('-v, --verbose', 'Show BOTCHA handshake before curl output')
+  .option('-q, --quiet', 'Minimal output')
+  .allowUnknownOption(true)
+  .action((targetUrl, options, command) => {
+    // Collect unknown args (everything Commander didn't parse) as passthrough to curl
+    const passthroughArgs = command.args.filter((a: string) => a !== targetUrl);
+    curlCommand(targetUrl, passthroughArgs, options);
+  });
 
 // ============ TAP COMMANDS ============
 // --url and --app-id are optional (reads from ~/.botcha/config.json)

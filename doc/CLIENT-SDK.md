@@ -9,7 +9,7 @@
 | [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.16.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
 | [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.5.0 | Python SDK on PyPI |
-| [`@botcha/verify`](../packages/verify/) | 0.1.0 | Server-side verification (Express/Hono middleware) |
+| [`@dupecom/botcha-verify`](../packages/verify/) | 0.1.0 | Server-side verification (Express/Hono middleware) |
 | [`botcha-verify`](../packages/python-verify/) | 0.1.0 | Server-side verification (FastAPI/Django middleware) |
 
 ## Overview
@@ -586,12 +586,12 @@ The Python SDK mirrors the TypeScript API:
 
 For API providers who need to verify incoming BOTCHA tokens from agents.
 
-### TypeScript (@botcha/verify)
+### TypeScript (@dupecom/botcha-verify)
 
 **Status:** ✅ Built (v0.1.0) — [README](../packages/verify/README.md)
 
 ```typescript
-import { botchaVerify } from '@botcha/verify/express';
+import { botchaVerify } from '@dupecom/botcha-verify/express';
 
 // Express middleware
 app.use('/api', botchaVerify({
@@ -610,14 +610,14 @@ app.get('/api/data', (req, res) => {
 
 ```typescript
 // Hono middleware
-import { botchaVerify } from '@botcha/verify/hono';
+import { botchaVerify } from '@dupecom/botcha-verify/hono';
 
 app.use('/api/*', botchaVerify({ secret: env.BOTCHA_SECRET }));
 ```
 
 ```typescript
 // Standalone verification (any framework)
-import { verifyBotchaToken } from '@botcha/verify';
+import { verifyBotchaToken } from '@dupecom/botcha-verify';
 
 const result = await verifyBotchaToken(token, {
   secret: process.env.BOTCHA_SECRET!,

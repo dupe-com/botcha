@@ -46,7 +46,7 @@ curl https://botcha.ai/endpoint
 | [@dupecom/botcha-cli](https://www.npmjs.com/package/@dupecom/botcha-cli) | X.Y.Z | Changes |
 | [@dupecom/botcha-langchain](https://www.npmjs.com/package/@dupecom/botcha-langchain) | X.Y.Z | Changes |
 | [`botcha`](https://pypi.org/project/botcha/) (Python) | X.Y.Z | Python SDK changes |
-| [`@botcha/verify`](../packages/verify/) | X.Y.Z | Server-side verification (TS) |
+| [`@dupecom/botcha-verify`](../packages/verify/) | X.Y.Z | Server-side verification (TS) |
 | [`botcha-verify`](../packages/python-verify/) | X.Y.Z | Server-side verification (Python) |
 
 ## 🚀 Try It Now

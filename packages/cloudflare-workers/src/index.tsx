@@ -42,6 +42,7 @@ import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from 
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
 import { WhitepaperPage } from './dashboard/whitepaper';
+import { DocsPage } from './dashboard/docs';
 import { createAgent, getAgent, listAgents } from './agents';
 import {
   registerTAPAgentRoute,
@@ -432,7 +433,7 @@ The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the 
     sdk: {
       npm: 'npm install @dupecom/botcha',
       python: 'pip install botcha',
-      verify_ts: 'npm install @botcha/verify',
+      verify_ts: 'npm install @dupecom/botcha-verify',
       verify_python: 'pip install botcha-verify',
     },
     links: {
@@ -533,6 +534,12 @@ app.get('/whitepaper', (c) => {
 
   // HTML for browsers
   return c.html(<WhitepaperPage version={version} />);
+});
+
+// ============ API DOCS ============
+app.get('/docs', (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.16.0';
+  return c.html(<DocsPage version={version} />);
 });
 
 app.get('/health', (c) => {
@@ -1459,7 +1466,7 @@ app.get('/agent-only', async (c) => {
       description: 'As a verified agent, you can access any BOTCHA-protected API.',
       next_steps: [
         'Register your agent identity: POST /v1/agents/register',
-        'Access any service that uses @botcha/verify middleware',
+        'Access any service that uses @dupecom/botcha-verify middleware',
         'Refresh your token: POST /v1/token/refresh',
         'Give your human dashboard access: POST /v1/auth/device-code',
       ],

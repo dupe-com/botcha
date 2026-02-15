@@ -1,5 +1,5 @@
 {
-  "name": "@botcha/verify",
+  "name": "@dupecom/botcha-verify",
   "version": "0.1.0",
   "description": "Server-side verification middleware for BOTCHA JWT tokens",
   "type": "module",
