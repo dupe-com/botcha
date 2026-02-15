@@ -429,3 +429,54 @@ class AttestationVerifyResponse:
     matched_rule: Optional[str] = None
     checked_capability: Optional[str] = None
     error: Optional[str] = None
+
+
+# ============ Agent Reputation Scoring Types ============
+
+
+@dataclass
+class ReputationScoreResponse:
+    """Response from getting an agent's reputation score."""
+
+    success: bool = False
+    agent_id: str = ""
+    app_id: str = ""
+    score: int = 500
+    tier: str = "neutral"
+    event_count: int = 0
+    positive_events: int = 0
+    negative_events: int = 0
+    last_event_at: Optional[str] = None
+    created_at: str = ""
+    updated_at: str = ""
+    category_scores: Optional[Dict[str, int]] = None
+
+
+@dataclass
+class ReputationEventResponse:
+    """Response from recording a reputation event."""
+
+    success: bool = False
+    event: Optional[Dict[str, Any]] = None
+    score: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class ReputationEventListResponse:
+    """Response from listing reputation events."""
+
+    success: bool = False
+    events: Optional[List[Dict[str, Any]]] = None
+    count: int = 0
+    agent_id: str = ""
+
+
+@dataclass
+class ReputationResetResponse:
+    """Response from resetting an agent's reputation."""
+
+    success: bool = False
+    agent_id: str = ""
+    score: int = 500
+    tier: str = "neutral"
+    message: str = ""

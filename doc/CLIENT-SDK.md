@@ -28,6 +28,7 @@ The client SDK allows AI agents to:
 11. ✅ TAP Full Spec (v0.16.0) — Ed25519, JWKS, Consumer Recognition (Layer 2), Payment Container (Layer 3), 402 micropayments, CDN edge verify, Visa key federation (SDK: `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`)
 12. ✅ Delegation Chains (v0.17.0) — signed, auditable chains of trust between TAP agents with capability subset enforcement, depth limits, cascading revocation, and cycle detection (SDK: `createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`)
 13. ✅ Capability Attestation (v0.17.0) — fine-grained `action:resource` permission tokens with explicit deny, signed JWT attestations, enforcement middleware, and online revocation (SDK: `issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`)
+14. ✅ Agent Reputation Scoring (v0.18.0) — persistent trust scores for agents based on behavioral events, with tiers, decay, endorsements, and category breakdowns (SDK: `getReputation`, `recordReputationEvent`, `listReputationEvents`, `resetReputation`)
 
 ## Implemented API
 
@@ -1303,6 +1304,119 @@ app.post('/api/transfers', requireCapability('write:transfers'), handler);
 **TypeScript:** `issueAttestation(options)`, `getAttestation(id)`, `listAttestations(agentId)`, `revokeAttestation(id, reason?)`, `verifyAttestation(token, action?, resource?)`
 
 **Python:** `issue_attestation(agent_id, can, cannot?, ...)`, `get_attestation(id)`, `list_attestations(agent_id)`, `revoke_attestation(id, reason?)`, `verify_attestation(token, action?, resource?)`
+
+---
+
+## Agent Reputation Scoring (v0.18.0)
+
+The "credit score" for AI agents. Persistent identity enables behavioral tracking over time, producing trust scores that unlock higher rate limits, faster verification, and access to sensitive APIs.
+
+### Score Model
+
+| Property | Value |
+|----------|-------|
+| Base score | 500 (neutral) |
+| Range | 0 - 1000 |
+| Tiers | untrusted (0-199), low (200-399), neutral (400-599), good (600-799), excellent (800-1000) |
+| Decay | Mean reversion toward 500 after 7+ days of inactivity |
+
+### Event Categories & Score Deltas
+
+| Category | Action | Delta |
+|----------|--------|-------|
+| verification | challenge_solved | +5 |
+| verification | challenge_failed | -3 |
+| verification | auth_success | +3 |
+| verification | auth_failure | -5 |
+| attestation | attestation_issued | +8 |
+| attestation | attestation_verified | +4 |
+| attestation | attestation_revoked | -10 |
+| delegation | delegation_granted | +6 |
+| delegation | delegation_received | +10 |
+| delegation | delegation_revoked | -8 |
+| session | session_created | +2 |
+| session | session_expired | +1 |
+| session | session_terminated | -5 |
+| violation | rate_limit_exceeded | -15 |
+| violation | invalid_token | -10 |
+| violation | abuse_detected | -50 |
+| endorsement | endorsement_received | +20 |
+| endorsement | endorsement_given | +3 |
+
+### TypeScript Examples
+
+```typescript
+// Get agent reputation
+const rep = await client.getReputation('agent_abc123');
+console.log(`Score: ${rep.score}, Tier: ${rep.tier}`);
+// { score: 750, tier: 'good', event_count: 42, ... }
+
+// Record events
+await client.recordReputationEvent({
+  agent_id: 'agent_abc123',
+  category: 'verification',
+  action: 'challenge_solved',
+});
+
+// Endorsement from another agent
+await client.recordReputationEvent({
+  agent_id: 'agent_abc123',
+  category: 'endorsement',
+  action: 'endorsement_received',
+  source_agent_id: 'agent_def456',
+});
+
+// List events with optional filters
+const events = await client.listReputationEvents('agent_abc123', {
+  category: 'verification',
+  limit: 10,
+});
+
+// Admin: reset reputation to 500
+await client.resetReputation('agent_abc123');
+```
+
+### Python Examples
+
+```python
+# Get agent reputation
+rep = await client.get_reputation("agent_abc123")
+print(f"Score: {rep['score']}, Tier: {rep['tier']}")
+
+# Record events
+await client.record_reputation_event(
+    "agent_abc123", "verification", "challenge_solved"
+)
+
+# Endorsement
+await client.record_reputation_event(
+    "agent_abc123", "endorsement", "endorsement_received",
+    source_agent_id="agent_def456"
+)
+
+# List events
+events = await client.list_reputation_events(
+    "agent_abc123", category="verification", limit=10
+)
+
+# Admin reset
+await client.reset_reputation("agent_abc123")
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/reputation/:agent_id` | Get agent reputation score |
+| `POST` | `/v1/reputation/events` | Record a reputation event |
+| `GET` | `/v1/reputation/:agent_id/events` | List reputation events |
+| `POST` | `/v1/reputation/:agent_id/reset` | Reset reputation (admin) |
+
+### SDK Methods
+
+**TypeScript:** `getReputation(agentId)`, `recordReputationEvent(options)`, `listReputationEvents(agentId, options?)`, `resetReputation(agentId)`
+
+**Python:** `get_reputation(agent_id)`, `record_reputation_event(agent_id, category, action, ...)`, `list_reputation_events(agent_id, category?, limit?)`, `reset_reputation(agent_id)`
 
 ---
 

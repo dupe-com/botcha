@@ -72,6 +72,12 @@ import {
   verifyAttestationRoute,
 } from './tap-attestation-routes.js';
 import {
+  getReputationRoute,
+  recordReputationEventRoute,
+  listReputationEventsRoute,
+  resetReputationRoute,
+} from './tap-reputation-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -1899,6 +1905,12 @@ app.post('/v1/attestations', issueAttestationRoute);
 app.get('/v1/attestations/:id', getAttestationRoute);
 app.get('/v1/attestations', listAttestationsRoute);
 app.post('/v1/attestations/:id/revoke', revokeAttestationRoute);
+
+// TAP Agent Reputation Scoring
+app.get('/v1/reputation/:agent_id/events', listReputationEventsRoute);
+app.post('/v1/reputation/:agent_id/reset', resetReputationRoute);
+app.get('/v1/reputation/:agent_id', getReputationRoute);
+app.post('/v1/reputation/events', recordReputationEventRoute);
 
 // TAP Verification Utility Endpoints
 app.post('/v1/verify/consumer', verifyConsumerRoute);

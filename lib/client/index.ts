@@ -47,6 +47,14 @@ export type {
   AttestationListResponse,
   RevokeAttestationResponse,
   AttestationVerifyResponse,
+  ReputationTier,
+  ReputationEventCategory,
+  ReputationEventAction,
+  ReputationScoreResponse,
+  RecordReputationEventOptions,
+  ReputationEventResponse,
+  ReputationEventListResponse,
+  ReputationResetResponse,
 } from './types.js';
 
 import type {
@@ -83,6 +91,11 @@ import type {
   AttestationListResponse,
   RevokeAttestationResponse,
   AttestationVerifyResponse,
+  RecordReputationEventOptions,
+  ReputationScoreResponse,
+  ReputationEventResponse,
+  ReputationEventListResponse,
+  ReputationResetResponse,
 } from './types.js';
 
 // Export stream client
@@ -1127,6 +1140,69 @@ export class BotchaClient {
     if (action) body.action = action;
     if (resource) body.resource = resource;
     return await this.request('POST', '/v1/verify/attestation', body) as AttestationVerifyResponse;
+  }
+
+  // ============ Agent Reputation Scoring Methods ============
+
+  /**
+   * Get the reputation score for an agent.
+   * Returns the current score, tier, event counts, and category breakdown.
+   * 
+   * @example
+   * ```typescript
+   * const rep = await client.getReputation('agent_abc123');
+   * console.log(`Score: ${rep.score}, Tier: ${rep.tier}`);
+   * // Score: 750, Tier: good
+   * ```
+   */
+  async getReputation(agentId: string): Promise<ReputationScoreResponse> {
+    return await this.request('GET', `/v1/reputation/${encodeURIComponent(agentId)}`) as ReputationScoreResponse;
+  }
+
+  /**
+   * Record a reputation event for an agent.
+   * Adjusts the agent's score based on the event type.
+   * 
+   * @example
+   * ```typescript
+   * const result = await client.recordReputationEvent({
+   *   agent_id: 'agent_abc123',
+   *   category: 'verification',
+   *   action: 'challenge_solved',
+   * });
+   * console.log(`New score: ${result.score.score}`);
+   * ```
+   */
+  async recordReputationEvent(options: RecordReputationEventOptions): Promise<ReputationEventResponse> {
+    return await this.request('POST', '/v1/reputation/events', options) as ReputationEventResponse;
+  }
+
+  /**
+   * List reputation events for an agent.
+   * 
+   * @param agentId - The agent to list events for
+   * @param options - Optional filters (category, limit)
+   */
+  async listReputationEvents(agentId: string, options?: {
+    category?: string;
+    limit?: number;
+  }): Promise<ReputationEventListResponse> {
+    const params = new URLSearchParams();
+    if (options?.category) params.set('category', options.category);
+    if (options?.limit) params.set('limit', options.limit.toString());
+    const query = params.toString();
+    const path = `/v1/reputation/${encodeURIComponent(agentId)}/events${query ? `?${query}` : ''}`;
+    return await this.request('GET', path) as ReputationEventListResponse;
+  }
+
+  /**
+   * Reset an agent's reputation to default (admin action).
+   * Clears all event history and resets score to 500 (neutral).
+   * 
+   * @param agentId - The agent to reset
+   */
+  async resetReputation(agentId: string): Promise<ReputationResetResponse> {
+    return await this.request('POST', `/v1/reputation/${encodeURIComponent(agentId)}/reset`) as ReputationResetResponse;
   }
 }
 

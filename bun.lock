@@ -22,12 +22,12 @@
     },
     "packages/cli": {
       "name": "@dupecom/botcha-cli",
-      "version": "0.1.0",
+      "version": "0.4.0",
       "bin": {
-        "botcha": "./bin/botcha.js",
+        "botcha": "bin/botcha.js",
       },
       "dependencies": {
-        "@dupecom/botcha": "^0.4.3",
+        "@dupecom/botcha": "^0.13.1",
         "chalk": "^5.3.0",
         "commander": "^12.1.0",
       },
@@ -39,7 +39,7 @@
     },
     "packages/cloudflare-workers": {
       "name": "@dupecom/botcha-cloudflare",
-      "version": "0.5.0",
+      "version": "0.16.0",
       "dependencies": {
         "hono": "^4.7.0",
         "jose": "^5.9.6",
@@ -115,7 +115,7 @@
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 
-    "@dupecom/botcha": ["@dupecom/botcha@0.4.4", "", { "peerDependencies": { "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["express"] }, "sha512-Sa0Og7dFr8Py4DRithqv8/BtDofbHbffLfVQgzSngNdJgsmd0MaMQ4me+PqeehcxTxyNdt/a5Z4jqSK40d3aCQ=="],
+    "@dupecom/botcha": ["@dupecom/botcha@0.13.1", "", { "peerDependencies": { "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["express"] }, "sha512-/7jjmtSxDCoh80J8vVUm7eQxva/nTGzs94C3ce/Y/PKDUkVhoRNnIrEWdr8yg8n24G34RwNjdIp6kzc0dzvD1Q=="],
 
     "@dupecom/botcha-cli": ["@dupecom/botcha-cli@workspace:packages/cli"],
 
@@ -668,6 +668,8 @@
     "zod-to-json-schema": ["zod-to-json-schema@3.25.1", "", { "peerDependencies": { "zod": "^3.25 || ^4" } }, "sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA=="],
 
     "@dupecom/botcha-cloudflare/vitest": ["vitest@3.2.4", "", { "dependencies": { "@types/chai": "^5.2.2", "@vitest/expect": "3.2.4", "@vitest/mocker": "3.2.4", "@vitest/pretty-format": "^3.2.4", "@vitest/runner": "3.2.4", "@vitest/snapshot": "3.2.4", "@vitest/spy": "3.2.4", "@vitest/utils": "3.2.4", "chai": "^5.2.0", "debug": "^4.4.1", "expect-type": "^1.2.1", "magic-string": "^0.30.17", "pathe": "^2.0.3", "picomatch": "^4.0.2", "std-env": "^3.9.0", "tinybench": "^2.9.0", "tinyexec": "^0.3.2", "tinyglobby": "^0.2.14", "tinypool": "^1.1.1", "tinyrainbow": "^2.0.0", "vite": "^5.0.0 || ^6.0.0 || ^7.0.0-0", "vite-node": "3.2.4", "why-is-node-running": "^2.3.0" }, "peerDependencies": { "@edge-runtime/vm": "*", "@types/debug": "^4.1.12", "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "@vitest/browser": "3.2.4", "@vitest/ui": "3.2.4", "happy-dom": "*", "jsdom": "*" }, "optionalPeers": ["@edge-runtime/vm", "@types/debug", "@types/node", "@vitest/browser", "@vitest/ui", "happy-dom", "jsdom"], "bin": { "vitest": "vitest.mjs" } }, "sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A=="],
+
+    "@dupecom/botcha-langchain/@dupecom/botcha": ["@dupecom/botcha@0.4.4", "", { "peerDependencies": { "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["express"] }, "sha512-Sa0Og7dFr8Py4DRithqv8/BtDofbHbffLfVQgzSngNdJgsmd0MaMQ4me+PqeehcxTxyNdt/a5Z4jqSK40d3aCQ=="],
 
     "@poppinss/dumper/supports-color": ["supports-color@10.2.2", "", {}, "sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g=="],
 

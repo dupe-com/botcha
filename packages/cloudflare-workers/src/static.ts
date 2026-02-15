@@ -132,6 +132,15 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | \`GET\` | \`/v1/attestations\` | List attestations for agent |
 | \`POST\` | \`/v1/attestations/:id/revoke\` | Revoke attestation |
 
+### Agent Reputation Scoring
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/v1/reputation/:agent_id\` | Get agent reputation score |
+| \`POST\` | \`/v1/reputation/events\` | Record a reputation event |
+| \`GET\` | \`/v1/reputation/:agent_id/events\` | List reputation events |
+| \`POST\` | \`/v1/reputation/:agent_id/reset\` | Reset reputation (admin) |
+
 ### Challenges
 
 | Method | Path | Description |
@@ -420,6 +429,12 @@ Endpoint: GET https://botcha.ai/v1/attestations - List attestations for agent (?
 Endpoint: POST https://botcha.ai/v1/attestations/:id/revoke - Revoke attestation (token rejected on future verification)
 Endpoint: POST https://botcha.ai/v1/verify/attestation - Verify attestation token + optionally check specific capability
 
+# Agent Reputation Scoring (v0.18.0)
+Endpoint: GET https://botcha.ai/v1/reputation/:agent_id - Get agent reputation score (0-1000, 5 tiers)
+Endpoint: POST https://botcha.ai/v1/reputation/events - Record a reputation event (18 action types, 6 categories)
+Endpoint: GET https://botcha.ai/v1/reputation/:agent_id/events - List reputation events (?category=&limit=)
+Endpoint: POST https://botcha.ai/v1/reputation/:agent_id/reset - Reset reputation to default (admin action)
+
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
 Endpoint: POST https://botcha.ai/api/challenge - Verify standard challenge
@@ -498,8 +513,8 @@ TAP-Session-Get: GET /v1/sessions/:id/tap — includes time_remaining
 TAP-Get-Agent: GET /v1/agents/:id/tap — includes public_key for verification
 TAP-List-Agents: GET /v1/agents/tap?app_id=...&tap_only=true
 TAP-Middleware-Modes: tap, signature-only, challenge-only, flexible
-TAP-SDK-TS: registerTAPAgent(options), getTAPAgent(agentId), listTAPAgents(tapOnly?), createTAPSession(options), getTAPSession(sessionId), getJWKS(), getKeyById(keyId), rotateAgentKey(agentId), createInvoice(data), getInvoice(id), verifyBrowsingIOU(invoiceId, token), createDelegation(options), getDelegation(id), listDelegations(agentId, options?), revokeDelegation(id, reason?), verifyDelegationChain(id), issueAttestation(options), getAttestation(id), listAttestations(agentId), revokeAttestation(id, reason?), verifyAttestation(token, action?, resource?)
-TAP-SDK-Python: register_tap_agent(name, ...), get_tap_agent(agent_id), list_tap_agents(tap_only?), create_tap_session(agent_id, user_context, intent), get_tap_session(session_id), get_jwks(), get_key_by_id(key_id), rotate_agent_key(agent_id), create_invoice(data), get_invoice(id), verify_browsing_iou(invoice_id, token), create_delegation(grantor_id, grantee_id, capabilities, ...), get_delegation(id), list_delegations(agent_id, ...), revoke_delegation(id, reason?), verify_delegation_chain(id), issue_attestation(agent_id, can, cannot?, ...), get_attestation(id), list_attestations(agent_id), revoke_attestation(id, reason?), verify_attestation(token, action?, resource?)
+TAP-SDK-TS: registerTAPAgent(options), getTAPAgent(agentId), listTAPAgents(tapOnly?), createTAPSession(options), getTAPSession(sessionId), getJWKS(), getKeyById(keyId), rotateAgentKey(agentId), createInvoice(data), getInvoice(id), verifyBrowsingIOU(invoiceId, token), createDelegation(options), getDelegation(id), listDelegations(agentId, options?), revokeDelegation(id, reason?), verifyDelegationChain(id), issueAttestation(options), getAttestation(id), listAttestations(agentId), revokeAttestation(id, reason?), verifyAttestation(token, action?, resource?), getReputation(agentId), recordReputationEvent(options), listReputationEvents(agentId, options?), resetReputation(agentId)
+TAP-SDK-Python: register_tap_agent(name, ...), get_tap_agent(agent_id), list_tap_agents(tap_only?), create_tap_session(agent_id, user_context, intent), get_tap_session(session_id), get_jwks(), get_key_by_id(key_id), rotate_agent_key(agent_id), create_invoice(data), get_invoice(id), verify_browsing_iou(invoice_id, token), create_delegation(grantor_id, grantee_id, capabilities, ...), get_delegation(id), list_delegations(agent_id, ...), revoke_delegation(id, reason?), verify_delegation_chain(id), issue_attestation(agent_id, can, cannot?, ...), get_attestation(id), list_attestations(agent_id), revoke_attestation(id, reason?), verify_attestation(token, action?, resource?), get_reputation(agent_id), record_reputation_event(agent_id, category, action, ...), list_reputation_events(agent_id, category?, limit?), reset_reputation(agent_id)
 TAP-Middleware-Import: import { createTAPVerifyMiddleware } from '@dupecom/botcha/middleware'
 
 # TAP FULL SPEC v0.16.0
@@ -726,7 +741,7 @@ MCP gives agents tools. A2A lets agents communicate. TAP proves identity and sco
 
 **Shipped:** Challenge types, JWT tokens, multi-tenant apps, agent registry, TAP, dashboard, SDKs (TS/Python), CLI, LangChain, discovery standards.
 
-**Planned:** Agent reputation scoring, Agent SSO (cross-service verification), IETF RFC contribution.
+**Planned:** Agent SSO (cross-service verification), IETF RFC contribution.
 
 ---
 
@@ -2018,6 +2033,80 @@ export function getOpenApiSpec(version: string) {
             "200": { description: "Token valid — returns payload or capability check result" },
             "401": { description: "Invalid or expired token" },
             "403": { description: "Capability denied" }
+          }
+        }
+      },
+      "/v1/reputation/{agent_id}": {
+        get: {
+          summary: "Get agent reputation",
+          description: "Get the reputation score for an agent. Returns score (0-1000), tier, event counts, and category breakdown.",
+          operationId: "getReputation",
+          parameters: [
+            { name: "agent_id", in: "path", required: true, schema: { type: "string" }, description: "Agent ID" },
+            { name: "app_id", in: "query", schema: { type: "string" }, description: "App ID for authentication" }
+          ],
+          responses: {
+            "200": { description: "Reputation score with tier and category breakdown" },
+            "404": { description: "Agent not found" }
+          }
+        }
+      },
+      "/v1/reputation/events": {
+        post: {
+          summary: "Record reputation event",
+          description: "Record a behavioral event that affects an agent's reputation score. 18 action types across 6 categories.",
+          operationId: "recordReputationEvent",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agent_id", "category", "action"],
+                  properties: {
+                    "agent_id": { type: "string", description: "Agent to record event for" },
+                    "category": { type: "string", enum: ["verification", "attestation", "delegation", "session", "violation", "endorsement"], description: "Event category" },
+                    "action": { type: "string", description: "Event action (e.g. challenge_solved, abuse_detected)" },
+                    "source_agent_id": { type: "string", description: "Source agent for endorsements" },
+                    "metadata": { type: "object", additionalProperties: { type: "string" }, description: "Optional key/value metadata" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "Event recorded — returns event details and updated score" },
+            "400": { description: "Invalid category/action or self-endorsement" },
+            "404": { description: "Agent not found" }
+          }
+        }
+      },
+      "/v1/reputation/{agent_id}/events": {
+        get: {
+          summary: "List reputation events",
+          description: "List reputation events for an agent with optional category filter.",
+          operationId: "listReputationEvents",
+          parameters: [
+            { name: "agent_id", in: "path", required: true, schema: { type: "string" }, description: "Agent ID" },
+            { name: "category", in: "query", schema: { type: "string" }, description: "Filter by category" },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 100 }, description: "Max events (default: 50, max: 100)" }
+          ],
+          responses: {
+            "200": { description: "List of reputation events" }
+          }
+        }
+      },
+      "/v1/reputation/{agent_id}/reset": {
+        post: {
+          summary: "Reset reputation",
+          description: "Reset an agent's reputation to default (500 neutral). Admin action — clears all event history.",
+          operationId: "resetReputation",
+          parameters: [
+            { name: "agent_id", in: "path", required: true, schema: { type: "string" }, description: "Agent ID" }
+          ],
+          responses: {
+            "200": { description: "Reputation reset to default" },
+            "404": { description: "Agent not found" }
           }
         }
       }

@@ -507,3 +507,92 @@ export interface AttestationVerifyResponse {
   checked_capability?: string;
   error?: string;
 }
+
+// ============ Agent Reputation Scoring Types ============
+
+export type ReputationTier = 'untrusted' | 'low' | 'neutral' | 'good' | 'excellent';
+export type ReputationEventCategory = 'verification' | 'attestation' | 'delegation' | 'session' | 'violation' | 'endorsement';
+export type ReputationEventAction =
+  | 'challenge_solved' | 'challenge_failed' | 'auth_success' | 'auth_failure'
+  | 'attestation_issued' | 'attestation_verified' | 'attestation_revoked'
+  | 'delegation_granted' | 'delegation_received' | 'delegation_revoked'
+  | 'session_created' | 'session_expired' | 'session_terminated'
+  | 'rate_limit_exceeded' | 'invalid_token' | 'abuse_detected'
+  | 'endorsement_received' | 'endorsement_given';
+
+export interface ReputationScoreResponse {
+  success: boolean;
+  agent_id: string;
+  app_id: string;
+  score: number;
+  tier: ReputationTier;
+  event_count: number;
+  positive_events: number;
+  negative_events: number;
+  last_event_at: string | null;
+  created_at: string;
+  updated_at: string;
+  category_scores: {
+    verification: number;
+    attestation: number;
+    delegation: number;
+    session: number;
+    violation: number;
+    endorsement: number;
+  };
+}
+
+export interface RecordReputationEventOptions {
+  agent_id: string;
+  category: ReputationEventCategory;
+  action: ReputationEventAction;
+  source_agent_id?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface ReputationEventResponse {
+  success: boolean;
+  event: {
+    event_id: string;
+    agent_id: string;
+    category: ReputationEventCategory;
+    action: ReputationEventAction;
+    delta: number;
+    score_before: number;
+    score_after: number;
+    source_agent_id: string | null;
+    metadata: Record<string, string> | null;
+    created_at: string;
+  };
+  score: {
+    score: number;
+    tier: ReputationTier;
+    event_count: number;
+  };
+}
+
+export interface ReputationEventListResponse {
+  success: boolean;
+  events: Array<{
+    event_id: string;
+    agent_id: string;
+    category: ReputationEventCategory;
+    action: ReputationEventAction;
+    delta: number;
+    score_before: number;
+    score_after: number;
+    source_agent_id: string | null;
+    metadata: Record<string, string> | null;
+    created_at: string;
+  }>;
+  count: number;
+  agent_id: string;
+}
+
+export interface ReputationResetResponse {
+  success: boolean;
+  agent_id: string;
+  score: number;
+  tier: ReputationTier;
+  message: string;
+}

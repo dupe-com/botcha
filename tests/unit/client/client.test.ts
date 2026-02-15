@@ -1719,4 +1719,189 @@ describe('BotchaClient', () => {
       ).rejects.toThrow();
     });
   });
+
+  // ============ Agent Reputation Scoring ============
+
+  describe('getReputation', () => {
+    test('gets reputation score for an agent', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          agent_id: 'agent_abc123',
+          app_id: 'app_test',
+          score: 750,
+          tier: 'good',
+          event_count: 42,
+          positive_events: 35,
+          negative_events: 7,
+          last_event_at: '2026-02-14T01:00:00Z',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-02-14T01:00:00Z',
+          category_scores: { verification: 50, attestation: 30, delegation: 20, session: 10, violation: -15, endorsement: 40 },
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.getReputation('agent_abc123');
+
+      expect(result.success).toBe(true);
+      expect(result.score).toBe(750);
+      expect(result.tier).toBe('good');
+      expect(result.event_count).toBe(42);
+    });
+
+    test('URL-encodes agent ID', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, score: 500 }),
+      });
+
+      const client = new BotchaClient();
+      await client.getReputation('agent/special&chars');
+
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('agent%2Fspecial%26chars');
+    });
+  });
+
+  describe('recordReputationEvent', () => {
+    test('records a reputation event', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          event: {
+            event_id: 'evt_123',
+            agent_id: 'agent_abc123',
+            category: 'verification',
+            action: 'challenge_solved',
+            delta: 5,
+            score_before: 500,
+            score_after: 505,
+            source_agent_id: null,
+            metadata: null,
+            created_at: '2026-02-14T01:00:00Z',
+          },
+          score: { score: 505, tier: 'neutral', event_count: 1 },
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.recordReputationEvent({
+        agent_id: 'agent_abc123',
+        category: 'verification',
+        action: 'challenge_solved',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.event.delta).toBe(5);
+      expect(result.score.score).toBe(505);
+    });
+
+    test('sends all optional fields', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, event: {}, score: {} }),
+      });
+
+      const client = new BotchaClient();
+      await client.recordReputationEvent({
+        agent_id: 'agent_abc123',
+        category: 'endorsement',
+        action: 'endorsement_received',
+        source_agent_id: 'agent_def456',
+        metadata: { context: 'quality' },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.agent_id).toBe('agent_abc123');
+      expect(body.category).toBe('endorsement');
+      expect(body.action).toBe('endorsement_received');
+      expect(body.source_agent_id).toBe('agent_def456');
+      expect(body.metadata).toEqual({ context: 'quality' });
+    });
+  });
+
+  describe('listReputationEvents', () => {
+    test('lists events for an agent', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          events: [
+            { event_id: 'evt_1', action: 'challenge_solved' },
+            { event_id: 'evt_2', action: 'auth_success' },
+          ],
+          count: 2,
+          agent_id: 'agent_abc123',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.listReputationEvents('agent_abc123');
+
+      expect(result.success).toBe(true);
+      expect(result.events).toHaveLength(2);
+      expect(result.count).toBe(2);
+    });
+
+    test('passes category and limit filters', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, events: [], count: 0, agent_id: 'a' }),
+      });
+
+      const client = new BotchaClient();
+      await client.listReputationEvents('agent_abc123', { category: 'verification', limit: 10 });
+
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('category=verification');
+      expect(url).toContain('limit=10');
+    });
+  });
+
+  describe('resetReputation', () => {
+    test('resets reputation to default', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          agent_id: 'agent_abc123',
+          score: 500,
+          tier: 'neutral',
+          message: 'Reputation reset to default.',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.resetReputation('agent_abc123');
+
+      expect(result.success).toBe(true);
+      expect(result.score).toBe(500);
+      expect(result.tier).toBe('neutral');
+    });
+
+    test('URL-encodes agent ID', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.resetReputation('agent/id');
+
+      const url = (global.fetch as any).mock.calls[0][0];
+      expect(url).toContain('agent%2Fid');
+    });
+  });
 });

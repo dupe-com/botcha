@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.17.0)
+## Current Status (v0.18.0)
 
 ### Shipped
 
@@ -46,8 +46,8 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - `human_link` field in `/v1/token/verify` response (primary human handoff mechanism)
 
 #### SDKs & Integration
-- `@dupecom/botcha` npm package (v0.17.0) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`, `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`, `createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`, `issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`)
-- `botcha` PyPI package (v0.6.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`, `create_delegation`, `get_delegation`, `list_delegations`, `revoke_delegation`, `verify_delegation_chain`, `issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`)
+- `@dupecom/botcha` npm package (v0.18.0) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`, `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`, `createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`, `issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`, `getReputation`, `recordReputationEvent`, `listReputationEvents`, `resetReputation`)
+- `botcha` PyPI package (v0.7.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`, `create_delegation`, `get_delegation`, `list_delegations`, `revoke_delegation`, `verify_delegation_chain`, `issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`, `get_reputation`, `record_reputation_event`, `list_reputation_events`, `reset_reputation`)
 - `@botcha/verify` npm package (v0.1.0) — Server-side verification (Express/Hono)
 - `botcha-verify` PyPI package (v0.1.0) — Server-side verification (FastAPI/Django)
 - Express middleware (`botcha.verify()`)
@@ -290,9 +290,25 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - **SDK support:** TypeScript (`issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`) and Python (`issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`)
 **Effort:** Large
 
-### Agent reputation scoring
-**What:** Persistent identity → track behavior over time → build trust scores.
-**Why:** The "credit score" for AI agents. High-reputation agents get faster verification, higher rate limits, access to sensitive APIs.
+### ✅ Agent Reputation Scoring — SHIPPED (v0.18.0)
+**What:** Persistent identity → track behavior over time → build trust scores. The "credit score" for AI agents.
+**Why:** High-reputation agents get faster verification, higher rate limits, access to sensitive APIs.
+**Status:** Built and tested. Agents accumulate reputation through behavioral events across 6 categories, with scoring, decay, endorsements, and admin controls.
+**Implementation:**
+- `GET /v1/reputation/:agent_id` → get agent reputation score (0-1000, 5 tiers)
+- `POST /v1/reputation/events` → record a reputation event (18 action types across 6 categories)
+- `GET /v1/reputation/:agent_id/events` → list reputation events with category filtering
+- `POST /v1/reputation/:agent_id/reset` → reset reputation to default (admin action)
+- Scoring model: base 500, range 0-1000, weighted deltas per event type
+- Tiers: untrusted (0-199), low (200-399), neutral (400-599), good (600-799), excellent (800-1000)
+- Mean-reversion decay: scores trend toward 500 after 7+ days of inactivity (1% per week)
+- 6 event categories: verification, attestation, delegation, session, violation, endorsement
+- 18 event actions with calibrated deltas (+5 for challenge_solved to -50 for abuse_detected)
+- Self-endorsement prevention (agent cannot endorse itself)
+- Category-level score breakdown for fine-grained analysis
+- Events retained for 90 days with automatic TTL expiry
+- KV storage: `reputation:{agent_id}`, `reputation_events:{agent_id}`, `reputation_event:{event_id}`
+- **SDK support:** TypeScript (`getReputation`, `recordReputationEvent`, `listReputationEvents`, `resetReputation`) and Python (`get_reputation`, `record_reputation_event`, `list_reputation_events`, `reset_reputation`)
 **Effort:** Large
 
 ### RFC / Standards contribution

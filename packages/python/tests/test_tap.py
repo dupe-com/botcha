@@ -1926,3 +1926,311 @@ async def test_verify_attestation_invalid_token():
     async with BotchaClient() as client:
         with pytest.raises(httpx.HTTPStatusError):
             await client.verify_attestation("bad-token")
+
+
+# ============ Agent Reputation Scoring Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_reputation_happy_path():
+    """Test getting an agent's reputation score."""
+    respx.get("https://botcha.ai/v1/reputation/agent_abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "agent_id": "agent_abc123",
+                "app_id": "app_test",
+                "score": 750,
+                "tier": "good",
+                "event_count": 42,
+                "positive_events": 35,
+                "negative_events": 7,
+                "last_event_at": "2026-02-14T01:00:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-02-14T01:00:00Z",
+                "category_scores": {
+                    "verification": 50,
+                    "attestation": 30,
+                    "delegation": 20,
+                    "session": 10,
+                    "violation": -15,
+                    "endorsement": 40,
+                },
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.get_reputation("agent_abc123")
+
+        assert result["success"] is True
+        assert result["score"] == 750
+        assert result["tier"] == "good"
+        assert result["event_count"] == 42
+        assert result["category_scores"]["verification"] == 50
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_reputation_with_app_id():
+    """Test getting reputation with app_id."""
+    respx.get("https://botcha.ai/v1/reputation/agent_abc123?app_id=app_test").mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "score": 500, "tier": "neutral"}
+        )
+    )
+
+    async with BotchaClient(app_id="app_test") as client:
+        result = await client.get_reputation("agent_abc123")
+        assert result["success"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_reputation_not_found():
+    """Test getting reputation for non-existent agent."""
+    respx.get("https://botcha.ai/v1/reputation/agent_nonexistent").mock(
+        return_value=httpx.Response(
+            404, json={"success": False, "error": "REPUTATION_LOOKUP_FAILED"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.get_reputation("agent_nonexistent")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_record_reputation_event_happy_path():
+    """Test recording a reputation event."""
+    respx.post("https://botcha.ai/v1/reputation/events").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "event": {
+                    "event_id": "evt_123",
+                    "agent_id": "agent_abc123",
+                    "category": "verification",
+                    "action": "challenge_solved",
+                    "delta": 5,
+                    "score_before": 500,
+                    "score_after": 505,
+                    "source_agent_id": None,
+                    "metadata": None,
+                    "created_at": "2026-02-14T01:00:00Z",
+                },
+                "score": {"score": 505, "tier": "neutral", "event_count": 1},
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.record_reputation_event(
+            "agent_abc123", "verification", "challenge_solved"
+        )
+
+        assert result["success"] is True
+        assert result["event"]["delta"] == 5
+        assert result["score"]["score"] == 505
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_record_reputation_event_with_all_params():
+    """Test recording event with all optional parameters."""
+    respx.post("https://botcha.ai/v1/reputation/events").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "event": {
+                    "event_id": "evt_456",
+                    "agent_id": "agent_abc123",
+                    "category": "endorsement",
+                    "action": "endorsement_received",
+                    "delta": 20,
+                    "score_before": 500,
+                    "score_after": 520,
+                    "source_agent_id": "agent_def456",
+                    "metadata": {"context": "quality"},
+                    "created_at": "2026-02-14T01:00:00Z",
+                },
+                "score": {"score": 520, "tier": "neutral", "event_count": 1},
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.record_reputation_event(
+            "agent_abc123",
+            "endorsement",
+            "endorsement_received",
+            source_agent_id="agent_def456",
+            metadata={"context": "quality"},
+        )
+
+        assert result["success"] is True
+        assert result["event"]["source_agent_id"] == "agent_def456"
+        assert result["event"]["metadata"] == {"context": "quality"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_record_reputation_event_validates_body():
+    """Test that the request body is correctly constructed."""
+    route = respx.post("https://botcha.ai/v1/reputation/events").mock(
+        return_value=httpx.Response(
+            201, json={"success": True, "event": {}, "score": {}}
+        )
+    )
+
+    async with BotchaClient() as client:
+        await client.record_reputation_event(
+            "agent_abc123", "violation", "abuse_detected"
+        )
+
+    request = route.calls[0].request
+    body = json.loads(request.content)
+    assert body["agent_id"] == "agent_abc123"
+    assert body["category"] == "violation"
+    assert body["action"] == "abuse_detected"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_reputation_events_happy_path():
+    """Test listing reputation events for an agent."""
+    respx.get("https://botcha.ai/v1/reputation/agent_abc123/events").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "events": [
+                    {"event_id": "evt_1", "action": "challenge_solved"},
+                    {"event_id": "evt_2", "action": "auth_success"},
+                ],
+                "count": 2,
+                "agent_id": "agent_abc123",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.list_reputation_events("agent_abc123")
+
+        assert result["success"] is True
+        assert len(result["events"]) == 2
+        assert result["count"] == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_reputation_events_with_filters():
+    """Test listing events with category and limit filters."""
+    respx.get(
+        "https://botcha.ai/v1/reputation/agent_abc123/events",
+        params={"category": "verification", "limit": "10"},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "events": [],
+                "count": 0,
+                "agent_id": "agent_abc123",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.list_reputation_events(
+            "agent_abc123", category="verification", limit=10
+        )
+
+        assert result["success"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_reputation_events_with_app_id():
+    """Test listing events with app_id."""
+    respx.get(
+        "https://botcha.ai/v1/reputation/agent_abc123/events",
+        params={"app_id": "app_test"},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "events": [],
+                "count": 0,
+                "agent_id": "agent_abc123",
+            },
+        )
+    )
+
+    async with BotchaClient(app_id="app_test") as client:
+        result = await client.list_reputation_events("agent_abc123")
+        assert result["success"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_reset_reputation_happy_path():
+    """Test resetting an agent's reputation."""
+    respx.post("https://botcha.ai/v1/reputation/agent_abc123/reset").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "agent_id": "agent_abc123",
+                "score": 500,
+                "tier": "neutral",
+                "message": "Reputation reset to default. All event history cleared.",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.reset_reputation("agent_abc123")
+
+        assert result["success"] is True
+        assert result["score"] == 500
+        assert result["tier"] == "neutral"
+        assert "reset" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_reset_reputation_with_app_id():
+    """Test resetting reputation with app_id."""
+    respx.post(
+        "https://botcha.ai/v1/reputation/agent_abc123/reset?app_id=app_test"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "score": 500, "tier": "neutral"}
+        )
+    )
+
+    async with BotchaClient(app_id="app_test") as client:
+        result = await client.reset_reputation("agent_abc123")
+        assert result["success"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_reset_reputation_not_found():
+    """Test resetting reputation for non-existent agent."""
+    respx.post("https://botcha.ai/v1/reputation/agent_nonexistent/reset").mock(
+        return_value=httpx.Response(
+            404, json={"success": False, "error": "REPUTATION_RESET_FAILED"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.reset_reputation("agent_nonexistent")

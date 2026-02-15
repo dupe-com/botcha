@@ -13,7 +13,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@dupecom/botcha?color=00d4ff)](https://www.npmjs.com/package/@dupecom/botcha)
 [![PyPI version](https://img.shields.io/pypi/v/botcha?color=00d4ff)](https://pypi.org/project/botcha/)
-<!-- test-count -->[![Tests](https://img.shields.io/badge/tests-772%20passing-brightgreen)](./tests/)<!-- /test-count -->
+<!-- test-count -->[![Tests](https://img.shields.io/badge/tests-859%20passing-brightgreen)](./tests/)<!-- /test-count -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![AI Agents Only](https://img.shields.io/badge/contributors-AI%20agents%20only-ff6b6b)](./.github/CONTRIBUTING.md)
 
@@ -40,6 +40,7 @@ Use cases:
 - 🆔 Persistent agent identities with registry
 - 🔏 Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures (SDK: `registerTAPAgent`, `createTAPSession`)
 - 🌐 TAP showcase homepage at [botcha.ai](https://botcha.ai) — one of the first services to implement [Visa's Trusted Agent Protocol](https://github.com/visa/trusted-agent-protocol)
+- 📈 Agent reputation scoring — trust scores that unlock higher rate limits and access (SDK: `getReputation`, `recordReputationEvent`)
 
 ## Install
 
@@ -359,7 +360,7 @@ curl -X POST "https://botcha.ai/v1/agents/register?app_id=app_abc123" \
 | `GET /v1/agents/:id` | Get agent info by ID (public, no auth) |
 | `GET /v1/agents` | List all agents for authenticated app |
 
-> **Note:** Agent Registry is the foundation for delegation chains and capability attestation (both shipped in v0.17.0), and future features like reputation scoring. See [ROADMAP.md](./ROADMAP.md) for details.
+> **Note:** Agent Registry is the foundation for delegation chains (v0.17.0), capability attestation (v0.17.0), and reputation scoring (v0.18.0). See [ROADMAP.md](./ROADMAP.md) for details.
 
 ## 🔏 Trusted Agent Protocol (TAP)
 
@@ -599,6 +600,56 @@ await client.revokeAttestation(att.attestation_id, 'Session ended');
 | `GET /v1/attestations` | List attestations for agent |
 | `POST /v1/attestations/:id/revoke` | Revoke attestation |
 | `POST /v1/verify/attestation` | Verify token + check capability |
+
+## Agent Reputation Scoring (v0.18.0)
+
+The "credit score" for AI agents. Persistent identity enables behavioral tracking over time, producing trust scores that unlock higher rate limits, faster verification, and access to sensitive APIs.
+
+```typescript
+// Get agent reputation
+const rep = await client.getReputation('agent_abc123');
+console.log(`Score: ${rep.score}, Tier: ${rep.tier}`);
+// Score: 750, Tier: good
+
+// Record events that affect score
+await client.recordReputationEvent({
+  agent_id: 'agent_abc123',
+  category: 'verification',
+  action: 'challenge_solved',   // +5 points
+});
+
+// Endorsement from another agent
+await client.recordReputationEvent({
+  agent_id: 'agent_abc123',
+  category: 'endorsement',
+  action: 'endorsement_received',  // +20 points
+  source_agent_id: 'agent_def456',
+});
+
+// View event history
+const events = await client.listReputationEvents('agent_abc123', {
+  category: 'verification',
+  limit: 10,
+});
+
+// Admin: reset reputation
+await client.resetReputation('agent_abc123');
+```
+
+**Scoring model:**
+- Base score: **500** (neutral, no history)
+- Range: **0 - 1000**
+- Tiers: untrusted (0-199), low (200-399), neutral (400-599), good (600-799), excellent (800-1000)
+- **Decay**: scores trend toward 500 over time without activity (mean reversion)
+- **Deny always wins**: abuse events (-50) are heavily weighted
+- **Endorsements**: explicit trust signals from other agents (+20)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET /v1/reputation/:agent_id` | Get agent reputation score |
+| `POST /v1/reputation/events` | Record a reputation event |
+| `GET /v1/reputation/:agent_id/events` | List reputation events |
+| `POST /v1/reputation/:agent_id/reset` | Reset reputation (admin) |
 
 ## SSE Streaming Flow (AI-Native)
 

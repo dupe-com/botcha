@@ -1200,6 +1200,125 @@ class BotchaClient:
         response.raise_for_status()
         return response.json()
 
+    # ============ Agent Reputation Scoring ============
+
+    async def get_reputation(self, agent_id: str) -> dict:
+        """Get the reputation score for an agent.
+
+        Args:
+            agent_id: The agent to get reputation for
+
+        Returns:
+            Reputation score with tier, event counts, and category breakdown
+        """
+        url = f"{self.base_url}/v1/reputation/{quote(agent_id, safe='')}"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def record_reputation_event(
+        self,
+        agent_id: str,
+        category: str,
+        action: str,
+        source_agent_id: Optional[str] = None,
+        metadata: Optional[dict[str, str]] = None,
+    ) -> dict:
+        """Record a reputation event for an agent.
+
+        Args:
+            agent_id: Agent to record event for
+            category: Event category (verification, attestation, delegation, session, violation, endorsement)
+            action: Event action (e.g. "challenge_solved", "attestation_issued")
+            source_agent_id: Optional source agent (for endorsements)
+            metadata: Optional key/value metadata
+
+        Returns:
+            Event details and updated score
+        """
+        url = f"{self.base_url}/v1/reputation/events"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        body: dict[str, Any] = {
+            "agent_id": agent_id,
+            "category": category,
+            "action": action,
+        }
+        if source_agent_id:
+            body["source_agent_id"] = source_agent_id
+        if metadata:
+            body["metadata"] = metadata
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def list_reputation_events(
+        self,
+        agent_id: str,
+        category: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> dict:
+        """List reputation events for an agent.
+
+        Args:
+            agent_id: The agent to list events for
+            category: Optional category filter
+            limit: Max events to return (default: 50, max: 100)
+
+        Returns:
+            List of events with count
+        """
+        url = f"{self.base_url}/v1/reputation/{quote(agent_id, safe='')}/events"
+        params: dict[str, str] = {}
+        if self.app_id:
+            params["app_id"] = self.app_id
+        if category:
+            params["category"] = category
+        if limit is not None:
+            params["limit"] = str(limit)
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def reset_reputation(self, agent_id: str) -> dict:
+        """Reset an agent's reputation to default (admin action).
+
+        Args:
+            agent_id: The agent to reset
+
+        Returns:
+            Reset confirmation with default score
+        """
+        url = f"{self.base_url}/v1/reputation/{quote(agent_id, safe='')}/reset"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
     async def close(self) -> None:
         """Close the underlying HTTP client and clear cached tokens."""
         self._token = None
