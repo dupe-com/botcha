@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.19.0)
+## Current Status (v0.21.0)
 
 ### Shipped
 
@@ -324,6 +324,20 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - Three verification modes: JWKS (recommended), remote validation, shared secret (legacy)
 - `@dupecom/botcha-verify` supports `jwksUrl` option (no `secret` needed)
 - `botcha-verify` (Python) supports `jwks_url` option
+**Effort:** Medium
+
+### ✅ App Registration Required — SHIPPED (v0.21.0)
+**What:** All `/v1/*` API endpoints now require a registered app with verified email. Enforced via `requireAppId` middleware.
+**Why:** Prevents anonymous abuse. Ties all agent activity to a verified email for accountability. Enables per-app rate limiting, token scoping, and audit trails.
+**Status:** Built and tested. Breaking change for existing integrations — all agents must register an app and verify email before using the API.
+**Implementation:**
+- `requireAppId` middleware gates all `/v1/*` routes except registration, verification, and recovery
+- Open paths (no app_id needed): `POST /v1/apps`, `POST /v1/apps/:id/verify-email`, `POST /v1/apps/:id/resend-verification`, `GET /v1/apps/:id`, `POST /v1/auth/recover`
+- All other `/v1/*` routes return 401 `APP_REGISTRATION_REQUIRED` without a valid app_id
+- app_id can be provided via `?app_id=`, `X-App-Id` header, or JWT claim
+- Fail-open design: KV errors don't block requests (logged as warnings)
+- Homepage demo at botcha.ai still works without app_id (uses internal demo app)
+- Discovery docs updated: ai.txt, OpenAPI spec, root JSON response, static.ts markdown
 **Effort:** Medium
 
 ### RFC / Standards contribution

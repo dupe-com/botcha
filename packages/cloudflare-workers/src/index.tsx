@@ -99,7 +99,9 @@ type Bindings = {
   ANALYTICS?: AnalyticsEngineDataset;
   JWT_SECRET: string;
   JWT_SIGNING_KEY?: string; // ES256 private key in JWK format (optional, enables asymmetric signing)
+  RESEND_API_KEY?: string;
   BOTCHA_VERSION: string;
+  BOTCHA_INTERNAL_APP_ID: string; // Internal demo app for homepage challenges
 };
 
 type Variables = {
@@ -124,17 +126,46 @@ app.route('/dashboard', dashboardRoutes);
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.20.2');
+  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.20.3');
   c.header('X-Botcha-Enabled', 'true');
   c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
   c.header('X-Botcha-Runtime', 'cloudflare-workers');
 });
 
-// Rate limiting middleware for challenge generation
+// App gate: require registered app_id with verified email on /v1/* routes.
+// Open paths (registration, verification, recovery) are exempted.
+const APP_GATE_OPEN_PATHS = [
+  '/v1/apps',                       // POST: create app (registration)
+  '/v1/auth/recover',               // POST: account recovery
+];
+
+// Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
+function isAppManagementPath(path: string): boolean {
+  return /^\/v1\/apps\/[^/]+\/(verify-email|resend-verification)$/.test(path);
+}
+
+app.use('/v1/*', async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+
+  // Allow open paths through without app_id
+  if (APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path)) {
+    return next();
+  }
+
+  // Also allow GET /v1/apps/:id (app info lookup)
+  if (/^\/v1\/apps\/[^/]+$/.test(path) && c.req.method === 'GET') {
+    return next();
+  }
+
+  return requireAppId(c, next);
+});
+
+// Rate limiting middleware for challenge generation (app-scoped when app_id present)
 async function rateLimitMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) {
   const clientIP = getClientIP(c.req.raw);
-  const rateLimitResult = await checkRateLimit(c.env.RATE_LIMITS, clientIP, 100);
+  const appId = c.req.query('app_id') || c.req.header('x-app-id');
+  const rateLimitResult = await checkRateLimit(c.env.RATE_LIMITS, clientIP, 100, appId);
 
   // Add rate limit headers
   c.header('X-RateLimit-Limit', '100');
@@ -164,13 +195,17 @@ async function rateLimitMiddleware(c: Context<{ Bindings: Bindings; Variables: V
 }
 
 // Helper: Validate app_id against APPS KV (fail-open)
+// Note: The requireAppId middleware handles the "must have app_id" check globally.
+// This helper does additional route-level validation (e.g., consistency checks).
 async function validateAppId(
   appId: string | undefined,
   appsKV: KVNamespace
 ): Promise<{ valid: boolean; error?: string }> {
   if (!appId) {
-    // No app_id provided - valid (not required)
-    return { valid: true };
+    return {
+      valid: false,
+      error: 'app_id is required. Register at POST https://botcha.ai/v1/apps with {"email": "you@example.com"}.',
+    };
   }
 
   try {
@@ -178,10 +213,7 @@ async function validateAppId(
     if (!app) {
       return {
         valid: false,
-        error: `App not found: ${appId}. ` +
-          `app_id is OPTIONAL — remove it to get a token without an app. ` +
-          `To register an app: POST https://botcha.ai/v1/apps with {"email": "you@example.com", "name": "My App"}. ` +
-          `App IDs look like: app_a1b2c3d4e5f6a7b8`
+        error: `App not found: ${appId}. Register at POST https://botcha.ai/v1/apps with {"email": "you@example.com"}.`,
       };
     }
     return { valid: true };
@@ -190,6 +222,84 @@ async function validateAppId(
     console.warn(`Failed to validate app_id ${appId} (KV unavailable), proceeding:`, error);
     return { valid: true };
   }
+}
+
+// ============ APP GATE MIDDLEWARE ============
+// Requires a registered app_id with verified email on all gated /v1/* routes.
+// Extracts app_id from: query param, X-App-Id header, or JWT Bearer token claim.
+async function requireAppId(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) {
+  // 1. Extract app_id from multiple sources
+  const queryAppId = c.req.query('app_id');
+  const headerAppId = c.req.header('x-app-id');
+
+  // Try JWT claim if Bearer token present
+  let jwtAppId: string | undefined;
+  const authHeader = c.req.header('authorization');
+  const token = extractBearerToken(authHeader);
+  if (token) {
+    try {
+      const publicKey = getPublicKey(c.env);
+      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+      if (result.valid && result.payload?.app_id) {
+        jwtAppId = result.payload.app_id;
+      }
+    } catch {
+      // Token invalid — will be caught by route-level auth if needed
+    }
+  }
+
+  const appId = queryAppId || headerAppId || jwtAppId;
+
+  // 2. No app_id at all → 401 with registration instructions
+  if (!appId) {
+    return c.json({
+      success: false,
+      error: 'APP_REGISTRATION_REQUIRED',
+      message: 'All API endpoints require a registered app. Create one for free:',
+      registration: {
+        endpoint: 'POST https://botcha.ai/v1/apps',
+        body: '{"email": "you@example.com", "name": "My App"}',
+        note: 'You will receive a 6-digit verification code via email. Verify to activate your app.',
+      },
+      docs: 'https://botcha.ai/ai.txt',
+    }, 401);
+  }
+
+  // 3. Validate app exists and email is verified
+  try {
+    const app = await getApp(c.env.APPS, appId);
+    if (!app) {
+      return c.json({
+        success: false,
+        error: 'APP_NOT_FOUND',
+        message: `App '${appId}' not found. Register at POST https://botcha.ai/v1/apps`,
+      }, 401);
+    }
+
+    if (!app.email_verified) {
+      return c.json({
+        success: false,
+        error: 'EMAIL_NOT_VERIFIED',
+        message: 'Your app email must be verified before using the API.',
+        next_step: `POST https://botcha.ai/v1/apps/${appId}/verify-email with {"code": "<6-digit code>", "app_secret": "<your_secret>"}`,
+        resend: `POST https://botcha.ai/v1/apps/${appId}/resend-verification`,
+      }, 403);
+    }
+  } catch (error) {
+    // Fail-open on KV errors — log warning and proceed
+    console.warn(`requireAppId: KV lookup failed for ${appId}, proceeding (fail-open):`, error);
+  }
+
+  // 4. Cross-check: if both query and JWT have app_id, they must match
+  if (queryAppId && jwtAppId && queryAppId !== jwtAppId) {
+    return c.json({
+      success: false,
+      error: 'APP_ID_MISMATCH',
+      message: `Query app_id '${queryAppId}' does not match token app_id '${jwtAppId}'.`,
+    }, 400);
+  }
+
+  await next();
 }
 
 // Helper: Parse ES256 signing key from env, returning undefined if not set
@@ -434,20 +544,21 @@ app.get('/', async (c) => {
       version,
       tagline: 'Prove you are a bot. Humans need not apply.',
       status: 'unverified',
-      message: 'Verify yourself to see the full API documentation.',
-      verify: {
-        step1: `GET ${baseUrl}/v1/token — receive a speed challenge (5 SHA-256 hashes). No app_id needed.`,
-        step2: 'Solve: compute SHA-256 of each number, return first 8 hex chars',
-        step3: `POST ${baseUrl}/v1/token/verify {"id":"<challenge_id>","answers":["hash1","hash2",...]}`,
-        step4: `Revisit: GET ${baseUrl}/ with header Authorization: Bearer <access_token>`,
-        note: 'app_id is OPTIONAL. You can get tokens without registering an app. To register one for production use: POST /v1/apps {"email":"you@example.com","name":"My App"}',
+      message: 'App registration required. Register to see the full API documentation.',
+      registration_required: {
+        note: 'All API endpoints require a registered app with verified email (v0.21.0)',
+        demo: 'The homepage demo at botcha.ai lets agents try challenges without registering',
+        step1: 'Ask your human for their email',
+        step2: `POST ${baseUrl}/v1/apps {"email":"you@example.com","name":"My App"} — NO app_id needed`,
+        step3: 'Human receives 6-digit code via email',
+        step4: `POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."} — NO app_id needed`,
+        step5: 'Use your app_id on ALL other /v1/* endpoints via ?app_id=, X-App-Id header, or JWT claim',
       },
       human_handoff: {
         note: 'After verifying, the response includes a human_link. Give it to your human to open in their browser.',
         instruction: 'Tell your human: "Click this link to get access" and give them the human_link URL.',
-        link_field: 'human_link from step 3 response',
+        link_field: 'human_link from token verify response',
       },
-      hint: 'You have 500ms. Only a bot can do this.',
       links: {
         openapi: `${baseUrl}/openapi.json`,
         ai_txt: `${baseUrl}/ai.txt`,
@@ -459,19 +570,23 @@ app.get('/', async (c) => {
 
 > Prove you are a bot. Humans need not apply.
 
-**Status:** Unverified. Solve a challenge to see the full documentation.
+**Status:** Unverified. Register an app to see the full documentation.
 
-## Verify Yourself
+## App Registration Required (v0.21.0)
 
-1. \`GET ${baseUrl}/v1/token\` — receive a speed challenge (5 SHA-256 hashes). **No app_id needed.**
-2. Solve: compute SHA-256 of each number, return first 8 hex chars
-3. \`POST ${baseUrl}/v1/token/verify {"id":"<challenge_id>","answers":["hash1","hash2",...]}\`
-4. Revisit: \`GET ${baseUrl}/\` with header \`Authorization: Bearer <access_token>\`
+**All API endpoints require a registered app with verified email.**
 
-You have 500ms. Only a bot can do this.
+- Register for free: \`POST /v1/apps\` with your email
+- The homepage demo at botcha.ai lets agents try challenges without registering
+- Provide app_id via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
 
-> **Note:** \`app_id\` is optional. You can get tokens without registering an app.
-> To register for production: \`POST /v1/apps {"email":"you@example.com","name":"My App"}\`
+## Register Your App
+
+1. Ask your human for their email
+2. \`POST ${baseUrl}/v1/apps {"email":"you@example.com","name":"My App"}\` — **NO app_id needed**
+3. Human receives 6-digit code via email
+4. \`POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."}\` — **NO app_id needed**
+5. Use your \`app_id\` on ALL other \`/v1/*\` endpoints via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
 
 ## Human Handoff
 
@@ -482,7 +597,7 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
 
 ---
 
-*Full API docs, SDKs, onboarding, and endpoint reference available after verification.*
+*Full API docs, SDKs, onboarding, and endpoint reference available after registration.*
 `;
       return c.body(md, 200, {
         'Content-Type': 'text/markdown; charset=utf-8',
@@ -518,60 +633,71 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
       solve_time_ms: tokenPayload?.solveTime,
     },
 
+    // === APP REGISTRATION REQUIRED (v0.21.0) ===
+    registration_required: {
+      note: 'All /v1/* API endpoints require a registered app with verified email.',
+      demo: 'The homepage demo at botcha.ai lets agents try challenges without registering.',
+      how_to_provide: 'Provide app_id via ?app_id=, X-App-Id header, or JWT claim',
+    },
+
     // === FULL SETUP: register your app and agent identity ===
     onboarding: {
       note: 'For production use. Creates your app, verifies your human, registers your identity.',
       steps: [
         '1. Ask your human operator for their email address.',
-        `2. POST ${baseUrl}/v1/apps {"email":"human@example.com","name":"My App"} — returns app_id + name + app_secret (shown ONCE).`,
+        `2. POST ${baseUrl}/v1/apps {"email":"human@example.com","name":"My App"} — returns app_id + name + app_secret (shown ONCE). NO app_id needed.`,
         '3. Human receives a 6-digit verification code via email — ask them for it.',
-        `4. POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."} — enables account recovery.`,
-        `5. Register yourself: POST ${baseUrl}/v1/agents/register {"name":"my-agent","operator":"my-org"} — persistent agent identity.`,
-        `6. Solve challenges with your app: GET ${baseUrl}/v1/challenges?app_id=...`,
-        `7. Dashboard for your human: POST ${baseUrl}/v1/auth/device-code {"app_id":"..."}, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code.`,
-        `8. Lost your secret? POST ${baseUrl}/v1/auth/recover {"email":"..."} — recovery code emailed.`,
+        `4. POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."} — enables account recovery. NO app_id needed.`,
+        `5. Use your app_id on ALL other /v1/* endpoints via ?app_id=, X-App-Id header, or JWT claim.`,
+        `6. Register yourself: POST ${baseUrl}/v1/agents/register {"name":"my-agent","operator":"my-org"} — persistent agent identity (requires app_id).`,
+        `7. Solve challenges with your app: GET ${baseUrl}/v1/challenges?app_id=... (requires app_id)`,
+        `8. Dashboard for your human: POST ${baseUrl}/v1/auth/device-code {"app_id":"..."}, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code (requires app_id).`,
+        `9. Lost your secret? POST ${baseUrl}/v1/auth/recover {"email":"..."} — recovery code emailed (no app_id needed).`,
       ],
     },
 
     // === All endpoints, grouped by domain ===
     endpoints: {
       challenges: {
-        'GET /v1/challenges': 'Get a challenge (hybrid by default, no auth required)',
-        'GET /v1/challenges?type=speed': 'Speed-only (SHA256 in <500ms)',
-        'GET /v1/challenges?type=standard': 'Standard puzzle challenge',
-        'POST /v1/challenges/:id/verify': 'Verify challenge solution',
+        note: 'All challenge endpoints require app_id',
+        'GET /v1/challenges': 'Get a challenge (hybrid by default) — app_id required',
+        'GET /v1/challenges?type=speed': 'Speed-only (SHA256 in <500ms) — app_id required',
+        'GET /v1/challenges?type=standard': 'Standard puzzle challenge — app_id required',
+        'POST /v1/challenges/:id/verify': 'Verify challenge solution — app_id required',
       },
       tokens: {
-        note: 'Use token flow when you need a Bearer token for protected endpoints.',
-        'GET /v1/token': 'Get speed challenge for token flow (?audience= optional)',
-        'POST /v1/token/verify': 'Submit solution → access_token (1hr) + refresh_token (1hr)',
-        'POST /v1/token/refresh': 'Refresh access token',
-        'POST /v1/token/revoke': 'Revoke a token',
-        'POST /v1/token/validate': 'Remote token validation — verify any BOTCHA token without needing the secret',
+        note: 'All token endpoints require app_id. Use token flow when you need a Bearer token for protected endpoints.',
+        'GET /v1/token': 'Get speed challenge for token flow (?audience= optional) — app_id required',
+        'POST /v1/token/verify': 'Submit solution → access_token (1hr) + refresh_token (1hr) — app_id required',
+        'POST /v1/token/refresh': 'Refresh access token — app_id required',
+        'POST /v1/token/revoke': 'Revoke a token — app_id required',
+        'POST /v1/token/validate': 'Remote token validation — verify any BOTCHA token without needing the secret — app_id required',
       },
       protected: {
-        'GET /agent-only': 'Demo protected endpoint — requires Bearer token',
+        'GET /agent-only': 'Demo protected endpoint — requires Bearer token (app_id required)',
         'GET /': 'This documentation (requires Bearer token for full version)',
       },
       apps: {
-        note: 'Create an app for isolated rate limits, scoped tokens, and dashboard access.',
-        'POST /v1/apps': 'Create app (email required, name optional) → app_id + name + app_secret',
-        'GET /v1/apps/:id': 'Get app info',
-        'POST /v1/apps/:id/verify-email': 'Verify email with 6-digit code (app_secret auth required)',
-        'POST /v1/apps/:id/resend-verification': 'Resend verification email (app_secret auth required)',
-        'POST /v1/apps/:id/rotate-secret': 'Rotate app secret (auth required)',
+        note: 'App management endpoints. Registration and verification do NOT require app_id.',
+        'POST /v1/apps': 'Create app (email required, name optional) → app_id + name + app_secret — NO app_id required',
+        'GET /v1/apps/:id': 'Get app info — NO app_id required',
+        'POST /v1/apps/:id/verify-email': 'Verify email with 6-digit code (app_secret auth required) — NO app_id required',
+        'POST /v1/apps/:id/resend-verification': 'Resend verification email (app_secret auth required) — NO app_id required',
+        'POST /v1/apps/:id/rotate-secret': 'Rotate app secret (auth required) — app_id required',
       },
       agents: {
-        note: 'Register a persistent identity for your agent.',
-        'POST /v1/agents/register': 'Register agent identity (name, operator, version)',
-        'GET /v1/agents/:id': 'Get agent by ID (public, no auth)',
-        'GET /v1/agents': 'List all agents for your app (auth required)',
+        note: 'All agent endpoints require app_id. Register a persistent identity for your agent.',
+        'POST /v1/agents/register': 'Register agent identity (name, operator, version) — app_id required',
+        'GET /v1/agents/:id': 'Get agent by ID (public, no auth) — app_id required',
+        'GET /v1/agents': 'List all agents for your app (auth required) — app_id required',
       },
       recovery: {
-        'POST /v1/auth/recover': 'Account recovery via verified email',
+        note: 'Recovery does NOT require app_id',
+        'POST /v1/auth/recover': 'Account recovery via verified email — NO app_id required',
       },
       dashboard: {
-        'POST /v1/auth/device-code': 'Get challenge for device code flow',
+        note: 'Dashboard endpoints require app_id',
+        'POST /v1/auth/device-code': 'Get challenge for device code flow — app_id required',
         'GET /dashboard': 'Metrics dashboard (login required)',
       },
     },

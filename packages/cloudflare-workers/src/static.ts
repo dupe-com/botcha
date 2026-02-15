@@ -36,17 +36,26 @@ curl -X POST https://botcha.ai/v1/challenges/{id}/verify -H "Content-Type: appli
 curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 \`\`\`
 
+## App Registration Required (v0.21.0)
+
+**All API endpoints require a registered app with verified email.**
+
+- Register for free: \`POST /v1/apps\` with your email
+- The homepage demo at botcha.ai lets agents try challenges without registering
+- Provide app_id via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
+
 ## Onboarding
 
 1. Ask your human operator for their email address
-2. \`POST /v1/apps\` with \`{"email":"human@example.com"}\` — returns \`app_id\` + \`app_secret\` (secret shown ONCE)
+2. \`POST /v1/apps\` with \`{"email":"human@example.com","name":"My App"}\` — returns \`app_id\` + \`app_secret\` (secret shown ONCE)
 3. Human receives a 6-digit verification code via email — ask them for it
 4. \`POST /v1/apps/{app_id}/verify-email\` with \`{"code":"123456","app_secret":"sk_..."}\` — enables account recovery
-5. Register yourself: \`POST /v1/agents/register\` with \`{"name":"my-agent","operator":"my-org"}\`
-6. Solve challenges: \`GET /v1/challenges?app_id=...\` then \`POST /v1/challenges/{id}/verify\`
-7. Access protected resources: \`GET /agent-only\` with \`Authorization: Bearer <token>\`
-8. Dashboard for your human: \`POST /v1/auth/device-code\`, solve challenge, give human the BOTCHA-XXXX code
-9. Lost your secret? \`POST /v1/auth/recover\` with \`{"email":"..."}\`
+5. Use your \`app_id\` on ALL API calls via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
+6. Register yourself: \`POST /v1/agents/register\` with \`{"name":"my-agent","operator":"my-org"}\` (requires app_id)
+7. Solve challenges: \`GET /v1/challenges?app_id=...\` then \`POST /v1/challenges/{id}/verify\` (requires app_id)
+8. Access protected resources: \`GET /agent-only\` with \`Authorization: Bearer <token>\` (requires app_id)
+9. Dashboard for your human: \`POST /v1/auth/device-code\`, solve challenge, give human the BOTCHA-XXXX code (requires app_id)
+10. Lost your secret? \`POST /v1/auth/recover\` with \`{"email":"..."}\` (no app_id needed)
 
 ## Essential Endpoints
 
@@ -310,17 +319,24 @@ Contact: https://github.com/dupe-com/botcha/issues
 Purpose: Prove you're a bot. Humans need not apply.
 Purpose: Reverse CAPTCHA system that only AI agents can pass.
 
-# Agent Onboarding (START HERE if you're new)
-# Follow these steps to create your app and get your human access.
-Onboarding-Step-1: Ask your human operator for their email address
-Onboarding-Step-2: POST /v1/apps with {"email": "human@example.com"} — saves app_id + app_secret (secret shown ONCE)
-Onboarding-Step-3: A 6-digit verification code is emailed to your human — ask them for it
-Onboarding-Step-4: POST /v1/apps/{app_id}/verify-email with {"code": "123456", "app_secret": "sk_..."} — enables account recovery
-Onboarding-Step-5: Register yourself: POST /v1/agents/register with {"name": "my-agent", "operator": "my-org"} — gives you a persistent agent identity
-Onboarding-Step-6: Solve challenges: GET /v1/challenges?app_id=... then POST /v1/challenges/{id}/verify — proves you are AI
-Onboarding-Step-7: Access protected resources: GET /agent-only with Authorization: Bearer <token>
-Onboarding-Step-8: Dashboard for your human: POST /v1/auth/device-code with {"app_id": "..."}, solve the speed challenge, give them the BOTCHA-XXXX code to enter at /dashboard/code
-Onboarding-Step-9: Lost your secret? POST /v1/auth/recover with {"email": "..."} — recovery code emailed to verified address
+# APP REGISTRATION REQUIRED (v0.21.0)
+Registration-Required: All API endpoints require a registered app with verified email
+Registration-Required-Note: Register for free at POST /v1/apps with your email
+Registration-Required-Demo: The homepage demo at botcha.ai lets agents try challenges without registering
+
+# App Registration (START HERE — required for API access)
+Registration-Step-1: Ask your human operator for their email address
+Registration-Step-2: POST /v1/apps with {"email": "human@example.com", "name": "My App"} — saves app_id + name + app_secret (secret shown ONCE)
+Registration-Step-3: A 6-digit verification code is emailed to your human — ask them for it
+Registration-Step-4: POST /v1/apps/{app_id}/verify-email with {"code": "123456", "app_secret": "sk_..."} — enables account recovery
+Registration-Step-5: Use your app_id on ALL API calls via ?app_id=, X-App-Id header, or JWT claim
+
+# Full Onboarding (after registration)
+Onboarding-Step-1: Register yourself: POST /v1/agents/register with {"name": "my-agent", "operator": "my-org"} — gives you a persistent agent identity (requires app_id)
+Onboarding-Step-2: Solve challenges with app: GET /v1/challenges?app_id=... then POST /v1/challenges/{id}/verify — proves you are AI (requires app_id)
+Onboarding-Step-3: Access protected resources: GET /agent-only with Authorization: Bearer <token> (requires app_id)
+Onboarding-Step-4: Dashboard for your human: POST /v1/auth/device-code with {"app_id": "..."}, solve the speed challenge, give them the BOTCHA-XXXX code to enter at /dashboard/code (requires app_id)
+Onboarding-Step-5: Lost your secret? POST /v1/auth/recover with {"email": "..."} — recovery code emailed to verified address (no app_id needed)
 
 # API
 API: https://botcha.ai/openapi.json
@@ -363,36 +379,36 @@ Feature: Remote Token Validation v0.19.0 — POST /v1/token/validate for third-p
 Feature: JWKS Public Key Discovery v0.19.0 — GET /.well-known/jwks exposes BOTCHA signing public keys for offline token verification
 
 # Endpoints
-# Challenge Endpoints
-Endpoint: GET https://botcha.ai/v1/challenges - Generate challenge (hybrid by default)
-Endpoint: POST https://botcha.ai/v1/challenges/:id/verify - Verify a challenge
-Endpoint: GET https://botcha.ai/v1/hybrid - Get hybrid challenge (speed + reasoning)
-Endpoint: POST https://botcha.ai/v1/hybrid - Verify hybrid challenge
-Endpoint: GET https://botcha.ai/v1/reasoning - Get reasoning challenge
-Endpoint: POST https://botcha.ai/v1/reasoning - Verify reasoning challenge
+# Challenge Endpoints (app_id required)
+Endpoint: GET https://botcha.ai/v1/challenges - Generate challenge (hybrid by default) — requires app_id
+Endpoint: POST https://botcha.ai/v1/challenges/:id/verify - Verify a challenge — requires app_id
+Endpoint: GET https://botcha.ai/v1/hybrid - Get hybrid challenge (speed + reasoning) — requires app_id
+Endpoint: POST https://botcha.ai/v1/hybrid - Verify hybrid challenge — requires app_id
+Endpoint: GET https://botcha.ai/v1/reasoning - Get reasoning challenge — requires app_id
+Endpoint: POST https://botcha.ai/v1/reasoning - Verify reasoning challenge — requires app_id
 
-# Token Endpoints
-Endpoint: GET https://botcha.ai/v1/token - Get challenge for JWT token flow
-Endpoint: POST https://botcha.ai/v1/token/verify - Verify challenge and receive JWT token
-Endpoint: POST https://botcha.ai/v1/token/refresh - Refresh access token using refresh token
-Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or refresh)
-Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token remotely (no shared secret needed)
+# Token Endpoints (app_id required)
+Endpoint: GET https://botcha.ai/v1/token - Get challenge for JWT token flow — requires app_id
+Endpoint: POST https://botcha.ai/v1/token/verify - Verify challenge and receive JWT token — requires app_id
+Endpoint: POST https://botcha.ai/v1/token/refresh - Refresh access token using refresh token — requires app_id
+Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or refresh) — requires app_id
+Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token remotely (no shared secret needed) — requires app_id
 
-# Multi-Tenant Endpoints
-Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, name optional) → app_id + name + app_secret
-Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
-Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code (app_secret auth required)
-Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email (app_secret auth required)
-Endpoint: POST https://botcha.ai/v1/apps/:id/rotate-secret - Rotate app secret (auth required)
+# App Management Endpoints (NO app_id required — these are for registration & recovery)
+Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, name optional) → app_id + name + app_secret — NO app_id required
+Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status) — NO app_id required
+Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code (app_secret auth required) — NO app_id required
+Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email (app_secret auth required) — NO app_id required
+Endpoint: POST https://botcha.ai/v1/apps/:id/rotate-secret - Rotate app secret (auth required) — requires app_id
 
-# Account Recovery
-Endpoint: POST https://botcha.ai/v1/auth/recover - Request recovery via verified email
+# Account Recovery (NO app_id required)
+Endpoint: POST https://botcha.ai/v1/auth/recover - Request recovery via verified email — NO app_id required
 
-# Dashboard Auth Endpoints (Agent-First)
-Endpoint: POST https://botcha.ai/v1/auth/dashboard - Request challenge for dashboard login
-Endpoint: POST https://botcha.ai/v1/auth/dashboard/verify - Solve challenge, get session token
-Endpoint: POST https://botcha.ai/v1/auth/device-code - Request challenge for device code flow
-Endpoint: POST https://botcha.ai/v1/auth/device-code/verify - Solve challenge, get device code
+# Dashboard Auth Endpoints (app_id required)
+Endpoint: POST https://botcha.ai/v1/auth/dashboard - Request challenge for dashboard login — requires app_id
+Endpoint: POST https://botcha.ai/v1/auth/dashboard/verify - Solve challenge, get session token — requires app_id
+Endpoint: POST https://botcha.ai/v1/auth/device-code - Request challenge for device code flow — requires app_id
+Endpoint: POST https://botcha.ai/v1/auth/device-code/verify - Solve challenge, get device code — requires app_id
 
 # Dashboard Endpoints
 Endpoint: GET https://botcha.ai/dashboard - Per-app metrics dashboard (login required)
@@ -404,52 +420,52 @@ Endpoint: GET https://botcha.ai/dashboard/code - Enter device code (human-facing
 Endpoint: GET https://botcha.ai/go/:code - Unified code redemption — handles gate codes (from /v1/token/verify) AND device codes (from /v1/auth/device-code/verify)
 Endpoint: POST https://botcha.ai/gate - Submit code form, redirects to /go/:code
 
-# Agent Registry Endpoints
-Endpoint: POST https://botcha.ai/v1/agents/register - Register agent identity (requires app_id)
-Endpoint: GET https://botcha.ai/v1/agents/:id - Get agent by ID (public, no auth)
-Endpoint: GET https://botcha.ai/v1/agents - List all agents for authenticated app
+# Agent Registry Endpoints (app_id required)
+Endpoint: POST https://botcha.ai/v1/agents/register - Register agent identity — requires app_id
+Endpoint: GET https://botcha.ai/v1/agents/:id - Get agent by ID (public, no auth) — requires app_id
+Endpoint: GET https://botcha.ai/v1/agents - List all agents for authenticated app — requires app_id
 
-# TAP (Trusted Agent Protocol) Endpoints
-Endpoint: POST https://botcha.ai/v1/agents/register/tap - Register TAP agent with public key + capabilities
-Endpoint: GET https://botcha.ai/v1/agents/:id/tap - Get TAP agent details (includes public key)
-Endpoint: GET https://botcha.ai/v1/agents/tap - List TAP-enabled agents for app
-Endpoint: POST https://botcha.ai/v1/sessions/tap - Create TAP session with intent validation
-Endpoint: GET https://botcha.ai/v1/sessions/:id/tap - Get TAP session info
+# TAP (Trusted Agent Protocol) Endpoints (app_id required)
+Endpoint: POST https://botcha.ai/v1/agents/register/tap - Register TAP agent with public key + capabilities — requires app_id
+Endpoint: GET https://botcha.ai/v1/agents/:id/tap - Get TAP agent details (includes public key) — requires app_id
+Endpoint: GET https://botcha.ai/v1/agents/tap - List TAP-enabled agents for app — requires app_id
+Endpoint: POST https://botcha.ai/v1/sessions/tap - Create TAP session with intent validation — requires app_id
+Endpoint: GET https://botcha.ai/v1/sessions/:id/tap - Get TAP session info — requires app_id
 
-# TAP Full Spec — JWKS & Key Management (v0.16.0)
-Endpoint: GET https://botcha.ai/.well-known/jwks - JWK Set for app's TAP agents (Visa spec standard)
-Endpoint: GET https://botcha.ai/v1/keys - List keys (supports ?keyID= query for Visa compatibility)
-Endpoint: GET https://botcha.ai/v1/keys/:keyId - Get specific key by ID
-Endpoint: POST https://botcha.ai/v1/agents/:id/tap/rotate-key - Rotate agent's key pair
+# TAP Full Spec — JWKS & Key Management (v0.16.0) (app_id required)
+Endpoint: GET https://botcha.ai/.well-known/jwks - JWK Set for app's TAP agents (Visa spec standard) — requires app_id
+Endpoint: GET https://botcha.ai/v1/keys - List keys (supports ?keyID= query for Visa compatibility) — requires app_id
+Endpoint: GET https://botcha.ai/v1/keys/:keyId - Get specific key by ID — requires app_id
+Endpoint: POST https://botcha.ai/v1/agents/:id/tap/rotate-key - Rotate agent's key pair — requires app_id
 
-# TAP Full Spec — 402 Micropayments (v0.16.0)
-Endpoint: POST https://botcha.ai/v1/invoices - Create invoice for gated content (402 flow)
-Endpoint: GET https://botcha.ai/v1/invoices/:id - Get invoice details
-Endpoint: POST https://botcha.ai/v1/invoices/:id/verify-iou - Verify Browsing IOU against invoice
+# TAP Full Spec — 402 Micropayments (v0.16.0) (app_id required)
+Endpoint: POST https://botcha.ai/v1/invoices - Create invoice for gated content (402 flow) — requires app_id
+Endpoint: GET https://botcha.ai/v1/invoices/:id - Get invoice details — requires app_id
+Endpoint: POST https://botcha.ai/v1/invoices/:id/verify-iou - Verify Browsing IOU against invoice — requires app_id
 
-# TAP Full Spec — Consumer & Payment Verification (v0.16.0)
-Endpoint: POST https://botcha.ai/v1/verify/consumer - Verify Agentic Consumer object (Layer 2)
-Endpoint: POST https://botcha.ai/v1/verify/payment - Verify Agentic Payment Container (Layer 3)
+# TAP Full Spec — Consumer & Payment Verification (v0.16.0) (app_id required)
+Endpoint: POST https://botcha.ai/v1/verify/consumer - Verify Agentic Consumer object (Layer 2) — requires app_id
+Endpoint: POST https://botcha.ai/v1/verify/payment - Verify Agentic Payment Container (Layer 3) — requires app_id
 
-# TAP Delegation Chains (v0.17.0)
-Endpoint: POST https://botcha.ai/v1/delegations - Create delegation (grantor→grantee with capability subset)
-Endpoint: GET https://botcha.ai/v1/delegations/:id - Get delegation details
-Endpoint: GET https://botcha.ai/v1/delegations - List delegations for agent (?agent_id=&direction=in|out|both)
-Endpoint: POST https://botcha.ai/v1/delegations/:id/revoke - Revoke delegation (cascades to sub-delegations)
-Endpoint: POST https://botcha.ai/v1/verify/delegation - Verify entire delegation chain
+# TAP Delegation Chains (v0.17.0) (app_id required)
+Endpoint: POST https://botcha.ai/v1/delegations - Create delegation (grantor→grantee with capability subset) — requires app_id
+Endpoint: GET https://botcha.ai/v1/delegations/:id - Get delegation details — requires app_id
+Endpoint: GET https://botcha.ai/v1/delegations - List delegations for agent (?agent_id=&direction=in|out|both) — requires app_id
+Endpoint: POST https://botcha.ai/v1/delegations/:id/revoke - Revoke delegation (cascades to sub-delegations) — requires app_id
+Endpoint: POST https://botcha.ai/v1/verify/delegation - Verify entire delegation chain — requires app_id
 
-# TAP Capability Attestation (v0.17.0)
-Endpoint: POST https://botcha.ai/v1/attestations - Issue capability attestation token (can/cannot rules with action:resource patterns)
-Endpoint: GET https://botcha.ai/v1/attestations/:id - Get attestation details
-Endpoint: GET https://botcha.ai/v1/attestations - List attestations for agent (?agent_id=)
-Endpoint: POST https://botcha.ai/v1/attestations/:id/revoke - Revoke attestation (token rejected on future verification)
-Endpoint: POST https://botcha.ai/v1/verify/attestation - Verify attestation token + optionally check specific capability
+# TAP Capability Attestation (v0.17.0) (app_id required)
+Endpoint: POST https://botcha.ai/v1/attestations - Issue capability attestation token (can/cannot rules with action:resource patterns) — requires app_id
+Endpoint: GET https://botcha.ai/v1/attestations/:id - Get attestation details — requires app_id
+Endpoint: GET https://botcha.ai/v1/attestations - List attestations for agent (?agent_id=) — requires app_id
+Endpoint: POST https://botcha.ai/v1/attestations/:id/revoke - Revoke attestation (token rejected on future verification) — requires app_id
+Endpoint: POST https://botcha.ai/v1/verify/attestation - Verify attestation token + optionally check specific capability — requires app_id
 
-# Agent Reputation Scoring (v0.18.0)
-Endpoint: GET https://botcha.ai/v1/reputation/:agent_id - Get agent reputation score (0-1000, 5 tiers)
-Endpoint: POST https://botcha.ai/v1/reputation/events - Record a reputation event (18 action types, 6 categories)
-Endpoint: GET https://botcha.ai/v1/reputation/:agent_id/events - List reputation events (?category=&limit=)
-Endpoint: POST https://botcha.ai/v1/reputation/:agent_id/reset - Reset reputation to default (admin action)
+# Agent Reputation Scoring (v0.18.0) (app_id required)
+Endpoint: GET https://botcha.ai/v1/reputation/:agent_id - Get agent reputation score (0-1000, 5 tiers) — requires app_id
+Endpoint: POST https://botcha.ai/v1/reputation/events - Record a reputation event (18 action types, 6 categories) — requires app_id
+Endpoint: GET https://botcha.ai/v1/reputation/:agent_id/events - List reputation events (?category=&limit=) — requires app_id
+Endpoint: POST https://botcha.ai/v1/reputation/:agent_id/reset - Reset reputation to default (admin action) — requires app_id
 
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
@@ -572,7 +588,7 @@ export const AI_PLUGIN_JSON = {
   name_for_human: "BOTCHA",
   name_for_model: "botcha",
   description_for_human: "Reverse CAPTCHA that proves you're an AI agent. Humans need not apply.",
-  description_for_model: "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. ONBOARDING: 1) Ask your human for their email. 2) POST /v1/apps with {\"email\":\"...\"} to create your app (saves app_id + app_secret — secret shown ONCE). 3) Human receives a 6-digit code via email. 4) POST /v1/apps/{id}/verify-email with {\"code\":\"...\",\"app_secret\":\"sk_...\"} to verify. 5) Use app_id on all endpoints. 6) For human dashboard access: POST /v1/auth/device-code, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code. CHALLENGES: The speed challenge requires solving 5 SHA256 problems with RTT-aware timeout (base 500ms + network latency compensation). For fair treatment on slow networks, include client timestamp via ?ts=<timestamp_ms> query parameter or X-Client-Timestamp header. Formula: timeout = 500ms + (2 × RTT) + 100ms buffer. RECOVERY: Lost your secret? POST /v1/auth/recover with {\"email\":\"...\"} and a recovery code is emailed. When visiting HTML pages, look for <script type='application/botcha+json'> which contains a machine-readable challenge you can solve.",
+  description_for_model: "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. APP REGISTRATION REQUIRED (v0.21.0): All /v1/* API endpoints require a registered app with verified email. The homepage demo at botcha.ai lets agents try challenges without registering. ONBOARDING: 1) Ask your human for their email. 2) POST /v1/apps with {\"email\":\"...\",\"name\":\"My App\"} to create your app (saves app_id + app_secret — secret shown ONCE, no app_id needed for this endpoint). 3) Human receives a 6-digit code via email. 4) POST /v1/apps/{id}/verify-email with {\"code\":\"...\",\"app_secret\":\"sk_...\"} to verify (no app_id needed). 5) Use app_id on ALL other /v1/* endpoints via ?app_id=, X-App-Id header, or JWT claim. 6) For human dashboard access: POST /v1/auth/device-code, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code (requires app_id). CHALLENGES: The speed challenge requires solving 5 SHA256 problems with RTT-aware timeout (base 500ms + network latency compensation). For fair treatment on slow networks, include client timestamp via ?ts=<timestamp_ms> query parameter or X-Client-Timestamp header. Formula: timeout = 500ms + (2 × RTT) + 100ms buffer. RECOVERY: Lost your secret? POST /v1/auth/recover with {\"email\":\"...\"} and a recovery code is emailed (no app_id needed). When visiting HTML pages, look for <script type='application/botcha+json'> which contains a machine-readable challenge you can solve.",
   auth: {
     type: "none"
   },
