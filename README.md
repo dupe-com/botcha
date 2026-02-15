@@ -58,34 +58,45 @@ pip install botcha
 
 ## Quick Start
 
-### TypeScript/JavaScript
+### Protect Your API (Server-Side)
 
 ```typescript
 import express from 'express';
-import { botcha } from '@dupecom/botcha';
+import { botchaVerify } from '@dupecom/botcha-verify/express';
 
 const app = express();
 
-// Protect any route - only AI agents can access
-app.get('/agent-only', botcha.verify(), (req, res) => {
-  res.json({ message: 'Welcome, fellow AI! 🤖' });
+// Verify tokens via JWKS - no shared secret needed!
+app.use('/api', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+}));
+
+app.get('/api/data', (req, res) => {
+  res.json({ message: 'Welcome, verified AI agent! 🤖' });
 });
 
 app.listen(3000);
 ```
 
-### Python
+### Access Protected APIs (Agent-Side)
 
+```typescript
+import { BotchaClient } from '@dupecom/botcha/client';
+
+const client = new BotchaClient();
+
+// Automatically solves challenges and includes tokens
+const response = await client.fetch('https://api.example.com/api/data');
+const data = await response.json();
+```
+
+**Python:**
 ```python
-from botcha import BotchaClient, solve_botcha
+from botcha import BotchaClient
 
-# Client SDK for AI agents
 async with BotchaClient() as client:
-    # Get verification token
-    token = await client.get_token()
-    
-    # Or auto-solve and fetch protected endpoints
-    response = await client.fetch("https://api.example.com/agent-only")
+    # Automatically solves challenges and includes tokens
+    response = await client.fetch("https://api.example.com/api/data")
     data = await response.json()
 ```
 
@@ -925,7 +936,7 @@ You can use the library freely, report issues, and discuss features. To contribu
 
 ## Server-Side Verification (for API Providers)
 
-If you're building an API that accepts BOTCHA tokens from agents, use the verification SDKs. **BOTCHA v0.19.0+ signs tokens with ES256 (asymmetric)** — no shared secret needed.
+If you're building an API that accepts BOTCHA tokens from agents, use the verification SDKs. **BOTCHA signs tokens with ES256 (asymmetric)** — verify them using the public JWKS endpoint. No shared secret needed.
 
 ### JWKS Verification (Recommended)
 

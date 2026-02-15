@@ -29,13 +29,13 @@ export interface DeviceCodeData {
 
 /**
  * Generate a human-friendly device code.
- * Format: BOTCHA-XXXX (4 alphanumeric chars, no ambiguous chars)
+ * Format: BOTCHA-XXXXXX (6 alphanumeric chars, no ambiguous chars)
  *
  * Uses a restricted alphabet that avoids 0/O, 1/I/l confusion.
  */
 export function generateDeviceCode(): string {
   const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // no 0,O,1,I,L
-  const bytes = new Uint8Array(4);
+  const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   const chars = Array.from(bytes).map(b => alphabet[b % alphabet.length]).join('');
   return `BOTCHA-${chars}`;

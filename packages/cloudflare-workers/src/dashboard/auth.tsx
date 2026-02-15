@@ -24,6 +24,7 @@ import { SignJWT } from 'jose';
 import { verifyToken } from '../auth';
 import { validateAppSecret, getAppByEmail } from '../apps';
 import { sendEmail, recoveryEmail } from '../email';
+import { checkRateLimit, getClientIP } from '../rate-limit';
 import type { KVNamespace } from '../challenges';
 import { generateDeviceCode, storeDeviceCode, redeemDeviceCode } from './device-code';
 import { LoginLayout, Card, Divider } from './layout';
@@ -272,7 +273,7 @@ export async function handleDeviceCodeChallenge(c: Context<{ Bindings: Bindings 
  * POST /v1/auth/device-code/verify
  *
  * Agent submits challenge solution. On success, returns a short-lived
- * device code (BOTCHA-XXXX) that a human can enter at /dashboard/code.
+ * device code (BOTCHA-XXXXXX) that a human can enter at /dashboard/code.
  */
 export async function handleDeviceCodeVerify(c: Context<{ Bindings: Bindings }>) {
   const body = await c.req.json().catch(() => ({}));
@@ -361,11 +362,11 @@ export async function renderDeviceCodePage(c: Context<{ Bindings: Bindings }>) {
                 type="text"
                 id="code"
                 name="code"
-                placeholder="XXXX"
+                placeholder="XXXXXX"
                 value={prefill}
                 required
                 autocomplete="off"
-                maxlength={11}
+                maxlength={13}
                 style="font-size: 1.5rem; font-weight: 700; text-align: center; letter-spacing: 0.15em; padding: 1rem; flex: 1; border-left: none;"
               />
             </div>
@@ -375,7 +376,7 @@ export async function renderDeviceCodePage(c: Context<{ Bindings: Bindings }>) {
               var v = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
               if (v.startsWith('BOTCHA-')) v = v.slice(7);
               else if (v.startsWith('BOTCHA')) v = v.slice(6);
-              e.target.value = v.slice(0, 4);
+              e.target.value = v.slice(0, 6);
             });
           `}} />
           <button type="submit">Verify Code {'>'}</button>
@@ -396,6 +397,13 @@ export async function renderDeviceCodePage(c: Context<{ Bindings: Bindings }>) {
  * Human submits device code. If valid, creates session and redirects to dashboard.
  */
 export async function handleDeviceCodeRedeem(c: Context<{ Bindings: Bindings }>) {
+  // Brute-force guard for device code redemption attempts (20/hour/IP).
+  const clientIp = getClientIP(c.req.raw);
+  const redemptionRate = await checkRateLimit(c.env.RATE_LIMITS, `device-code:${clientIp}`, 20);
+  if (!redemptionRate.allowed) {
+    return c.redirect('/dashboard/code?error=invalid');
+  }
+
   const body = await c.req.parseBody();
   let code = (body.code as string || '').trim().toUpperCase();
 
@@ -403,7 +411,7 @@ export async function handleDeviceCodeRedeem(c: Context<{ Bindings: Bindings }>)
     return c.redirect('/dashboard/code?error=missing');
   }
 
-  // Normalize: accept both "AR8C" and "BOTCHA-AR8C", always look up with prefix
+  // Normalize: accept both "AR8C2Q" and "BOTCHA-AR8C2Q", always look up with prefix.
   if (!code.startsWith('BOTCHA-')) {
     code = `BOTCHA-${code}`;
   }
