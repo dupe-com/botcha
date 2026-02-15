@@ -52,7 +52,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 
 | Method | Path | Description |
 |--------|------|-------------|
-| \`POST\` | \`/v1/apps\` | Create app (email required) → app_id + app_secret |
+| \`POST\` | \`/v1/apps\` | Create app (email required, name optional) → app_id + app_secret |
 | \`POST\` | \`/v1/agents/register\` | Register agent identity → agent_id |
 | \`GET\` | \`/v1/challenges\` | Get a challenge (hybrid by default) |
 | \`POST\` | \`/v1/challenges/:id/verify\` | Submit solution → JWT token |
@@ -64,7 +64,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 
 | Method | Path | Description |
 |--------|------|-------------|
-| \`POST\` | \`/v1/apps\` | Create app (email required, returns app_id + app_secret) |
+| \`POST\` | \`/v1/apps\` | Create app (email required, name optional) → app_id + name + app_secret |
 | \`GET\` | \`/v1/apps/:id\` | Get app info |
 | \`POST\` | \`/v1/apps/:id/verify-email\` | Verify email with 6-digit code |
 | \`POST\` | \`/v1/apps/:id/resend-verification\` | Resend verification email |
@@ -379,7 +379,7 @@ Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or ref
 Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token remotely (no shared secret needed)
 
 # Multi-Tenant Endpoints
-Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, returns app_id + app_secret)
+Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, name optional) → app_id + name + app_secret
 Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
 Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code
 Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email
@@ -1164,8 +1164,8 @@ export function getOpenApiSpec(version: string) {
       },
       "/v1/apps": {
         post: {
-          summary: "Create a new multi-tenant app (email required)",
-          description: "Create a new app with unique app_id and app_secret. Email is required for account recovery. A 6-digit verification code is sent to the provided email.",
+          summary: "Create a new multi-tenant app",
+          description: "Create a new app with unique app_id and app_secret. Email is required for account recovery. Name is optional but recommended for identification. A 6-digit verification code is sent to the provided email.",
           operationId: "createApp",
           requestBody: {
             required: true,
@@ -1175,7 +1175,8 @@ export function getOpenApiSpec(version: string) {
                   type: "object",
                   required: ["email"],
                   properties: {
-                    "email": { type: "string", format: "email", description: "Owner email (required for recovery)" }
+                    "email": { type: "string", format: "email", description: "Owner email (required for recovery)" },
+                    "name": { type: "string", maxLength: 100, description: "Human-readable app label (optional, e.g. 'My Shopping App')" }
                   }
                 }
               }
@@ -1190,6 +1191,7 @@ export function getOpenApiSpec(version: string) {
                     type: "object",
                     properties: {
                       "app_id": { type: "string", description: "Unique app identifier" },
+                      "name": { type: "string", description: "Human-readable app label" },
                       "app_secret": { type: "string", description: "Secret key (only shown once!)" },
                       "email": { type: "string" },
                       "email_verified": { type: "boolean" },
@@ -1200,7 +1202,7 @@ export function getOpenApiSpec(version: string) {
                 }
               }
             },
-            "400": { description: "Missing or invalid email" }
+            "400": { description: "Missing or invalid email, or invalid name" }
           }
         }
       },

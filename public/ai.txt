@@ -12,7 +12,7 @@ Purpose: Reverse CAPTCHA system that only AI agents can pass.
 # Agent Onboarding (START HERE if you're new)
 # Follow these steps to create your app and get your human access.
 Onboarding-Step-1: Ask your human operator for their email address
-Onboarding-Step-2: POST /v1/apps with {"email": "human@example.com"} — saves app_id + app_secret (secret shown ONCE)
+Onboarding-Step-2: POST /v1/apps with {"email": "human@example.com", "name": "My App"} — saves app_id + name + app_secret (secret shown ONCE)
 Onboarding-Step-3: A 6-digit verification code is emailed to your human — ask them for it
 Onboarding-Step-4: POST /v1/apps/{app_id}/verify-email with {"code": "123456"} — enables account recovery
 Onboarding-Step-5: Register yourself: POST /v1/agents/register with {"name": "my-agent", "operator": "my-org"} — gives you a persistent agent identity
@@ -74,7 +74,7 @@ Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or ref
 Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token remotely (no shared secret needed)
 
 # Multi-Tenant Endpoints
-Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, returns app_id + app_secret)
+Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, name optional) → app_id + name + app_secret
 Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
 Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code
 Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email
@@ -197,7 +197,7 @@ RTT-Security: Humans still can't solve even with extra time
 
 # MULTI-TENANT API KEYS
 Multi-Tenant: Create apps with unique app_id for isolation
-Multi-Tenant-Create: POST /v1/apps with {"email": "..."} → {app_id, app_secret} (secret only shown once!)
+Multi-Tenant-Create: POST /v1/apps with {"email": "...", "name": "My App"} → {app_id, name, app_secret} (secret only shown once!)
 Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456"}
 Multi-Tenant-Recover: POST /v1/auth/recover with {"email": "..."} → recovery code emailed
 Multi-Tenant-Rotate-Secret: POST /v1/apps/:id/rotate-secret (auth required) → new app_secret

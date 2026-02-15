@@ -320,31 +320,39 @@ class BotchaClient:
 
     # ============ APP MANAGEMENT ============
 
-    async def create_app(self, email: str) -> CreateAppResponse:
+    async def create_app(
+        self, email: str, name: Optional[str] = None
+    ) -> CreateAppResponse:
         """
-        Create a new BOTCHA app. Email is required.
+        Create a new BOTCHA app. Email is required, name is optional.
 
         The returned ``app_secret`` is only shown once — save it securely.
         A 6-digit verification code will be sent to the provided email.
 
         Args:
             email: Email address for the app owner.
+            name: Optional human-readable label (e.g., "My Shopping App").
 
         Returns:
-            CreateAppResponse with app_id and app_secret.
+            CreateAppResponse with app_id, name, and app_secret.
 
         Raises:
             httpx.HTTPStatusError: If app creation fails.
 
         Example::
 
-            app = await client.create_app("agent@example.com")
+            app = await client.create_app("agent@example.com", name="My Shopping App")
             print(app.app_id)      # 'app_abc123'
+            print(app.name)        # 'My Shopping App'
             print(app.app_secret)  # 'sk_...' (save this!)
         """
+        body: dict = {"email": email}
+        if name:
+            body["name"] = name
+
         response = await self._client.post(
             f"{self.base_url}/v1/apps",
-            json={"email": email},
+            json=body,
         )
         response.raise_for_status()
         data = response.json()
@@ -358,6 +366,7 @@ class BotchaClient:
             app_id=data["app_id"],
             app_secret=data["app_secret"],
             email=data.get("email", email),
+            name=data.get("name"),
             email_verified=data.get("email_verified", False),
             verification_required=data.get("verification_required", True),
             warning=data.get("warning", ""),

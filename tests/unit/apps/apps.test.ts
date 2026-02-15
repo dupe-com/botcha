@@ -255,6 +255,29 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       expect(app2.app_secret).not.toBe(app3.app_secret);
       expect(app1.app_secret).not.toBe(app3.app_secret);
     });
+
+    test('creates app with optional name', async () => {
+      const result = await createApp(mockKV, TEST_EMAIL, 'My Shopping App');
+      
+      expect(result.name).toBe('My Shopping App');
+      expect(result.app_id).toMatch(/^app_[0-9a-f]{16}$/);
+      
+      // Verify name is stored in KV
+      const stored = await mockKV.get(`app:${result.app_id}`, 'text');
+      const config = JSON.parse(stored);
+      expect(config.name).toBe('My Shopping App');
+    });
+
+    test('creates app without name (backward compatible)', async () => {
+      const result = await createApp(mockKV, TEST_EMAIL);
+      
+      expect(result.name).toBeUndefined();
+      
+      // Verify no name field in KV
+      const stored = await mockKV.get(`app:${result.app_id}`, 'text');
+      const config = JSON.parse(stored);
+      expect(config.name).toBeUndefined();
+    });
   });
 
   describe('getApp()', () => {
@@ -282,6 +305,20 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       const retrieved = await getApp(mockKV, created.app_id);
       
       expect(retrieved).not.toHaveProperty('secret_hash');
+    });
+
+    test('returns name when set', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL, 'My API');
+      const retrieved = await getApp(mockKV, created.app_id);
+      
+      expect(retrieved?.name).toBe('My API');
+    });
+
+    test('omits name when not set (backward compatible)', async () => {
+      const created = await createApp(mockKV, TEST_EMAIL);
+      const retrieved = await getApp(mockKV, created.app_id);
+      
+      expect(retrieved?.name).toBeUndefined();
     });
 
     test('returns null for non-existent app', async () => {

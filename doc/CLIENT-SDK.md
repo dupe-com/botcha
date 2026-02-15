@@ -6,11 +6,129 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.16.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
-| [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.0 | LangChain Tool integration |
-| [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.5.0 | Python SDK on PyPI |
-| [`@dupecom/botcha-verify`](../packages/verify/) | 0.1.0 | Server-side verification (Express/Hono middleware) |
-| [`botcha-verify`](../packages/python-verify/) | 0.1.0 | Server-side verification (FastAPI/Django middleware) |
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.19.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
+| [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.1 | LangChain Tool integration |
+| [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.19.0 | Python SDK on PyPI |
+| [`@dupecom/botcha-verify`](../packages/verify/) | 0.2.0 | Server-side verification (Express/Hono middleware) |
+| [`botcha-verify`](../packages/python-verify/) | 0.2.0 | Server-side verification (FastAPI/Django middleware) |
+
+---
+
+## Quick Start: Protect Your API with BOTCHA
+
+**Want to add BOTCHA to your product?** Here's the complete flow:
+
+### Step 1: Register your app
+
+```bash
+curl -X POST https://botcha.ai/v1/apps \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@yourcompany.com", "name": "My Shopping App"}'
+```
+
+Response:
+```json
+{
+  "app_id": "app_a1b2c3d4e5f6a7b8",
+  "name": "My Shopping App",
+  "app_secret": "sk_...",
+  "next_step": "POST /v1/apps/app_.../verify-email with {\"code\": \"123456\"}"
+}
+```
+
+⚠️ **Save `app_id` and `app_secret`** — the secret is shown only once.
+
+### Step 2: Verify your email
+
+Check your inbox for a 6-digit code, then:
+
+```bash
+curl -X POST https://botcha.ai/v1/apps/app_a1b2c3d4e5f6a7b8/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+```
+
+### Step 3: Add verification middleware to your API
+
+**Node.js (Express):**
+```bash
+npm install @dupecom/botcha-verify
+```
+```typescript
+import express from 'express';
+import { botchaVerify } from '@dupecom/botcha-verify/express';
+
+const app = express();
+
+// Protect routes — only verified AI agents can access
+app.use('/api', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',  // No shared secret needed
+}));
+
+app.get('/api/products', (req, res) => {
+  // req.botcha contains the verified token payload
+  console.log(req.botcha.sub);  // challenge ID that was solved
+  res.json({ products: [...] });
+});
+```
+
+**Node.js (Hono / Cloudflare Workers):**
+```typescript
+import { Hono } from 'hono';
+import { botchaVerify } from '@dupecom/botcha-verify/hono';
+
+const app = new Hono();
+
+app.use('/api/*', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+}));
+
+app.get('/api/products', (c) => {
+  const botcha = c.get('botcha');
+  return c.json({ products: [...] });
+});
+```
+
+**Python (FastAPI):**
+```bash
+pip install botcha-verify
+```
+```python
+from botcha_verify import require_botcha
+
+@app.get("/api/products")
+@require_botcha(jwks_url="https://botcha.ai/.well-known/jwks")
+async def get_products(request):
+    return {"products": [...]}
+```
+
+### Step 4: Agents authenticate by solving a challenge
+
+Any AI agent can access your protected API:
+
+```typescript
+import { BotchaClient } from '@dupecom/botcha/client';
+
+const client = new BotchaClient();
+// Automatically solves BOTCHA challenge, gets JWT, includes it in request
+const response = await client.fetch('https://yourapp.com/api/products');
+```
+
+Or manually:
+```bash
+# 1. Get challenge
+curl https://botcha.ai/v1/token
+# 2. Solve it (compute SHA-256 hashes)
+curl -X POST https://botcha.ai/v1/token/verify \
+  -d '{"id": "<challenge_id>", "answers": ["hash1", "hash2", ...]}'
+# 3. Use the token
+curl https://yourapp.com/api/products \
+  -H "Authorization: Bearer <access_token>"
+```
+
+**That's it.** Your API is now agent-only. Humans can't solve the speed challenge. Agents get 1-hour JWT tokens.
+
+---
 
 ## Overview
 
@@ -155,13 +273,15 @@ BOTCHA supports **multi-tenant isolation** — create separate apps with unique 
 ```bash
 curl -X POST https://botcha.ai/v1/apps \
   -H "Content-Type: application/json" \
-  -d '{"email": "agent@example.com"}'
-# Returns: {app_id, app_secret, email, email_verified: false, verification_required: true, ...}
+  -d '{"email": "agent@example.com", "name": "My Shopping App"}'
+# Returns: {app_id, name, app_secret, email, email_verified: false, ...}
 ```
 
 **⚠️ Important:** The `app_secret` is only shown once. Save it securely.
 
 **Email is required.** A 6-digit verification code will be sent to the provided email.
+
+**Name is optional** but recommended — gives your app a memorable label (e.g., "Production API", "Staging", "My E-commerce Site").
 
 ### Verifying Email
 
@@ -232,8 +352,9 @@ import { BotchaClient } from '@dupecom/botcha/client';
 const client = new BotchaClient();
 
 // 1. Create app (auto-sets client.appId)
-const app = await client.createApp('agent@example.com');
+const app = await client.createApp('agent@example.com', 'My Shopping App');
 console.log(app.app_id);     // 'app_abc123'
+console.log(app.name);       // 'My Shopping App'
 console.log(app.app_secret); // 'sk_...' (save this!)
 
 // 2. Verify email with 6-digit code from inbox
@@ -257,8 +378,9 @@ from botcha import BotchaClient
 
 async with BotchaClient() as client:
     # 1. Create app (auto-sets client.app_id)
-    app = await client.create_app("agent@example.com")
+    app = await client.create_app("agent@example.com", name="My Shopping App")
     print(app.app_id)      # 'app_abc123'
+    print(app.name)        # 'My Shopping App'
     print(app.app_secret)  # 'sk_...' (save this!)
 
     # 2. Verify email with 6-digit code

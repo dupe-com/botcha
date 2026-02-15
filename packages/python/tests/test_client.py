@@ -1115,6 +1115,84 @@ async def test_create_app_happy_path():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_create_app_with_name():
+    """Test app creation with optional name."""
+    respx.post("https://botcha.ai/v1/apps").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "app_id": "app_test123",
+                "name": "My Shopping App",
+                "app_secret": "sk_secret",
+                "email": "agent@example.com",
+                "email_verified": False,
+                "verification_required": True,
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.create_app("agent@example.com", name="My Shopping App")
+
+        assert result.success is True
+        assert result.app_id == "app_test123"
+        assert result.name == "My Shopping App"
+        assert result.app_secret == "sk_secret"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_app_sends_name_in_body():
+    """Test that create_app sends name in POST body when provided."""
+    route = respx.post("https://botcha.ai/v1/apps").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "app_id": "app_test123",
+                "app_secret": "sk_secret",
+                "email": "agent@example.com",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        await client.create_app("agent@example.com", name="My API")
+
+        request = route.calls.last.request
+        body = json.loads(request.content)
+        assert body["email"] == "agent@example.com"
+        assert body["name"] == "My API"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_app_without_name():
+    """Test that create_app omits name when not provided (backward compatible)."""
+    route = respx.post("https://botcha.ai/v1/apps").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "app_id": "app_test123",
+                "app_secret": "sk_secret",
+                "email": "agent@example.com",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.create_app("agent@example.com")
+
+        request = route.calls.last.request
+        body = json.loads(request.content)
+        assert "name" not in body
+        assert result.name is None
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_create_app_sends_email_in_body():
     """Test that create_app sends email in POST body."""
     route = respx.post("https://botcha.ai/v1/apps").mock(

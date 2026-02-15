@@ -124,7 +124,7 @@ app.route('/dashboard', dashboardRoutes);
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.19.0');
+  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.20.0');
   c.header('X-Botcha-Enabled', 'true');
   c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
@@ -389,7 +389,7 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
       note: 'For production use. Creates your app, verifies your human, registers your identity.',
       steps: [
         '1. Ask your human operator for their email address.',
-        `2. POST ${baseUrl}/v1/apps {"email":"human@example.com"} — returns app_id + app_secret (shown ONCE).`,
+        `2. POST ${baseUrl}/v1/apps {"email":"human@example.com","name":"My App"} — returns app_id + name + app_secret (shown ONCE).`,
         '3. Human receives a 6-digit verification code via email — ask them for it.',
         `4. POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456"} — enables account recovery.`,
         `5. Register yourself: POST ${baseUrl}/v1/agents/register {"name":"my-agent","operator":"my-org"} — persistent agent identity.`,
@@ -421,7 +421,7 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
       },
       apps: {
         note: 'Create an app for isolated rate limits, scoped tokens, and dashboard access.',
-        'POST /v1/apps': 'Create app (email required) → app_id + app_secret',
+        'POST /v1/apps': 'Create app (email required, name optional) → app_id + name + app_secret',
         'GET /v1/apps/:id': 'Get app info',
         'POST /v1/apps/:id/verify-email': 'Verify email with 6-digit code',
         'POST /v1/apps/:id/rotate-secret': 'Rotate app secret (auth required)',
@@ -1681,8 +1681,8 @@ app.get('/api/badge/:id', async (c) => {
 // Create a new app (email required)
 app.post('/v1/apps', async (c) => {
   try {
-    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
-    const { email } = body;
+    const body = await c.req.json<{ email?: string; name?: string }>().catch(() => ({} as { email?: string; name?: string }));
+    const { email, name } = body;
 
     if (!email || typeof email !== 'string') {
       return c.json({
@@ -1701,7 +1701,17 @@ app.post('/v1/apps', async (c) => {
       }, 400);
     }
 
-    const result = await createApp(c.env.APPS, email);
+    // Validate name if provided (1-100 chars, no control characters)
+    const trimmedName = name?.trim();
+    if (trimmedName !== undefined && (trimmedName.length === 0 || trimmedName.length > 100)) {
+      return c.json({
+        success: false,
+        error: 'INVALID_NAME',
+        message: 'App name must be 1-100 characters',
+      }, 400);
+    }
+
+    const result = await createApp(c.env.APPS, email, trimmedName || undefined);
 
     // Generate a fresh verification code and send email
     const regen = await regenerateVerificationCode(c.env.APPS, result.app_id);
@@ -1716,6 +1726,7 @@ app.post('/v1/apps', async (c) => {
     return c.json({
       success: true,
       app_id: result.app_id,
+      ...(result.name && { name: result.name }),
       app_secret: result.app_secret,
       email: result.email,
       email_verified: false,
@@ -1760,6 +1771,7 @@ app.get('/v1/apps/:id', async (c) => {
     success: true,
     app: {
       app_id: app.app_id,
+      ...(app.name && { name: app.name }),
       created_at: new Date(app.created_at).toISOString(),
       rate_limit: app.rate_limit,
       email: app.email,

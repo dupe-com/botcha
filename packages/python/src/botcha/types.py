@@ -42,6 +42,7 @@ class CreateAppResponse:
     app_id: str
     app_secret: str
     email: str
+    name: Optional[str] = None
     email_verified: bool = False
     verification_required: bool = True
     warning: str = ""

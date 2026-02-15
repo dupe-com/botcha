@@ -25,6 +25,7 @@ export type KVNamespace = {
  */
 export interface AppConfig {
   app_id: string;
+  name?: string; // Optional human-readable label (e.g., "My Shopping App")
   secret_hash: string; // SHA-256 hash of app_secret
   created_at: number; // Unix timestamp (ms)
   rate_limit: number; // requests per hour
@@ -39,6 +40,7 @@ export interface AppConfig {
  */
 export interface CreateAppResult {
   app_id: string;
+  name?: string; // Optional human-readable label
   app_secret: string; // Only returned at creation time
   email: string;
   email_verified: boolean;
@@ -50,6 +52,7 @@ export interface CreateAppResult {
  */
 export type PublicAppConfig = {
   app_id: string;
+  name?: string;
   created_at: number;
   rate_limit: number;
   email: string;
@@ -131,9 +134,10 @@ export function generateVerificationCode(): string {
  * 
  * @param kv - KV namespace for storage
  * @param email - Required owner email address
- * @returns {app_id, app_secret, email, email_verified, verification_required}
+ * @param name - Optional human-readable label for the app
+ * @returns {app_id, name, app_secret, email, email_verified, verification_required}
  */
-export async function createApp(kv: KVNamespace, email: string): Promise<CreateAppResult> {
+export async function createApp(kv: KVNamespace, email: string, name?: string): Promise<CreateAppResult> {
   const app_id = generateAppId();
   const app_secret = generateAppSecret();
   const secret_hash = await hashSecret(app_secret);
@@ -144,6 +148,7 @@ export async function createApp(kv: KVNamespace, email: string): Promise<CreateA
 
   const config: AppConfig = {
     app_id,
+    ...(name && { name }),
     secret_hash,
     created_at: Date.now(),
     rate_limit: 100, // Default: 100 requests/hour
@@ -161,6 +166,7 @@ export async function createApp(kv: KVNamespace, email: string): Promise<CreateA
 
   return {
     app_id,
+    ...(name && { name }),
     app_secret, // ONLY returned at creation time!
     email,
     email_verified: false,
@@ -332,6 +338,7 @@ export async function getApp(
     // Return config WITHOUT secret_hash (security)
     return {
       app_id: config.app_id,
+      ...(config.name && { name: config.name }),
       created_at: config.created_at,
       rate_limit: config.rate_limit,
       email: config.email,

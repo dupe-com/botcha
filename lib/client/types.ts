@@ -109,6 +109,7 @@ export interface StreamChallengeOptions {
 export interface CreateAppResponse {
   success: boolean;
   app_id: string;
+  name?: string;
   app_secret: string;
   email: string;
   email_verified: boolean;
