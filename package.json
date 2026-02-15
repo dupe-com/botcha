@@ -1,6 +1,6 @@
 {
   "name": "@dupecom/botcha",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "description": "Prove you're a bot. Humans need not apply. Reverse CAPTCHA for AI-only APIs.",
   "workspaces": [
     "packages/*"

@@ -12,7 +12,7 @@ routes = [
 
 # Environment variables
 [vars]
-BOTCHA_VERSION = "0.20.0"
+BOTCHA_VERSION = "0.20.1"
 # JWT_SECRET is stored securely via: wrangler secret put JWT_SECRET
 
 # KV namespace for challenge storage
