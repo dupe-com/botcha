@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.18.0)
+## Current Status (v0.19.0)
 
 ### Shipped
 
@@ -33,6 +33,8 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - **Token refresh** — `POST /v1/token/refresh` for seamless token renewal
 - **JTI (JWT ID)** — unique IDs on every token for revocation tracking
 - **Multi-tenant app isolation** — per-app rate limiting and token scoping
+- **ES256 asymmetric signing** — ECDSA P-256 JWT signing, JWKS public key discovery, HS256 backward compatible
+- **Remote token validation** — `POST /v1/token/validate` for third-party verification without shared secrets
 
 #### Infrastructure
 - Cloudflare Workers deployment at botcha.ai
@@ -310,6 +312,19 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - KV storage: `reputation:{agent_id}`, `reputation_events:{agent_id}`, `reputation_event:{event_id}`
 - **SDK support:** TypeScript (`getReputation`, `recordReputationEvent`, `listReputationEvents`, `resetReputation`) and Python (`get_reputation`, `record_reputation_event`, `list_reputation_events`, `reset_reputation`)
 **Effort:** Large
+
+### ✅ Asymmetric Signing + Remote Validation — SHIPPED (v0.19.0)
+**What:** ES256 asymmetric JWT signing with JWKS discovery. Remote validation endpoint. No shared secret needed.
+**Why:** Eliminates token forgery risk. Third-party consumers can verify tokens without knowing the signing secret.
+**Status:** Built and tested. Tokens now signed with ES256 (ECDSA P-256) by default. HS256 still supported for backward compatibility.
+**Implementation:**
+- `POST /v1/token/validate` → validate any BOTCHA token remotely (returns `{valid, payload?, error?}`)
+- `GET /.well-known/jwks` → now includes BOTCHA signing public keys (alongside existing TAP agent keys)
+- ES256 asymmetric signing eliminates shared secret distribution
+- Three verification modes: JWKS (recommended), remote validation, shared secret (legacy)
+- `@dupecom/botcha-verify` supports `jwksUrl` option (no `secret` needed)
+- `botcha-verify` (Python) supports `jwks_url` option
+**Effort:** Medium
 
 ### RFC / Standards contribution
 **What:** Publish an Internet-Draft for agent identity. Get Anthropic, OpenAI, Google to adopt. Own the standard.

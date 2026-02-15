@@ -7,6 +7,7 @@
 import type { Context } from 'hono';
 import type { TAPAgent } from './tap-agents.js';
 import type { KVNamespace } from './agents.js';
+import { getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
 
 // ============ JWK TYPES ============
 
@@ -172,15 +173,38 @@ function arrayBufferToPem(buffer: ArrayBuffer): string {
 
 /**
  * GET /.well-known/jwks
- * Returns JWK Set for app's TAP-enabled agents
+ * Returns JWK Set for app's TAP-enabled agents.
+ * Also includes BOTCHA's own signing public key when JWT_SIGNING_KEY is configured.
  */
 export async function jwksRoute(c: Context): Promise<Response> {
   try {
+    const allKeys: JWK[] = [];
+
+    // Always include BOTCHA's own signing public key if configured
+    const jwtSigningKeyEnv = (c.env as any).JWT_SIGNING_KEY as string | undefined;
+    if (jwtSigningKeyEnv) {
+      try {
+        const privateKeyJwk = JSON.parse(jwtSigningKeyEnv) as ES256SigningKeyJWK;
+        const publicKeyJwk = getSigningPublicKeyJWK(privateKeyJwk);
+        allKeys.push({
+          kty: publicKeyJwk.kty,
+          crv: publicKeyJwk.crv,
+          x: publicKeyJwk.x,
+          y: publicKeyJwk.y,
+          kid: 'botcha-signing-1',
+          use: 'sig',
+          alg: 'ES256',
+        });
+      } catch (error) {
+        console.error('Failed to derive BOTCHA signing public key for JWKS:', error);
+      }
+    }
+
     const appId = c.req.query('app_id');
 
-    // Security: Don't expose all keys globally
+    // If no app_id, return just the BOTCHA signing key (if any)
     if (!appId) {
-      return c.json({ keys: [] }, 200, {
+      return c.json({ keys: allKeys }, 200, {
         'Cache-Control': 'public, max-age=3600',
       });
     }
@@ -188,7 +212,7 @@ export async function jwksRoute(c: Context): Promise<Response> {
     const agents = c.env.AGENTS as KVNamespace;
     if (!agents) {
       console.error('AGENTS KV namespace not available');
-      return c.json({ keys: [] }, 200);
+      return c.json({ keys: allKeys }, 200);
     }
 
     // Get agent list for this app
@@ -196,7 +220,7 @@ export async function jwksRoute(c: Context): Promise<Response> {
     const agentIdsData = await agents.get(agentIndexKey, 'text');
 
     if (!agentIdsData) {
-      return c.json({ keys: [] }, 200, {
+      return c.json({ keys: allKeys }, 200, {
         'Cache-Control': 'public, max-age=3600',
       });
     }
@@ -241,9 +265,10 @@ export async function jwksRoute(c: Context): Promise<Response> {
       }
     });
 
-    const jwks = (await Promise.all(jwkPromises)).filter((jwk): jwk is JWK => jwk !== null);
+    const agentJwks = (await Promise.all(jwkPromises)).filter((jwk): jwk is JWK => jwk !== null);
+    allKeys.push(...agentJwks);
 
-    return c.json({ keys: jwks }, 200, {
+    return c.json({ keys: allKeys }, 200, {
       'Cache-Control': 'public, max-age=3600',
     });
   } catch (error) {

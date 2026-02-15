@@ -34,11 +34,17 @@ declare global {
  * 
  * const app = express();
  * 
- * // Protect all /api routes
+ * // RECOMMENDED: JWKS verification (no shared secret needed!)
+ * app.use('/api', botchaVerify({
+ *   jwksUrl: 'https://botcha.ai/.well-known/jwks',
+ *   audience: 'https://api.example.com',
+ * }));
+ * 
+ * // LEGACY: Shared secret verification
  * app.use('/api', botchaVerify({
  *   secret: process.env.BOTCHA_SECRET!,
  *   audience: 'https://api.example.com',
- *   requireIp: true
+ *   requireIp: true,
  * }));
  * 
  * app.get('/api/protected', (req, res) => {

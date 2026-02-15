@@ -713,8 +713,10 @@ async with BotchaClient() as client:
             <h2 class="docs-section-title">Authentication (Tokens)</h2>
             <p class="docs-section-desc">
               JWT token flow for accessing protected endpoints. Solve a speed challenge to
-              receive an access token (5 min) and refresh token (1 hr). Includes human handoff
-              via gate codes.
+              receive an access token (5 min) and refresh token (1 hr). Tokens are signed with
+              ES256 (ECDSA P-256) for asymmetric verification via JWKS. HS256 still supported
+              for backward compatibility. Use <code>POST /v1/token/validate</code> for remote
+              validation without a shared secret.
             </p>
 
             <div class="docs-flow">
@@ -796,6 +798,28 @@ async with BotchaClient() as client:
             <Endpoint method="POST" path="/v1/token/revoke" desc="Revoke a token">
               <div class="docs-label">Request Body</div>
               <pre><code>{`{ "token": "<access_token or refresh_token>" }`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/token/validate" desc="Validate a token remotely (no secret needed)">
+              <p>Validate any BOTCHA token without needing the signing secret. Supports both ES256 and HS256 tokens.</p>
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{ "token": "<any BOTCHA JWT token>" }`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "valid": true,
+  "payload": {
+    "sub": "challenge_abc123",
+    "type": "botcha-verified",
+    "aud": "https://api.example.com",
+    "exp": 1770936300
+  }
+}
+
+// or if invalid:
+{
+  "valid": false,
+  "error": "Token expired"
+}`}</code></pre>
             </Endpoint>
 
             <Endpoint method="GET" path="/agent-only" desc="Protected endpoint (demo)">

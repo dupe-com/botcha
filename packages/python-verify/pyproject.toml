@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "botcha-verify"
-version = "0.1.0"
+version = "0.2.0"
 description = "Server-side verification middleware for BOTCHA JWT tokens"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,7 +29,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "PyJWT>=2.8.0",
+    "PyJWT[crypto]>=2.8.0",
 ]
 
 [project.optional-dependencies]

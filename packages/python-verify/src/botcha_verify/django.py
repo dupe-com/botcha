@@ -18,16 +18,26 @@ class BotchaVerifyMiddleware:
     """
     Django middleware for BOTCHA token verification.
 
-    Configuration in settings.py:
+    Supports both JWKS-based (ES256, recommended) and shared-secret (HS256, legacy)
+    verification modes. At least one of ``BOTCHA_SECRET`` or ``BOTCHA_JWKS_URL``
+    must be set.
+
+    Configuration in settings.py (JWKS — recommended):
         MIDDLEWARE = [
             # ... other middleware
             'botcha_verify.django.BotchaVerifyMiddleware',
         ]
 
-        BOTCHA_SECRET = 'your-secret-key'
+        BOTCHA_JWKS_URL = 'https://botcha.ai/.well-known/jwks'
         BOTCHA_AUDIENCE = 'https://api.example.com'  # Optional
         BOTCHA_PROTECTED_PATHS = ['/api/']  # Paths to protect
-        BOTCHA_EXCLUDED_PATHS = ['/api/health']  # Paths to exclude from verification
+        BOTCHA_EXCLUDED_PATHS = ['/api/health']  # Paths to exclude
+
+    Configuration in settings.py (shared secret — legacy):
+        BOTCHA_SECRET = 'your-secret-key'
+        BOTCHA_AUDIENCE = 'https://api.example.com'  # Optional
+        BOTCHA_PROTECTED_PATHS = ['/api/']
+        BOTCHA_EXCLUDED_PATHS = ['/api/health']
 
     Usage in views:
         def my_view(request):
@@ -48,8 +58,13 @@ class BotchaVerifyMiddleware:
 
         # Load configuration from settings
         self.secret = getattr(settings, "BOTCHA_SECRET", None)
-        if not self.secret:
-            raise ValueError("BOTCHA_SECRET must be set in Django settings")
+        self.jwks_url = getattr(settings, "BOTCHA_JWKS_URL", None)
+        self.jwks_cache_ttl = getattr(settings, "BOTCHA_JWKS_CACHE_TTL", 3600)
+
+        if not self.secret and not self.jwks_url:
+            raise ValueError(
+                "At least one of BOTCHA_SECRET or BOTCHA_JWKS_URL must be set in Django settings"
+            )
 
         self.audience = getattr(settings, "BOTCHA_AUDIENCE", None)
         self.protected_paths: List[str] = getattr(
@@ -91,6 +106,8 @@ class BotchaVerifyMiddleware:
         options = VerifyOptions(
             audience=self.audience,
             client_ip=None,  # Don't enforce IP by default
+            jwks_url=self.jwks_url,
+            jwks_cache_ttl=self.jwks_cache_ttl,
         )
         result = verify_botcha_token(token, self.secret, options)
 

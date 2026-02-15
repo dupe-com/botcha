@@ -3,7 +3,7 @@
 from .types import BotchaPayload, VerifyOptions, VerifyResult
 from .verify import verify_botcha_token, extract_bearer_token
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "BotchaPayload",

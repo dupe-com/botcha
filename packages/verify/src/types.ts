@@ -17,13 +17,33 @@ export interface BotchaTokenPayload {
 }
 
 /**
- * Options for verifying BOTCHA tokens
+ * Options for verifying BOTCHA tokens.
+ * 
+ * At least one of `secret` or `jwksUrl` must be provided.
+ * If both are provided, JWKS verification is tried first, falling back to shared secret.
  */
 export interface BotchaVerifyOptions {
   /**
-   * JWT secret used to sign tokens (HS256)
+   * JWT secret used to sign tokens (HS256).
+   * Legacy: prefer `jwksUrl` for asymmetric (ES256) verification.
    */
-  secret: string;
+  secret?: string;
+
+  /**
+   * JWKS URL for asymmetric (ES256) verification.
+   * Recommended: use 'https://botcha.ai/.well-known/jwks'
+   * 
+   * The JWKS endpoint is fetched automatically, and key rotation / caching
+   * is handled by the `jose` library's `createRemoteJWKSet`.
+   */
+  jwksUrl?: string;
+
+  /**
+   * Cache JWKS keys for this many seconds.
+   * Only used when `jwksUrl` is provided.
+   * @default 3600
+   */
+  jwksCacheTtl?: number;
 
   /**
    * Expected audience claim. If provided, tokens without matching aud will be rejected.

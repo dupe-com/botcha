@@ -14,26 +14,30 @@ bun add @dupecom/botcha-verify
 
 ## Features
 
-- 🔐 JWT token verification with HS256 signature
-- ⏰ Automatic expiry checking
-- 🎯 Audience claim validation
-- 🌐 Client IP binding support
-- 🚫 Token revocation checking (optional)
-- 🎨 Express & Hono middleware
-- 📦 TypeScript support with full type definitions
-- 🔄 Custom error handlers
+- **JWKS verification (ES256)** — no shared secret needed, keys rotate automatically
+- HS256 shared-secret verification (legacy, still supported)
+- Automatic expiry checking
+- Audience claim validation
+- Issuer validation (`botcha.ai`) in JWKS mode
+- Client IP binding support
+- Token revocation checking (optional)
+- Express & Hono middleware
+- TypeScript support with full type definitions
+- Custom error handlers
 
 ## Usage
 
-### Standalone Verification
+### JWKS Verification (Recommended)
+
+The recommended approach fetches BOTCHA's public key from the JWKS endpoint.
+No shared secret to manage — key rotation is handled automatically.
 
 ```typescript
 import { verifyBotchaToken } from '@dupecom/botcha-verify';
 
 const result = await verifyBotchaToken(token, {
-  secret: process.env.BOTCHA_SECRET!,
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
   audience: 'https://api.example.com',
-  requireIp: true,
 });
 
 if (result.valid) {
@@ -44,6 +48,20 @@ if (result.valid) {
 }
 ```
 
+### Legacy: Shared Secret Verification
+
+Still supported for existing integrations using HS256 tokens.
+
+```typescript
+import { verifyBotchaToken } from '@dupecom/botcha-verify';
+
+const result = await verifyBotchaToken(token, {
+  secret: process.env.BOTCHA_SECRET!,
+  audience: 'https://api.example.com',
+  requireIp: true,
+});
+```
+
 ### Express Middleware
 
 ```typescript
@@ -52,7 +70,13 @@ import { botchaVerify } from '@dupecom/botcha-verify/express';
 
 const app = express();
 
-// Protect all /api routes
+// RECOMMENDED: JWKS verification
+app.use('/api', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+  audience: 'https://api.example.com',
+}));
+
+// LEGACY: Shared secret
 app.use('/api', botchaVerify({
   secret: process.env.BOTCHA_SECRET!,
   audience: 'https://api.example.com',
@@ -60,7 +84,6 @@ app.use('/api', botchaVerify({
 }));
 
 app.get('/api/protected', (req, res) => {
-  // Access verified token payload
   console.log('Challenge ID:', req.botcha?.sub);
   console.log('Solve time:', req.botcha?.solveTime);
   res.json({ message: 'Success' });
@@ -76,7 +99,13 @@ import type { BotchaTokenPayload } from '@dupecom/botcha-verify';
 
 const app = new Hono<{ Variables: { botcha: BotchaTokenPayload } }>();
 
-// Protect all /api routes
+// RECOMMENDED: JWKS verification
+app.use('/api/*', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+  audience: 'https://api.example.com',
+}));
+
+// LEGACY: Shared secret
 app.use('/api/*', botchaVerify({
   secret: env.BOTCHA_SECRET,
   audience: 'https://api.example.com',
@@ -84,7 +113,6 @@ app.use('/api/*', botchaVerify({
 }));
 
 app.get('/api/protected', (c) => {
-  // Access verified token payload
   const botcha = c.get('botcha');
   console.log('Challenge ID:', botcha.sub);
   console.log('Solve time:', botcha.solveTime);
@@ -100,7 +128,7 @@ Verify a BOTCHA JWT token.
 
 **Parameters:**
 - `token` (string): JWT token to verify
-- `options` (BotchaVerifyOptions): Verification options
+- `options` (BotchaVerifyOptions): Verification options (at least one of `secret` or `jwksUrl` required)
 - `clientIp` (string, optional): Client IP for validation
 
 **Returns:** `Promise<VerificationResult>`
@@ -117,8 +145,17 @@ interface VerificationResult {
 
 ```typescript
 interface BotchaVerifyOptions {
-  // Required: JWT secret (HS256)
-  secret: string;
+  // JWKS URL for ES256 verification (recommended)
+  jwksUrl?: string;
+
+  // Cache JWKS keys for this many seconds (default: 3600)
+  jwksCacheTtl?: number;
+
+  // JWT secret for HS256 verification (legacy)
+  secret?: string;
+
+  // At least one of `secret` or `jwksUrl` must be provided.
+  // If both are provided, JWKS is tried first, falling back to secret.
 
   // Optional: Expected audience claim
   audience?: string;
@@ -153,22 +190,42 @@ interface BotchaTokenPayload {
 
 The verifier checks:
 
-1. **Signature**: HS256 signature using the provided secret
+1. **Signature**: ES256 via JWKS (recommended) or HS256 via shared secret (legacy)
 2. **Expiry**: Token must not be expired
 3. **Type**: Token must be `botcha-verified` (not `botcha-refresh`)
-4. **Audience** (optional): Token `aud` must match expected audience
-5. **Client IP** (optional): Token `client_ip` must match request IP
-6. **Revocation** (optional): Token JTI must not be revoked
+4. **Issuer** (JWKS mode): Token `iss` must be `botcha.ai`
+5. **Audience** (optional): Token `aud` must match expected audience
+6. **Client IP** (optional): Token `client_ip` must match request IP
+7. **Revocation** (optional): Token JTI must not be revoked
+
+## Migration from Shared Secret to JWKS
+
+Replace `secret` with `jwksUrl` in your configuration. During the transition
+period you can provide both — JWKS is tried first with a fallback to the secret:
+
+```typescript
+// Transition: both methods supported
+app.use('/api', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+  secret: process.env.BOTCHA_SECRET!, // fallback during migration
+  audience: 'https://api.example.com',
+}));
+
+// After migration: JWKS only
+app.use('/api', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+  audience: 'https://api.example.com',
+}));
+```
 
 ## Custom Error Handling
 
 ```typescript
 app.use('/api', botchaVerify({
-  secret: process.env.BOTCHA_SECRET!,
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
   onError: (error, context) => {
     console.error('Token verification failed:', error);
     console.error('Context:', context);
-    // Custom response logic here
   },
 }));
 ```
@@ -181,9 +238,8 @@ Implement custom revocation checking:
 import { verifyBotchaToken } from '@dupecom/botcha-verify';
 
 const result = await verifyBotchaToken(token, {
-  secret: process.env.BOTCHA_SECRET!,
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
   checkRevocation: async (jti) => {
-    // Check your database/cache if token is revoked
     const isRevoked = await db.revokedTokens.exists(jti);
     return isRevoked;
   },
@@ -201,10 +257,11 @@ The middleware automatically extracts client IP from:
 
 ## Security Notes
 
+- **JWKS**: Public keys are cached and rotated automatically by the `jose` library
 - **Fail-open**: Revocation checks fail-open if the check throws an error
 - **IP validation**: Only enabled if `requireIp: true` is set
 - **Audience**: Strongly recommended for multi-API deployments
-- **Secret**: Keep your JWT secret secure and rotate periodically
+- **Issuer**: Automatically validated as `botcha.ai` in JWKS mode
 
 ## License
 

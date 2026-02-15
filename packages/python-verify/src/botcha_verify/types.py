@@ -20,10 +20,17 @@ class BotchaPayload:
 
 @dataclass
 class VerifyOptions:
-    """Options for token verification."""
+    """Options for token verification.
+
+    At least one of ``secret`` (passed to ``verify_botcha_token``) or
+    ``jwks_url`` must be provided. If ``jwks_url`` is set, the public
+    key is fetched from the JWKS endpoint for asymmetric (ES256) verification.
+    """
 
     audience: Optional[str] = None  # required audience
     client_ip: Optional[str] = None  # client IP to validate against
+    jwks_url: Optional[str] = None  # JWKS URL for ES256 verification (recommended)
+    jwks_cache_ttl: int = 3600  # cache JWKS keys for this many seconds
 
 
 @dataclass

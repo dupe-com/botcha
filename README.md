@@ -925,9 +925,9 @@ You can use the library freely, report issues, and discuss features. To contribu
 
 ## Server-Side Verification (for API Providers)
 
-If you're building an API that accepts BOTCHA tokens from agents, use the verification SDKs:
+If you're building an API that accepts BOTCHA tokens from agents, use the verification SDKs. **BOTCHA v0.19.0+ signs tokens with ES256 (asymmetric)** — no shared secret needed.
 
-### TypeScript (Express / Hono)
+### JWKS Verification (Recommended)
 
 ```bash
 npm install @dupecom/botcha-verify
@@ -936,8 +936,9 @@ npm install @dupecom/botcha-verify
 ```typescript
 import { botchaVerify } from '@dupecom/botcha-verify/express';
 
+// ES256 verification via JWKS — no shared secret needed!
 app.use('/api', botchaVerify({
-  secret: process.env.BOTCHA_SECRET!,
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
   audience: 'https://api.example.com',
 }));
 
@@ -947,22 +948,42 @@ app.get('/api/protected', (req, res) => {
 });
 ```
 
-### Python (FastAPI / Django)
-
-```bash
-pip install botcha-verify
-```
-
 ```python
 from fastapi import FastAPI, Depends
 from botcha_verify.fastapi import BotchaVerify
 
 app = FastAPI()
-botcha = BotchaVerify(secret='your-secret-key')
+botcha = BotchaVerify(
+    jwks_url='https://botcha.ai/.well-known/jwks',
+    audience='https://api.example.com',
+)
 
 @app.get('/api/data')
 async def get_data(token = Depends(botcha)):
     return {"solve_time": token.solve_time}
+```
+
+### Remote Validation (No SDK Needed)
+
+For simple integrations, validate tokens with a single HTTP call:
+
+```bash
+curl -X POST https://botcha.ai/v1/token/validate \
+  -H "Content-Type: application/json" \
+  -d '{"token": "eyJ..."}'
+
+# {"valid": true, "payload": {"sub": "...", "type": "botcha-verified", ...}}
+```
+
+### Shared Secret (Legacy HS256)
+
+HS256 is still supported for backward compatibility:
+
+```typescript
+app.use('/api', botchaVerify({
+  secret: process.env.BOTCHA_SECRET!,
+  audience: 'https://api.example.com',
+}));
 ```
 
 > **Docs:** See [`@dupecom/botcha-verify` README](./packages/verify/README.md) and [`botcha-verify` README](./packages/python-verify/README.md) for full API reference, Hono middleware, Django middleware, revocation checking, and custom error handlers.

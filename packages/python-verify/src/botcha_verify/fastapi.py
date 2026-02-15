@@ -18,7 +18,20 @@ class BotchaVerify:
     """
     FastAPI dependency for BOTCHA token verification.
 
-    Usage:
+    Supports both JWKS-based (ES256, recommended) and shared-secret (HS256, legacy)
+    verification modes.
+
+    Usage (JWKS — recommended):
+        from botcha_verify.fastapi import BotchaVerify
+
+        botcha = BotchaVerify(jwks_url='https://botcha.ai/.well-known/jwks')
+
+        @app.get('/api/data')
+        async def get_data(token: BotchaPayload = Depends(botcha)):
+            print(f"Solved in {token.solve_time}ms")
+            return {"data": "protected"}
+
+    Usage (shared secret — legacy):
         from botcha_verify.fastapi import BotchaVerify
 
         botcha = BotchaVerify(secret='your-secret-key')
@@ -30,20 +43,34 @@ class BotchaVerify:
     """
 
     def __init__(
-        self, secret: str, audience: Optional[str] = None, auto_error: bool = True
+        self,
+        secret: Optional[str] = None,
+        audience: Optional[str] = None,
+        auto_error: bool = True,
+        jwks_url: Optional[str] = None,
+        jwks_cache_ttl: int = 3600,
     ):
         """
         Initialize BOTCHA verification dependency.
 
+        At least one of ``secret`` or ``jwks_url`` must be provided.
+
         Args:
-            secret: Secret key for JWT verification
+            secret: Secret key for HS256 JWT verification (legacy)
             audience: Optional required audience claim
             auto_error: If True, raise HTTPException on invalid token.
                        If False, return None for invalid tokens.
+            jwks_url: JWKS URL for ES256 verification (recommended).
+                      e.g. 'https://botcha.ai/.well-known/jwks'
+            jwks_cache_ttl: Cache JWKS keys for this many seconds (default: 3600)
         """
+        if not secret and not jwks_url:
+            raise ValueError("At least one of 'secret' or 'jwks_url' must be provided")
         self.secret = secret
         self.audience = audience
         self.auto_error = auto_error
+        self.jwks_url = jwks_url
+        self.jwks_cache_ttl = jwks_cache_ttl
         self.security = HTTPBearer(auto_error=auto_error)
 
     async def __call__(
@@ -88,6 +115,8 @@ class BotchaVerify:
         options = VerifyOptions(
             audience=self.audience,
             client_ip=None,  # Don't enforce IP by default in FastAPI
+            jwks_url=self.jwks_url,
+            jwks_cache_ttl=self.jwks_cache_ttl,
         )
         result = verify_botcha_token(token, self.secret, options)
 
@@ -105,23 +134,35 @@ class BotchaVerify:
 
 # Convenience function for route-level verification
 def verify_token_dependency(
-    secret: str, audience: Optional[str] = None
+    secret: Optional[str] = None,
+    audience: Optional[str] = None,
+    jwks_url: Optional[str] = None,
 ) -> BotchaVerify:
     """
     Create a FastAPI dependency for token verification.
 
+    At least one of ``secret`` or ``jwks_url`` must be provided.
+
     Args:
-        secret: Secret key for JWT verification
+        secret: Secret key for HS256 JWT verification (legacy)
         audience: Optional required audience claim
+        jwks_url: JWKS URL for ES256 verification (recommended)
 
     Returns:
         BotchaVerify instance for use with Depends()
 
-    Example:
+    Example (JWKS — recommended):
+        verify = verify_token_dependency(jwks_url='https://botcha.ai/.well-known/jwks')
+
+        @app.get('/data')
+        async def get_data(token: BotchaPayload = Depends(verify)):
+            return {"data": "protected"}
+
+    Example (shared secret — legacy):
         verify = verify_token_dependency(secret='my-secret')
 
         @app.get('/data')
         async def get_data(token: BotchaPayload = Depends(verify)):
             return {"data": "protected"}
     """
-    return BotchaVerify(secret=secret, audience=audience)
+    return BotchaVerify(secret=secret, audience=audience, jwks_url=jwks_url)

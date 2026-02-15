@@ -158,6 +158,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | \`POST\` | \`/v1/token/verify\` | Submit solution → access_token (5min) + refresh_token (1hr) |
 | \`POST\` | \`/v1/token/refresh\` | Refresh access token |
 | \`POST\` | \`/v1/token/revoke\` | Revoke a token |
+| \`POST\` | \`/v1/token/validate\` | Validate a token remotely (no shared secret needed) |
 
 ### Dashboard & Auth
 
@@ -183,7 +184,17 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 
 **Token lifetimes:** access_token = 5 minutes, refresh_token = 1 hour
 
-**Features:** audience claims, client IP binding, token revocation, refresh tokens
+**Token signing:** ES256 (ECDSA P-256) asymmetric signing. HS256 supported for backward compatibility.
+
+**Features:** audience claims, client IP binding, token revocation, refresh tokens, JWKS public key discovery
+
+## Token Verification (for API providers)
+
+Three ways to verify incoming BOTCHA tokens:
+
+1. **JWKS (Recommended)** — Fetch public keys from \`GET /.well-known/jwks\` and verify ES256 signatures locally. No shared secret needed.
+2. **Remote Validation** — \`POST /v1/token/validate\` with \`{"token": "..."}\`. Simplest approach, no SDK needed.
+3. **Shared Secret (Legacy)** — Verify HS256 tokens with \`BOTCHA_SECRET\`. Requires secret sharing.
 
 ## RTT-Aware Challenges
 
@@ -347,6 +358,9 @@ Feature: TAP Capabilities (action + resource scoping for agent sessions)
 Feature: TAP Trust Levels (basic, verified, enterprise)
 Feature: TAP Showcase Homepage (botcha.ai — one of the first services to implement Visa's Trusted Agent Protocol)
 Feature: TAP Full Spec v0.16.0 — Ed25519, RFC 9421 full compliance, JWKS infrastructure, Layer 2 Consumer Recognition, Layer 3 Payment Container, 402 micropayments, CDN edge verification, Visa key federation
+Feature: ES256 Asymmetric JWT Signing v0.19.0 — tokens signed with ES256 (ECDSA P-256), public key discovery via JWKS, HS256 still supported for backward compatibility
+Feature: Remote Token Validation v0.19.0 — POST /v1/token/validate for third-party token verification without shared secrets
+Feature: JWKS Public Key Discovery v0.19.0 — GET /.well-known/jwks exposes BOTCHA signing public keys for offline token verification
 
 # Endpoints
 # Challenge Endpoints
@@ -362,6 +376,7 @@ Endpoint: GET https://botcha.ai/v1/token - Get challenge for JWT token flow
 Endpoint: POST https://botcha.ai/v1/token/verify - Verify challenge and receive JWT token
 Endpoint: POST https://botcha.ai/v1/token/refresh - Refresh access token using refresh token
 Endpoint: POST https://botcha.ai/v1/token/revoke - Revoke a token (access or refresh)
+Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token remotely (no shared secret needed)
 
 # Multi-Tenant Endpoints
 Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, returns app_id + app_secret)
@@ -471,6 +486,10 @@ Content-Negotiation-Example: curl https://botcha.ai -H "Accept: text/markdown"
 Content-Negotiation-Benefit: 80% fewer tokens vs HTML — ideal for LLM context windows
 
 # JWT TOKEN SECURITY
+Token-Signing: ES256 (ECDSA P-256) asymmetric signing by default. HS256 still supported for backward compatibility.
+Token-JWKS: GET /.well-known/jwks — public keys for offline token verification (no shared secret needed)
+Token-Validate: POST /v1/token/validate with {"token": "<token>"} — remote validation without shared secret
+Token-Verify-Modes: 1. JWKS (recommended, offline) 2. Remote validation (/v1/token/validate) 3. Shared secret (legacy HS256)
 Token-Flow: 1. GET /v1/token (get challenge) → 2. Solve → 3. POST /v1/token/verify (get tokens + human_link)
 Token-Human-Link: /v1/token/verify response includes human_link — give this URL to your human for one-click browser access
 Token-Access-Expiry: 5 minutes (short-lived for security)
@@ -1007,6 +1026,44 @@ export function getOpenApiSpec(version: string) {
           responses: {
             "200": { description: "Token revoked successfully" },
             "400": { description: "Invalid token" }
+          }
+        }
+      },
+      "/v1/token/validate": {
+        post: {
+          summary: "Validate a BOTCHA token remotely",
+          description: "Validate a BOTCHA token without needing the signing secret. Returns the token validity and decoded payload. Supports both ES256 and HS256 tokens.",
+          operationId: "validateToken",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["token"],
+                  properties: {
+                    "token": { type: "string", description: "The JWT token to validate" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "Token validation result",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      "valid": { type: "boolean", description: "Whether the token is valid" },
+                      "payload": { type: "object", description: "Decoded token payload (if valid)" },
+                      "error": { type: "string", description: "Error message (if invalid)" }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },

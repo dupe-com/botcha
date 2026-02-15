@@ -9,7 +9,7 @@
  * - Token revocation via KV storage
  */
 
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify, importJWK, decodeProtectedHeader } from 'jose';
 
 /**
  * KV namespace interface (Cloudflare Workers)
@@ -68,20 +68,63 @@ export interface TokenGenerationOptions {
 }
 
 /**
+ * ES256 private key in JWK format
+ * { kty: "EC", crv: "P-256", x: "...", y: "...", d: "..." }
+ */
+export interface ES256SigningKeyJWK {
+  kty: string;
+  crv: string;
+  x: string;
+  y: string;
+  d: string; // private key parameter
+  kid?: string;
+}
+
+/**
+ * Derive the public key JWK from an ES256 private key JWK.
+ * Strips the `d` (private) parameter and sets standard fields.
+ * Used by the JWKS endpoint to publish the signing key.
+ */
+export function getSigningPublicKeyJWK(privateKeyJwk: ES256SigningKeyJWK): Omit<ES256SigningKeyJWK, 'd'> & { kid: string; use: string; alg: string } {
+  const { d: _d, ...publicKey } = privateKeyJwk;
+  return {
+    ...publicKey,
+    kid: privateKeyJwk.kid || 'botcha-signing-1',
+    use: 'sig',
+    alg: 'ES256',
+  };
+}
+
+/**
  * Generate JWT tokens (access + refresh) after successful challenge verification
  * 
  * Access token: 5 minutes, used for API access
  * Refresh token: 1 hour, used to get new access tokens
+ * 
+ * When signingKey (ES256 JWK) is provided, tokens are signed with ES256.
+ * Otherwise falls back to HS256 with the shared secret (backward compat).
  */
 export async function generateToken(
   challengeId: string,
   solveTimeMs: number,
   secret: string,
   env?: { CHALLENGES: KVNamespace },
-  options?: TokenGenerationOptions
+  options?: TokenGenerationOptions,
+  signingKey?: ES256SigningKeyJWK
 ): Promise<TokenCreationResult> {
-  const encoder = new TextEncoder();
-  const secretKey = encoder.encode(secret);
+  // Determine signing algorithm and key
+  let signKey: CryptoKey | Uint8Array;
+  let protectedHeader: { alg: string; kid?: string };
+
+  if (signingKey) {
+    // ES256 asymmetric signing
+    signKey = await importJWK(signingKey, 'ES256') as CryptoKey;
+    protectedHeader = { alg: 'ES256', kid: signingKey.kid || 'botcha-signing-1' };
+  } else {
+    // HS256 symmetric signing (legacy fallback)
+    signKey = new TextEncoder().encode(secret);
+    protectedHeader = { alg: 'HS256' };
+  }
 
   // Generate unique JTIs for both tokens
   const accessJti = crypto.randomUUID();
@@ -106,11 +149,12 @@ export async function generateToken(
   }
 
   const accessToken = await new SignJWT(accessTokenPayload)
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader(protectedHeader)
     .setSubject(challengeId)
+    .setIssuer('botcha.ai')
     .setIssuedAt()
     .setExpirationTime('5m') // 5 minutes
-    .sign(secretKey);
+    .sign(signKey);
 
   // Refresh token: 1 hour
   const refreshTokenPayload: Record<string, any> = {
@@ -125,11 +169,12 @@ export async function generateToken(
   }
   
   const refreshToken = await new SignJWT(refreshTokenPayload)
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader(protectedHeader)
     .setSubject(challengeId)
+    .setIssuer('botcha.ai')
     .setIssuedAt()
     .setExpirationTime('1h') // 1 hour
-    .sign(secretKey);
+    .sign(signKey);
 
   // Store refresh token JTI in KV if env provided (for revocation tracking)
   // Also store aud, client_ip, and app_id so they carry over on refresh
@@ -187,21 +232,34 @@ export async function revokeToken(
 /**
  * Refresh an access token using a valid refresh token
  * 
- * Verifies the refresh token, checks revocation, and issues a new access token
+ * Verifies the refresh token, checks revocation, and issues a new access token.
+ * Supports both ES256 (asymmetric) and HS256 (symmetric) refresh tokens.
  */
 export async function refreshAccessToken(
   refreshToken: string,
   env: { CHALLENGES: KVNamespace },
   secret: string,
-  options?: TokenGenerationOptions
+  options?: TokenGenerationOptions,
+  signingKey?: ES256SigningKeyJWK,
+  publicKey?: { kty: string; crv: string; x: string; y: string; kid?: string; use?: string; alg?: string }
 ): Promise<{ success: boolean; tokens?: Omit<TokenCreationResult, 'refresh_token' | 'refresh_expires_in'> & { access_token: string; expires_in: number }; error?: string }> {
   try {
-    const encoder = new TextEncoder();
-    const secretKey = encoder.encode(secret);
+    // Detect algorithm from token header and verify accordingly
+    const header = decodeProtectedHeader(refreshToken);
+    let verifyKey: CryptoKey | Uint8Array;
+    let algorithms: string[];
+
+    if (header.alg === 'ES256' && publicKey) {
+      verifyKey = await importJWK(publicKey, 'ES256') as CryptoKey;
+      algorithms = ['ES256'];
+    } else {
+      verifyKey = new TextEncoder().encode(secret);
+      algorithms = ['HS256'];
+    }
 
     // Verify refresh token
-    const { payload } = await jwtVerify(refreshToken, secretKey, {
-      algorithms: ['HS256'],
+    const { payload } = await jwtVerify(refreshToken, verifyKey, {
+      algorithms,
     });
 
     // Check token type
@@ -258,6 +316,18 @@ export async function refreshAccessToken(
       }
     }
 
+    // Determine signing algorithm and key for the new access token
+    let signKey: CryptoKey | Uint8Array;
+    let protectedHeaderObj: { alg: string; kid?: string };
+
+    if (signingKey) {
+      signKey = await importJWK(signingKey, 'ES256') as CryptoKey;
+      protectedHeaderObj = { alg: 'ES256', kid: signingKey.kid || 'botcha-signing-1' };
+    } else {
+      signKey = new TextEncoder().encode(secret);
+      protectedHeaderObj = { alg: 'HS256' };
+    }
+
     // Generate new access token
     const newAccessJti = crypto.randomUUID();
     const accessTokenPayload: Record<string, any> = {
@@ -281,11 +351,12 @@ export async function refreshAccessToken(
     }
 
     const accessToken = await new SignJWT(accessTokenPayload)
-      .setProtectedHeader({ alg: 'HS256' })
+      .setProtectedHeader(protectedHeaderObj)
       .setSubject(payload.sub || '')
+      .setIssuer('botcha.ai')
       .setIssuedAt()
       .setExpirationTime('5m') // 5 minutes
-      .sign(secretKey);
+      .sign(signKey);
 
     return {
       success: true,
@@ -305,6 +376,9 @@ export async function refreshAccessToken(
 /**
  * Verify a JWT token with security checks
  * 
+ * Supports both ES256 (asymmetric) and HS256 (symmetric) tokens.
+ * The algorithm is detected from the token's protected header.
+ * 
  * Checks:
  * - Token signature and expiry
  * - Revocation status (via JTI)
@@ -318,14 +392,27 @@ export async function verifyToken(
   options?: {
     requiredAud?: string; // expected audience
     clientIp?: string; // client IP to validate against
-  }
+  },
+  publicKey?: { kty: string; crv: string; x: string; y: string; kid?: string; use?: string; alg?: string }
 ): Promise<{ valid: boolean; payload?: BotchaTokenPayload; error?: string }> {
   try {
-    const encoder = new TextEncoder();
-    const secretKey = encoder.encode(secret);
+    // Detect algorithm from the token header
+    const header = decodeProtectedHeader(token);
+    let verifyKey: CryptoKey | Uint8Array;
+    let algorithms: string[];
 
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ['HS256'],
+    if (header.alg === 'ES256' && publicKey) {
+      // ES256 asymmetric verification
+      verifyKey = await importJWK(publicKey, 'ES256') as CryptoKey;
+      algorithms = ['ES256'];
+    } else {
+      // HS256 symmetric verification (legacy/fallback)
+      verifyKey = new TextEncoder().encode(secret);
+      algorithms = ['HS256'];
+    }
+
+    const { payload } = await jwtVerify(token, verifyKey, {
+      algorithms,
     });
 
     // Check token type (must be access token, not refresh token)

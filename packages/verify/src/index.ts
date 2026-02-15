@@ -2,28 +2,53 @@
  * BOTCHA Token Verification
  * 
  * Core verification logic for BOTCHA JWT tokens.
- * Validates signature, expiry, type, audience, and client IP claims.
+ * Supports both JWKS-based (ES256, recommended) and shared-secret (HS256, legacy) verification.
+ * Validates signature, expiry, type, audience, issuer, and client IP claims.
  */
 
-import { jwtVerify } from 'jose';
+import { jwtVerify, createRemoteJWKSet } from 'jose';
+import type { JWTVerifyResult, KeyLike, FlattenedJWSInput, JWSHeaderParameters } from 'jose';
 import type { BotchaTokenPayload, BotchaVerifyOptions, VerificationResult } from './types.js';
 
 export type { BotchaTokenPayload, BotchaVerifyOptions, VerificationResult, VerificationContext } from './types.js';
 
 /**
+ * Cache for JWKS key sets, keyed by URL.
+ * createRemoteJWKSet already handles internal caching and rotation,
+ * so we just avoid re-creating the function on every call.
+ */
+const jwksCache = new Map<string, (protectedHeader?: JWSHeaderParameters, token?: FlattenedJWSInput) => Promise<KeyLike | Uint8Array>>();
+
+/**
+ * Get or create a cached JWKS key set function for the given URL.
+ */
+function getJWKS(jwksUrl: string): (protectedHeader?: JWSHeaderParameters, token?: FlattenedJWSInput) => Promise<KeyLike | Uint8Array> {
+  let jwks = jwksCache.get(jwksUrl);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(jwksUrl));
+    jwksCache.set(jwksUrl, jwks);
+  }
+  return jwks;
+}
+
+/**
  * Verify a BOTCHA JWT token
  * 
  * Checks:
- * - Token signature (HS256)
+ * - Token signature (ES256 via JWKS, or HS256 via shared secret)
  * - Token expiry
  * - Token type (must be 'botcha-verified')
+ * - Issuer claim (validated as 'botcha.ai' when using JWKS mode)
  * - Audience claim (if options.audience provided)
  * - Client IP binding (if options.requireIp and options.clientIp provided)
  * - Revocation status (if options.checkRevocation provided)
  * 
+ * If both `jwksUrl` and `secret` are provided, JWKS is tried first with
+ * a fallback to shared-secret verification.
+ * 
  * @param token - JWT token to verify
- * @param options - Verification options including secret and optional checks
- * @param clientIp - Optional client IP for validation
+ * @param options - Verification options (at least one of `secret` or `jwksUrl` required)
+ * @param clientIp_ - Optional client IP for validation
  * @returns Verification result with valid flag, payload, and error message
  */
 export async function verifyBotchaToken(
@@ -31,15 +56,41 @@ export async function verifyBotchaToken(
   options: BotchaVerifyOptions,
   clientIp_?: string
 ): Promise<VerificationResult> {
-  try {
-    // Encode secret for jose
-    const encoder = new TextEncoder();
-    const secretKey = encoder.encode(options.secret);
+  // Validate that at least one verification method is provided
+  if (!options.secret && !options.jwksUrl) {
+    return {
+      valid: false,
+      error: 'Configuration error: at least one of "secret" or "jwksUrl" must be provided',
+    };
+  }
 
-    // Verify JWT signature and expiry
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ['HS256'],
-    });
+  try {
+    let payload: JWTVerifyResult['payload'];
+
+    if (options.jwksUrl && options.secret) {
+      // Both provided: try JWKS first, fall back to secret
+      try {
+        payload = (await verifyWithJWKS(token, options.jwksUrl)).payload;
+      } catch {
+        payload = (await verifyWithSecret(token, options.secret)).payload;
+      }
+    } else if (options.jwksUrl) {
+      // JWKS-only mode
+      const result = await verifyWithJWKS(token, options.jwksUrl);
+      payload = result.payload;
+
+      // Validate issuer when using JWKS mode
+      const iss = payload.iss as string | undefined;
+      if (!iss || iss !== 'botcha.ai') {
+        return {
+          valid: false,
+          error: `Invalid issuer claim. Expected "botcha.ai", got "${iss || 'none'}"`,
+        };
+      }
+    } else {
+      // Secret-only mode (legacy)
+      payload = (await verifyWithSecret(token, options.secret!)).payload;
+    }
 
     // Check token type (must be access token, not refresh token)
     if (payload.type !== 'botcha-verified') {
@@ -110,6 +161,28 @@ export async function verifyBotchaToken(
       error: error instanceof Error ? error.message : 'Invalid token',
     };
   }
+}
+
+/**
+ * Verify token using JWKS (asymmetric, ES256).
+ * Accepts both ES256 and HS256 tokens to support the migration period.
+ */
+async function verifyWithJWKS(token: string, jwksUrl: string): Promise<JWTVerifyResult> {
+  const jwks = getJWKS(jwksUrl);
+  return jwtVerify(token, jwks, {
+    algorithms: ['ES256', 'HS256'],
+  });
+}
+
+/**
+ * Verify token using a shared secret (symmetric, HS256).
+ */
+async function verifyWithSecret(token: string, secret: string): Promise<JWTVerifyResult> {
+  const encoder = new TextEncoder();
+  const secretKey = encoder.encode(secret);
+  return jwtVerify(token, secretKey, {
+    algorithms: ['HS256'],
+  });
 }
 
 /**

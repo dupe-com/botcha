@@ -24,7 +24,7 @@ import {
   type KVNamespace,
 } from './challenges';
 import { SignJWT, jwtVerify } from 'jose';
-import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken } from './auth';
+import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth';
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
 import streamRoutes from './routes/stream';
@@ -98,6 +98,7 @@ type Bindings = {
   INVOICES: KVNamespace;
   ANALYTICS?: AnalyticsEngineDataset;
   JWT_SECRET: string;
+  JWT_SIGNING_KEY?: string; // ES256 private key in JWK format (optional, enables asymmetric signing)
   BOTCHA_VERSION: string;
 };
 
@@ -123,7 +124,7 @@ app.route('/dashboard', dashboardRoutes);
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
-  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.18.0');
+  c.header('X-Botcha-Version', c.env.BOTCHA_VERSION || '0.19.0');
   c.header('X-Botcha-Enabled', 'true');
   c.header('X-Botcha-Methods', 'speed-challenge,reasoning-challenge,hybrid-challenge,standard-challenge,jwt-token');
   c.header('X-Botcha-Docs', 'https://botcha.ai/openapi.json');
@@ -185,6 +186,23 @@ async function validateAppId(
   }
 }
 
+// Helper: Parse ES256 signing key from env, returning undefined if not set
+function getSigningKey(env: Bindings): ES256SigningKeyJWK | undefined {
+  if (!env.JWT_SIGNING_KEY) return undefined;
+  try {
+    return JSON.parse(env.JWT_SIGNING_KEY) as ES256SigningKeyJWK;
+  } catch {
+    console.error('Failed to parse JWT_SIGNING_KEY — falling back to HS256');
+    return undefined;
+  }
+}
+
+// Helper: Get the public key for ES256 verification, or undefined for HS256 fallback
+function getPublicKey(env: Bindings) {
+  const sk = getSigningKey(env);
+  return sk ? getSigningPublicKeyJWK(sk) : undefined;
+}
+
 // JWT verification middleware
 async function requireJWT(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) {
   const authHeader = c.req.header('authorization');
@@ -197,7 +215,8 @@ async function requireJWT(c: Context<{ Bindings: Bindings; Variables: Variables 
     }, 401);
   }
 
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
+  const publicKey = getPublicKey(c.env);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
 
   if (!result.valid) {
     return c.json({
@@ -249,7 +268,8 @@ app.get('/', async (c) => {
   let tokenPayload: Record<string, unknown> | undefined;
   
   if (token) {
-    const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
+    const pubKey = getPublicKey(c.env);
+    const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, pubKey);
     if (result.valid) {
       isVerified = true;
       tokenPayload = result.payload as Record<string, unknown> | undefined;
@@ -393,6 +413,7 @@ The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the 
         'POST /v1/token/verify': 'Submit solution → access_token (5min) + refresh_token (1hr)',
         'POST /v1/token/refresh': 'Refresh access token',
         'POST /v1/token/revoke': 'Revoke a token',
+        'POST /v1/token/validate': 'Remote token validation — verify any BOTCHA token without needing the secret',
       },
       protected: {
         'GET /agent-only': 'Demo protected endpoint — requires Bearer token',
@@ -929,6 +950,7 @@ app.post('/v1/token/verify', async (c) => {
 
   // Generate JWT tokens (access + refresh)
   // Prefer app_id from request body, fall back to challenge's app_id (returned by verifySpeedChallenge)
+  const signingKey = getSigningKey(c.env);
   const tokenResult = await generateToken(
     id, 
     result.solveTimeMs || 0, 
@@ -938,7 +960,8 @@ app.post('/v1/token/verify', async (c) => {
       aud: audience,
       clientIp: bind_ip ? clientIp : undefined,
       app_id: app_id || result.app_id,
-    }
+    },
+    signingKey
   );
 
   // Get badge information (for backward compatibility)
@@ -1008,10 +1031,15 @@ app.post('/v1/token/refresh', async (c) => {
     }, 400);
   }
 
+  const refreshSigningKey = getSigningKey(c.env);
+  const refreshPublicKey = getPublicKey(c.env);
   const result = await refreshAccessToken(
     refresh_token,
     c.env,
-    c.env.JWT_SECRET
+    c.env.JWT_SECRET,
+    undefined,
+    refreshSigningKey,
+    refreshPublicKey
   );
 
   if (!result.success) {
@@ -1084,6 +1112,50 @@ app.post('/v1/token/revoke', async (c) => {
       message: error instanceof Error ? error.message : 'Unknown error',
     }, 400);
   }
+});
+
+// Remote token validation — no auth required (the token IS the credential)
+app.post('/v1/token/validate', async (c) => {
+  // Rate limit: 100 req/min/IP
+  const clientIP = getClientIP(c.req.raw);
+  const rateLimitResult = await checkRateLimit(c.env.RATE_LIMITS, clientIP, 100);
+
+  c.header('X-RateLimit-Limit', '100');
+  c.header('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+  c.header('X-RateLimit-Reset', new Date(rateLimitResult.resetAt).toISOString());
+
+  if (!rateLimitResult.allowed) {
+    c.header('Retry-After', rateLimitResult.retryAfter?.toString() || '3600');
+    return c.json({
+      valid: false,
+      error: 'Rate limit exceeded',
+    }, 429);
+  }
+
+  const body = await c.req.json<{ token?: string }>().catch(() => ({} as { token?: string }));
+  const { token } = body;
+
+  if (!token || typeof token !== 'string') {
+    return c.json({
+      valid: false,
+      error: 'Missing or invalid token field',
+    }, 400);
+  }
+
+  const validatePublicKey = getPublicKey(c.env);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, validatePublicKey);
+
+  if (!result.valid) {
+    return c.json({
+      valid: false,
+      error: result.error || 'Token is invalid',
+    });
+  }
+
+  return c.json({
+    valid: true,
+    payload: result.payload,
+  });
 });
 
 // ============ REASONING CHALLENGE ============
@@ -1424,7 +1496,8 @@ app.get('/agent-only', async (c) => {
     }, 401);
   }
 
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
+  const agentOnlyPublicKey = getPublicKey(c.env);
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, agentOnlyPublicKey);
 
   // Track authentication attempt
   await trackAuthAttempt(
@@ -1939,7 +2012,8 @@ app.post('/v1/agents/register', async (c) => {
     const token = extractBearerToken(authHeader);
     
     if (token) {
-      const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
+      const regPublicKey = getPublicKey(c.env);
+      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, regPublicKey);
       if (result.valid && result.payload) {
         jwtAppId = (result.payload as any).app_id;
       }
@@ -2059,7 +2133,8 @@ app.get('/v1/agents', async (c) => {
     const token = extractBearerToken(authHeader);
     
     if (token) {
-      const result = await verifyToken(token, c.env.JWT_SECRET, c.env);
+      const listPublicKey = getPublicKey(c.env);
+      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, listPublicKey);
       if (result.valid && result.payload) {
         jwtAppId = (result.payload as any).app_id;
       }
@@ -2150,7 +2225,8 @@ app.get('/go/:code', async (c) => {
 
   if (gateToken) {
     // Verify the underlying token is still valid
-    const result = await verifyToken(gateToken, c.env.JWT_SECRET, c.env);
+    const gatePublicKey = getPublicKey(c.env);
+    const result = await verifyToken(gateToken, c.env.JWT_SECRET, c.env, undefined, gatePublicKey);
     
     // Delete the code (one-time use) regardless of token validity
     try { await c.env.CHALLENGES.delete(`gate:${normalizedCode}`); } catch {}
@@ -2347,7 +2423,7 @@ export {
   solveSpeedChallenge,
 } from './challenges';
 
-export { generateToken, verifyToken } from './auth';
+export { generateToken, verifyToken, getSigningPublicKeyJWK } from './auth';
 export { checkRateLimit } from './rate-limit';
 export { 
   generateBadge, 

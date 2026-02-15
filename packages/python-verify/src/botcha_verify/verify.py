@@ -1,51 +1,107 @@
-"""Core BOTCHA JWT token verification."""
+"""Core BOTCHA JWT token verification.
+
+Supports both JWKS-based (ES256, recommended) and shared-secret (HS256, legacy)
+verification of BOTCHA JWT tokens.
+"""
 
 import jwt
 from typing import Optional
 
 from .types import BotchaPayload, VerifyOptions, VerifyResult
 
+# ---------------------------------------------------------------------------
+# JWKS client cache – reuse PyJWKClient instances across calls
+# ---------------------------------------------------------------------------
+_jwks_clients: dict = {}
+
+
+def _get_jwks_client(jwks_url: str, cache_ttl: int = 3600):
+    """Get or create a cached PyJWKClient for the given JWKS URL."""
+    from jwt import PyJWKClient
+
+    key = (jwks_url, cache_ttl)
+    if key not in _jwks_clients:
+        _jwks_clients[key] = PyJWKClient(
+            jwks_url, cache_jwk_set=True, lifespan=cache_ttl
+        )
+    return _jwks_clients[key]
+
 
 def verify_botcha_token(
-    token: str, secret: str, options: Optional[VerifyOptions] = None
+    token: str, secret: Optional[str] = None, options: Optional[VerifyOptions] = None
 ) -> VerifyResult:
     """
     Verify a BOTCHA JWT token.
 
+    Supports two verification modes:
+
+    1. **JWKS (recommended)** – set ``options.jwks_url`` to fetch the public key
+       from BOTCHA's JWKS endpoint. Accepts both ES256 and HS256 tokens.
+    2. **Shared secret (legacy)** – pass ``secret`` for HS256 verification.
+
+    If both ``jwks_url`` and ``secret`` are provided, JWKS is tried first with
+    a fallback to the shared secret.
+
     Checks:
-    - Token signature and expiry (HS256)
+    - Token signature and expiry
     - Token type must be "botcha-verified"
+    - Issuer claim (must be "botcha.ai" in JWKS-only mode)
     - Audience claim (if options.audience provided)
     - Client IP binding (if options.client_ip provided)
 
     Args:
         token: JWT token string
-        secret: Secret key for verification
-        options: Optional verification options
+        secret: Secret key for HS256 verification (optional if jwks_url provided)
+        options: Optional verification options (including jwks_url)
 
     Returns:
         VerifyResult with valid flag, payload, or error message
 
-    Example:
+    Example (JWKS – recommended):
+        >>> opts = VerifyOptions(jwks_url="https://botcha.ai/.well-known/jwks")
+        >>> result = verify_botcha_token(token, options=opts)
+        >>> if result.valid:
+        ...     print(f"Solved in {result.payload.solve_time}ms")
+
+    Example (shared secret – legacy):
         >>> result = verify_botcha_token(token, secret="my-secret")
         >>> if result.valid:
         ...     print(f"Solved in {result.payload.solve_time}ms")
     """
+    jwks_url = options.jwks_url if options else None
+    jwks_cache_ttl = options.jwks_cache_ttl if options else 3600
+
+    # Must have at least one verification method
+    if not secret and not jwks_url:
+        return VerifyResult(
+            valid=False,
+            error='Configuration error: at least one of "secret" or "options.jwks_url" must be provided',
+        )
+
     try:
-        # Decode and verify JWT signature, expiry, and audience
-        # PyJWT handles audience verification if passed as parameter
-        decode_kwargs = {
-            "algorithms": ["HS256"],
-            "options": {
-                "require": ["sub", "iat", "exp", "jti"],
-            },
-        }
+        payload: Optional[dict] = None
 
-        # Add audience verification if provided
-        if options and options.audience:
-            decode_kwargs["audience"] = options.audience
+        if jwks_url and secret:
+            # Both provided: try JWKS first, fall back to secret
+            try:
+                payload = _decode_with_jwks(token, jwks_url, jwks_cache_ttl, options)
+            except Exception:
+                payload = _decode_with_secret(token, secret, options)
+        elif jwks_url:
+            # JWKS-only mode
+            payload = _decode_with_jwks(token, jwks_url, jwks_cache_ttl, options)
 
-        payload = jwt.decode(token, secret, **decode_kwargs)
+            # Validate issuer when using JWKS mode
+            iss = payload.get("iss")
+            if not iss or iss != "botcha.ai":
+                return VerifyResult(
+                    valid=False,
+                    error=f"Invalid issuer claim: expected 'botcha.ai', got '{iss}'",
+                )
+        else:
+            # Secret-only mode (legacy)
+            assert secret is not None  # guaranteed by earlier check
+            payload = _decode_with_secret(token, secret, options)
 
         # Check token type (must be access token, not refresh token)
         token_type = payload.get("type")
@@ -86,6 +142,46 @@ def verify_botcha_token(
         return VerifyResult(valid=False, error=f"Invalid token: {str(e)}")
     except Exception as e:
         return VerifyResult(valid=False, error=f"Token verification failed: {str(e)}")
+
+
+def _decode_with_jwks(
+    token: str,
+    jwks_url: str,
+    cache_ttl: int,
+    options: Optional[VerifyOptions],
+) -> dict:
+    """Decode and verify a token using a JWKS endpoint (ES256 + HS256)."""
+    jwks_client = _get_jwks_client(jwks_url, cache_ttl)
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+    decode_kwargs: dict = {
+        "algorithms": ["ES256", "HS256"],
+        "options": {
+            "require": ["sub", "iat", "exp", "jti"],
+        },
+    }
+    if options and options.audience:
+        decode_kwargs["audience"] = options.audience
+
+    return jwt.decode(token, signing_key.key, **decode_kwargs)
+
+
+def _decode_with_secret(
+    token: str,
+    secret: str,
+    options: Optional[VerifyOptions],
+) -> dict:
+    """Decode and verify a token using a shared secret (HS256)."""
+    decode_kwargs: dict = {
+        "algorithms": ["HS256"],
+        "options": {
+            "require": ["sub", "iat", "exp", "jti"],
+        },
+    }
+    if options and options.audience:
+        decode_kwargs["audience"] = options.audience
+
+    return jwt.decode(token, secret, **decode_kwargs)
 
 
 def extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:

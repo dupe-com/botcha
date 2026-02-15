@@ -660,6 +660,154 @@ result = verify_botcha_token(token, secret='your-key', options=VerifyOptions(aud
 
 **Features:** JWT signature (HS256), expiry, token type, audience claim, client IP binding, auto_error toggle (FastAPI), path-based protection (Django).
 
+## Token Verification (v0.19.0+)
+
+BOTCHA v0.19.0 introduces **ES256 asymmetric signing** for JWT tokens. This means third-party consumers can verify tokens without knowing the signing secret. Three verification modes are available:
+
+### 1. JWKS Verification (Recommended)
+
+Fetch public keys from `/.well-known/jwks` and verify ES256 signatures locally. No shared secret needed. Best for high-throughput services.
+
+**TypeScript:**
+
+```typescript
+import { botchaVerify } from '@dupecom/botcha-verify/express';
+
+// JWKS-based verification — no secret needed!
+app.use('/api', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+  audience: 'https://api.example.com',
+}));
+
+app.get('/api/data', (req, res) => {
+  console.log('Verified agent:', req.botcha?.sub);
+  res.json({ data: 'protected' });
+});
+```
+
+```typescript
+// Hono middleware
+import { botchaVerify } from '@dupecom/botcha-verify/hono';
+
+app.use('/api/*', botchaVerify({
+  jwksUrl: 'https://botcha.ai/.well-known/jwks',
+}));
+```
+
+**Python:**
+
+```python
+# FastAPI
+from fastapi import FastAPI, Depends
+from botcha_verify.fastapi import BotchaVerify
+
+app = FastAPI()
+botcha = BotchaVerify(
+    jwks_url='https://botcha.ai/.well-known/jwks',
+    audience='https://api.example.com',
+)
+
+@app.get('/api/data')
+async def get_data(token = Depends(botcha)):
+    return {"solve_time": token.solve_time}
+```
+
+```python
+# Django (settings.py)
+MIDDLEWARE = ['botcha_verify.django.BotchaVerifyMiddleware']
+BOTCHA_JWKS_URL = 'https://botcha.ai/.well-known/jwks'
+BOTCHA_PROTECTED_PATHS = ['/api/']
+```
+
+### 2. Remote Validation (Simplest)
+
+`POST /v1/token/validate` — no SDK needed, just a single HTTP call. Best for simple integrations or languages without an SDK.
+
+**curl:**
+
+```bash
+curl -X POST https://botcha.ai/v1/token/validate \
+  -H "Content-Type: application/json" \
+  -d '{"token": "eyJ..."}'
+
+# Response:
+# {"valid": true, "payload": {"sub": "challenge_abc123", "type": "botcha-verified", ...}}
+# or
+# {"valid": false, "error": "Token expired"}
+```
+
+**TypeScript:**
+
+```typescript
+// No SDK needed — just fetch
+const res = await fetch('https://botcha.ai/v1/token/validate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ token: incomingToken }),
+});
+const { valid, payload, error } = await res.json();
+
+if (valid) {
+  console.log('Token verified, agent:', payload.sub);
+} else {
+  console.log('Invalid token:', error);
+}
+```
+
+**Python:**
+
+```python
+import httpx
+
+async def validate_token(token: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            'https://botcha.ai/v1/token/validate',
+            json={'token': token},
+        )
+        result = resp.json()
+        if result['valid']:
+            return result['payload']
+        raise ValueError(result['error'])
+```
+
+### 3. Shared Secret (Legacy — HS256)
+
+Verify HS256-signed tokens locally with the shared secret. Requires distributing `BOTCHA_SECRET` to every verifying service.
+
+**TypeScript:**
+
+```typescript
+import { botchaVerify } from '@dupecom/botcha-verify/express';
+
+// Legacy HS256 verification — requires shared secret
+app.use('/api', botchaVerify({
+  secret: process.env.BOTCHA_SECRET!,
+  audience: 'https://api.example.com',
+}));
+```
+
+**Python:**
+
+```python
+from botcha_verify.fastapi import BotchaVerify
+
+botcha = BotchaVerify(
+    secret='your-botcha-secret',
+    audience='https://api.example.com',
+)
+```
+
+### Verification Mode Comparison
+
+| Mode | Requires Secret? | Offline? | Best For |
+|------|-----------------|----------|----------|
+| JWKS (ES256) | No | Yes | Production — high-throughput, no secret distribution |
+| Remote Validation | No | No | Simple integrations — one HTTP call |
+| Shared Secret (HS256) | Yes | Yes | Legacy — backward compatibility |
+
+---
+
 ## Trusted Agent Protocol (TAP) Endpoints (v0.12.0+)
 
 TAP adds cryptographic agent authentication using HTTP Message Signatures (RFC 9421). TAP-enabled agents register public keys, declare capabilities, and create intent-scoped sessions.
