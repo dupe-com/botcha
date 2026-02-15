@@ -510,24 +510,29 @@ export class BotchaClient {
    * A 6-digit verification code will be sent to the provided email.
    *
    * @param email - Email address for the app owner
-   * @returns App creation response including app_id and app_secret
+   * @param name - Optional human-readable label for the app (e.g., "My Shopping App")
+   * @returns App creation response including app_id, name, and app_secret
    * @throws Error if app creation fails
    *
    * @example
    * ```typescript
-   * const app = await client.createApp('agent@example.com');
+   * const app = await client.createApp('agent@example.com', 'My Shopping App');
    * console.log(app.app_id);     // 'app_abc123'
+   * console.log(app.name);       // 'My Shopping App'
    * console.log(app.app_secret); // 'sk_...' (save this!)
    * ```
    */
-  async createApp(email: string): Promise<CreateAppResponse> {
+  async createApp(email: string, name?: string): Promise<CreateAppResponse> {
+    const body: Record<string, string> = { email }
+    if (name) body.name = name
+
     const res = await fetch(`${this.baseUrl}/v1/apps`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': this.agentIdentity,
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify(body),
     })
 
     if (!res.ok) {
