@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 // SDK version - hardcoded since npm_package_version is unreliable when used as a library
-const SDK_VERSION = '0.16.0';
+const SDK_VERSION = '0.18.0';
 
 // Export types
 export type {
