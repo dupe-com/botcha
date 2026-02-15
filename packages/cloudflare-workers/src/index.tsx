@@ -226,11 +226,24 @@ async function validateAppId(
 
 // ============ APP GATE MIDDLEWARE ============
 // Requires a registered app_id with verified email on all gated /v1/* routes.
-// Extracts app_id from: query param, X-App-Id header, or JWT Bearer token claim.
+// Extracts app_id from: query param, X-App-Id header, request body, or JWT Bearer token claim.
 async function requireAppId(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) {
   // 1. Extract app_id from multiple sources
   const queryAppId = c.req.query('app_id');
   const headerAppId = c.req.header('x-app-id');
+
+  // Try request body for POST/PUT requests (e.g., /v1/token/verify sends app_id in body)
+  let bodyAppId: string | undefined;
+  if (c.req.method === 'POST' || c.req.method === 'PUT') {
+    try {
+      const body = await c.req.json();
+      if (body && typeof body.app_id === 'string') {
+        bodyAppId = body.app_id;
+      }
+    } catch {
+      // Body not JSON or not parseable — that's fine
+    }
+  }
 
   // Try JWT claim if Bearer token present
   let jwtAppId: string | undefined;
@@ -248,7 +261,7 @@ async function requireAppId(c: Context<{ Bindings: Bindings; Variables: Variable
     }
   }
 
-  const appId = queryAppId || headerAppId || jwtAppId;
+  const appId = queryAppId || headerAppId || bodyAppId || jwtAppId;
 
   // 2. No app_id at all → 401 with registration instructions
   if (!appId) {
