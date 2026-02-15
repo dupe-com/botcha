@@ -37,7 +37,10 @@ BotchaClient(
     base_url: str = "https://botcha.ai",
     agent_identity: Optional[str] = None,
     max_retries: int = 3,
-    auto_token: bool = True
+    auto_token: bool = True,
+    audience: Optional[str] = None,
+    app_id: Optional[str] = None,
+    app_secret: Optional[str] = None,
 )
 ```
 
@@ -46,6 +49,9 @@ BotchaClient(
 - `agent_identity` (str, optional): Custom agent identity string for User-Agent header
 - `max_retries` (int): Maximum number of retries for failed requests. Default: `3`
 - `auto_token` (bool): Automatically acquire and attach Bearer tokens. Default: `True`
+- `audience` (str, optional): Scope tokens to a specific API/service
+- `app_id` (str, optional): Multi-tenant app ID for token/challenge scoping
+- `app_secret` (str, optional): App secret for app-management endpoints (`verify_email`, `resend_verification`)
 
 #### Methods
 
@@ -115,11 +121,11 @@ Close the underlying HTTP client. Automatically called when using async context 
 
 Create a new BOTCHA app. Returns `app_id` and `app_secret`.
 
-##### `async verify_email(code: str, app_id: str = None) -> VerifyEmailResponse`
+##### `async verify_email(code: str, app_id: str = None, app_secret: str = None) -> VerifyEmailResponse`
 
 Verify email with 6-digit code sent to your email.
 
-##### `async resend_verification(app_id: str = None) -> ResendVerificationResponse`
+##### `async resend_verification(app_id: str = None, app_secret: str = None) -> ResendVerificationResponse`
 
 Resend the email verification code.
 

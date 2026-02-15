@@ -19,6 +19,8 @@ export interface BotchaClientOptions {
   audience?: string;
   /** Multi-tenant application ID (optional) */
   appId?: string;
+  /** Application secret for app-management endpoints (optional, but required for email verify/resend unless using dashboard session token) */
+  appSecret?: string;
 }
 
 export interface ChallengeResponse {

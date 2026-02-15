@@ -6,9 +6,9 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.19.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.20.3 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.1 | LangChain Tool integration |
-| [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.19.0 | Python SDK on PyPI |
+| [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.20.3 | Python SDK on PyPI |
 | [`@dupecom/botcha-verify`](../packages/verify/) | 0.2.0 | Server-side verification (Express/Hono middleware) |
 | [`botcha-verify`](../packages/python-verify/) | 0.2.0 | Server-side verification (FastAPI/Django middleware) |
 
@@ -32,7 +32,7 @@ Response:
   "app_id": "app_a1b2c3d4e5f6a7b8",
   "name": "My Shopping App",
   "app_secret": "sk_...",
-  "next_step": "POST /v1/apps/app_.../verify-email with {\"code\": \"123456\"}"
+  "next_step": "POST /v1/apps/app_.../verify-email with {\"code\": \"123456\", \"app_secret\": \"sk_...\"}"
 }
 ```
 
@@ -45,7 +45,7 @@ Check your inbox for a 6-digit code, then:
 ```bash
 curl -X POST https://botcha.ai/v1/apps/app_a1b2c3d4e5f6a7b8/verify-email \
   -H "Content-Type: application/json" \
-  -d '{"code": "123456"}'
+  -d '{"code": "123456", "app_secret": "sk_..."}'
 ```
 
 ### Step 3: Add verification middleware to your API
@@ -288,7 +288,7 @@ curl -X POST https://botcha.ai/v1/apps \
 ```bash
 curl -X POST https://botcha.ai/v1/apps/app_abc123/verify-email \
   -H "Content-Type: application/json" \
-  -d '{"code": "123456"}'
+  -d '{"code": "123456", "app_secret": "sk_..."}'
 # Returns: {success: true, email_verified: true}
 ```
 
@@ -323,7 +323,8 @@ A notification email is sent when the secret is rotated (if email is verified).
 import { BotchaClient } from '@dupecom/botcha/client';
 
 const client = new BotchaClient({
-  appId: 'app_abc123',  // All requests include this app_id
+  appId: 'app_abc123',    // All requests include this app_id
+  appSecret: 'sk_...',    // Required for verifyEmail()/resendVerification()
   audience: 'https://api.example.com',
 });
 
@@ -336,7 +337,7 @@ const response = await client.fetch('/protected');
 ```python
 from botcha import BotchaClient
 
-async with BotchaClient(app_id="app_abc123") as client:
+async with BotchaClient(app_id="app_abc123", app_secret="sk_...") as client:
     response = await client.fetch("https://api.example.com/protected")
 ```
 
@@ -351,7 +352,7 @@ import { BotchaClient } from '@dupecom/botcha/client';
 
 const client = new BotchaClient();
 
-// 1. Create app (auto-sets client.appId)
+// 1. Create app (auto-sets client.appId + client.appSecret)
 const app = await client.createApp('agent@example.com', 'My Shopping App');
 console.log(app.app_id);     // 'app_abc123'
 console.log(app.name);       // 'My Shopping App'
@@ -377,7 +378,7 @@ console.log(rotated.app_secret); // new secret
 from botcha import BotchaClient
 
 async with BotchaClient() as client:
-    # 1. Create app (auto-sets client.app_id)
+    # 1. Create app (auto-sets client.app_id + client.app_secret)
     app = await client.create_app("agent@example.com", name="My Shopping App")
     print(app.app_id)      # 'app_abc123'
     print(app.name)        # 'My Shopping App'
@@ -410,8 +411,8 @@ async with BotchaClient() as client:
 |----------|--------|-------------|
 | `/v1/apps` | POST | Create new app (email required, returns app_id + app_secret) |
 | `/v1/apps/:id` | GET | Get app info (includes email + verification status) |
-| `/v1/apps/:id/verify-email` | POST | Verify email with 6-digit code |
-| `/v1/apps/:id/resend-verification` | POST | Resend verification email |
+| `/v1/apps/:id/verify-email` | POST | Verify email with 6-digit code (requires `app_secret` or dashboard session token) |
+| `/v1/apps/:id/resend-verification` | POST | Resend verification email (requires `app_secret` or dashboard session token) |
 | `/v1/apps/:id/rotate-secret` | POST | Rotate app secret (auth required) |
 | `/v1/auth/recover` | POST | Request account recovery via email |
 
@@ -677,8 +678,8 @@ The Python SDK mirrors the TypeScript API:
 - `refresh_token()` - Refresh access token using refresh token
 - `fetch(url)` - Auto-solve and fetch URL with challenge handling
 - `create_app(email)` - Create a new app (email required, auto-sets app_id)
-- `verify_email(code, app_id?)` - Verify email with 6-digit code
-- `resend_verification(app_id?)` - Resend verification email
+- `verify_email(code, app_id?, app_secret?)` - Verify email with 6-digit code
+- `resend_verification(app_id?, app_secret?)` - Resend verification email
 - `recover_account(email)` - Request account recovery via email
 - `rotate_secret(app_id?)` - Rotate app secret (requires session token)
 - `register_tap_agent(name, operator?, ...)` → Register TAP agent
@@ -701,6 +702,7 @@ The Python SDK mirrors the TypeScript API:
 - `auto_token` - Enable automatic token acquisition (default: True)
 - `audience` - Scope tokens to a specific service (optional)
 - `app_id` - Multi-tenant app ID for per-app isolation (optional)
+- `app_secret` - App secret for app-management endpoints like verify/resend (optional)
 
 **Implementation:** See `packages/python/` for full source code including SHA256 solver, async HTTP client (httpx), and type annotations.
 

@@ -1,6 +1,6 @@
 """BOTCHA Python SDK - Prove you're a bot. Humans need not apply."""
 
-__version__ = "0.4.0"
+__version__ = "0.20.3"
 
 from botcha.client import BotchaClient
 from botcha.solver import solve_botcha

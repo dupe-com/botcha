@@ -500,6 +500,16 @@ async def test_app_id_parameter():
 
 
 @pytest.mark.asyncio
+async def test_app_secret_parameter():
+    """Test that app_secret parameter is stored correctly."""
+    client = BotchaClient(app_secret="sk_test_secret")
+
+    assert client.app_secret == "sk_test_secret"
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 @respx.mock
 async def test_token_parsing_with_invalid_jwt():
     """Test that invalid JWT still works with default 1hr expiry."""
@@ -1111,6 +1121,7 @@ async def test_create_app_happy_path():
         assert result.email_verified is False
         # app_id should be auto-set on the client
         assert client.app_id == "app_test123"
+        assert client.app_secret == "sk_secret"
 
 
 @pytest.mark.asyncio
@@ -1249,7 +1260,9 @@ async def test_verify_email_happy_path():
         )
     )
 
-    async with BotchaClient(app_id="app_test123") as client:
+    async with BotchaClient(
+        app_id="app_test123", app_secret="sk_test_secret"
+    ) as client:
         result = await client.verify_email("123456")
 
         assert result.success is True
@@ -1267,12 +1280,15 @@ async def test_verify_email_sends_code_in_body():
         )
     )
 
-    async with BotchaClient(app_id="app_test123") as client:
+    async with BotchaClient(
+        app_id="app_test123", app_secret="sk_test_secret"
+    ) as client:
         await client.verify_email("654321")
 
         request = route.calls.last.request
         body = json.loads(request.content)
         assert body["code"] == "654321"
+        assert body["app_secret"] == "sk_test_secret"
 
 
 @pytest.mark.asyncio
@@ -1294,16 +1310,26 @@ async def test_verify_email_explicit_app_id():
         )
     )
 
-    async with BotchaClient(app_id="app_default") as client:
+    async with BotchaClient(
+        app_id="app_default", app_secret="sk_test_secret"
+    ) as client:
         await client.verify_email("123456", app_id="app_override")
         assert route.called
+
+
+@pytest.mark.asyncio
+async def test_verify_email_no_app_secret_raises():
+    """Test that verify_email raises when no app_secret is set."""
+    async with BotchaClient(app_id="app_test123") as client:
+        with pytest.raises(ValueError, match="No app secret"):
+            await client.verify_email("123456")
 
 
 @pytest.mark.asyncio
 @respx.mock
 async def test_resend_verification_happy_path():
     """Test successful resend verification."""
-    respx.post("https://botcha.ai/v1/apps/app_test123/resend-verification").mock(
+    route = respx.post("https://botcha.ai/v1/apps/app_test123/resend-verification").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -1313,9 +1339,15 @@ async def test_resend_verification_happy_path():
         )
     )
 
-    async with BotchaClient(app_id="app_test123") as client:
+    async with BotchaClient(
+        app_id="app_test123", app_secret="sk_test_secret"
+    ) as client:
         result = await client.resend_verification()
         assert result.success is True
+
+    request = route.calls.last.request
+    body = json.loads(request.content)
+    assert body["app_secret"] == "sk_test_secret"
 
 
 @pytest.mark.asyncio
@@ -1323,6 +1355,14 @@ async def test_resend_verification_no_app_id_raises():
     """Test that resend_verification raises when no app_id is set."""
     async with BotchaClient() as client:
         with pytest.raises(ValueError, match="No app ID"):
+            await client.resend_verification()
+
+
+@pytest.mark.asyncio
+async def test_resend_verification_no_app_secret_raises():
+    """Test that resend_verification raises when no app_secret is set."""
+    async with BotchaClient(app_id="app_test123") as client:
+        with pytest.raises(ValueError, match="No app secret"):
             await client.resend_verification()
 
 

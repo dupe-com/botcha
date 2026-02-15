@@ -37,6 +37,14 @@ describe('BotchaClient', () => {
       
       expect((client as any).appId).toBe('test-app-123');
     });
+
+    test('accepts appSecret option', () => {
+      const client = new BotchaClient({
+        appSecret: 'sk_test_secret',
+      });
+
+      expect((client as any).appSecret).toBe('sk_test_secret');
+    });
   });
 
   describe('solveChallenge()', () => {
@@ -610,6 +618,7 @@ describe('BotchaClient', () => {
       expect(result.email_verified).toBe(false);
       // appId should be auto-set
       expect((client as any).appId).toBe('app_test123');
+      expect((client as any).appSecret).toBe('sk_secret');
 
       // Verify POST body
       const call = (global.fetch as any).mock.calls[0];
@@ -646,7 +655,10 @@ describe('BotchaClient', () => {
         }),
       });
 
-      const client = new BotchaClient({ appId: 'app_test123' });
+      const client = new BotchaClient({
+        appId: 'app_test123',
+        appSecret: 'sk_test_secret',
+      });
       const result = await client.verifyEmail('123456');
 
       expect(result.success).toBe(true);
@@ -656,6 +668,7 @@ describe('BotchaClient', () => {
       expect(call[0]).toContain('/v1/apps/app_test123/verify-email');
       const body = JSON.parse(call[1].body);
       expect(body.code).toBe('123456');
+      expect(body.app_secret).toBe('sk_test_secret');
     });
 
     test('throws when no appId set', async () => {
@@ -670,11 +683,21 @@ describe('BotchaClient', () => {
         json: vi.fn().mockResolvedValue({ success: true, email_verified: true }),
       });
 
-      const client = new BotchaClient({ appId: 'app_default' });
+      const client = new BotchaClient({
+        appId: 'app_default',
+        appSecret: 'sk_test_secret',
+      });
       await client.verifyEmail('123456', 'app_override');
 
       const call = (global.fetch as any).mock.calls[0];
       expect(call[0]).toContain('/v1/apps/app_override/verify-email');
+      const body = JSON.parse(call[1].body);
+      expect(body.app_secret).toBe('sk_test_secret');
+    });
+
+    test('throws when no appSecret set', async () => {
+      const client = new BotchaClient({ appId: 'app_test123' });
+      await expect(client.verifyEmail('123456')).rejects.toThrow('No app secret');
     });
   });
 
@@ -689,7 +712,10 @@ describe('BotchaClient', () => {
         }),
       });
 
-      const client = new BotchaClient({ appId: 'app_test123' });
+      const client = new BotchaClient({
+        appId: 'app_test123',
+        appSecret: 'sk_test_secret',
+      });
       const result = await client.resendVerification();
 
       expect(result.success).toBe(true);
@@ -697,11 +723,18 @@ describe('BotchaClient', () => {
       const call = (global.fetch as any).mock.calls[0];
       expect(call[0]).toContain('/v1/apps/app_test123/resend-verification');
       expect(call[1].method).toBe('POST');
+      const body = JSON.parse(call[1].body);
+      expect(body.app_secret).toBe('sk_test_secret');
     });
 
     test('throws when no appId set', async () => {
       const client = new BotchaClient();
       await expect(client.resendVerification()).rejects.toThrow('No app ID');
+    });
+
+    test('throws when no appSecret set', async () => {
+      const client = new BotchaClient({ appId: 'app_test123' });
+      await expect(client.resendVerification()).rejects.toThrow('No app secret');
     });
   });
 

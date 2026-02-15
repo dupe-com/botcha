@@ -122,6 +122,7 @@ export class BotchaClient {
   private maxRetries: number
   private autoToken: boolean
   private appId?: string
+  private appSecret?: string
   private opts: BotchaClientOptions
   private cachedToken: string | null = null
   private _refreshToken: string | null = null
@@ -134,6 +135,7 @@ export class BotchaClient {
     this.maxRetries = options.maxRetries || 3
     this.autoToken = options.autoToken !== undefined ? options.autoToken : true
     this.appId = options.appId
+    this.appSecret = options.appSecret
   }
 
   /**
@@ -552,6 +554,9 @@ export class BotchaClient {
     if (data.app_id) {
       this.appId = data.app_id
     }
+    if (data.app_secret) {
+      this.appSecret = data.app_secret
+    }
 
     return data
   }
@@ -560,6 +565,7 @@ export class BotchaClient {
    * Verify the email address for an app using the 6-digit code sent via email.
    *
    * @param appId - The app ID (defaults to the client's appId)
+   * @param appSecret - App secret (defaults to the client's appSecret)
    * @param code - The 6-digit verification code from the email
    * @returns Verification response
    * @throws Error if verification fails
@@ -572,11 +578,18 @@ export class BotchaClient {
    */
   async verifyEmail(
     code: string,
-    appId?: string
+    appId?: string,
+    appSecret?: string
   ): Promise<VerifyEmailResponse> {
     const id = appId || this.appId
     if (!id) {
       throw new Error('No app ID. Call createApp() first or pass appId.')
+    }
+    const secret = appSecret || this.appSecret
+    if (!secret) {
+      throw new Error(
+        'No app secret. Provide appSecret from createApp() or pass appSecret.'
+      )
     }
 
     const res = await fetch(
@@ -587,7 +600,7 @@ export class BotchaClient {
           'Content-Type': 'application/json',
           'User-Agent': this.agentIdentity,
         },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, app_secret: secret }),
       }
     )
 
@@ -609,15 +622,23 @@ export class BotchaClient {
    * Resend the email verification code.
    *
    * @param appId - The app ID (defaults to the client's appId)
+   * @param appSecret - App secret (defaults to the client's appSecret)
    * @returns Response with success status
    * @throws Error if resend fails
    */
   async resendVerification(
-    appId?: string
+    appId?: string,
+    appSecret?: string
   ): Promise<ResendVerificationResponse> {
     const id = appId || this.appId
     if (!id) {
       throw new Error('No app ID. Call createApp() first or pass appId.')
+    }
+    const secret = appSecret || this.appSecret
+    if (!secret) {
+      throw new Error(
+        'No app secret. Provide appSecret from createApp() or pass appSecret.'
+      )
     }
 
     const res = await fetch(
@@ -628,6 +649,7 @@ export class BotchaClient {
           'Content-Type': 'application/json',
           'User-Agent': this.agentIdentity,
         },
+        body: JSON.stringify({ app_secret: secret }),
       }
     )
 

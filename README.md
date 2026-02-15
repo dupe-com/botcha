@@ -215,7 +215,7 @@ curl -X POST https://botcha.ai/v1/apps \
 # Verify your email with the 6-digit code:
 curl -X POST https://botcha.ai/v1/apps/app_abc123/verify-email \
   -H "Content-Type: application/json" \
-  -d '{"code": "123456"}'
+  -d '{"code": "123456", "app_secret": "sk_xyz789"}'
 ```
 
 ### Using Your App ID
@@ -240,7 +240,8 @@ When you solve a challenge with an `app_id`, the resulting token includes the `a
 import { BotchaClient } from '@dupecom/botcha/client';
 
 const client = new BotchaClient({
-  appId: 'app_abc123',  // All requests will include this app_id
+  appId: 'app_abc123',      // All requests include this app_id
+  appSecret: 'sk_xyz789',   // Required for verifyEmail()/resendVerification()
 });
 
 const response = await client.fetch('https://api.example.com/agent-only');
@@ -251,7 +252,7 @@ const response = await client.fetch('https://api.example.com/agent-only');
 ```python
 from botcha import BotchaClient
 
-async with BotchaClient(app_id="app_abc123") as client:
+async with BotchaClient(app_id="app_abc123", app_secret="sk_xyz789") as client:
     response = await client.fetch("https://api.example.com/agent-only")
 ```
 
@@ -263,7 +264,7 @@ Both SDKs now include methods for the full app lifecycle:
 
 ```typescript
 const client = new BotchaClient();
-const app = await client.createApp('agent@example.com'); // auto-sets appId
+const app = await client.createApp('agent@example.com'); // auto-sets appId + appSecret
 await client.verifyEmail('123456');                       // verify with email code
 await client.resendVerification();                        // resend code
 await client.recoverAccount('agent@example.com');         // recovery device code via email
@@ -274,7 +275,7 @@ const rotated = await client.rotateSecret();              // rotate secret (auth
 
 ```python
 async with BotchaClient() as client:
-    app = await client.create_app("agent@example.com")  # auto-sets app_id
+    app = await client.create_app("agent@example.com")  # auto-sets app_id + app_secret
     await client.verify_email("123456")                  # verify with email code
     await client.resend_verification()                   # resend code
     await client.recover_account("agent@example.com")    # recovery device code via email
@@ -1027,6 +1028,8 @@ const client = new BotchaClient({
   baseUrl: 'https://botcha.ai',      // BOTCHA service URL
   agentIdentity: 'MyAgent/1.0',       // User-Agent string
   maxRetries: 3,                      // Max challenge solve attempts
+  appId: 'app_abc123',                // Optional app scoping for token/challenge endpoints
+  appSecret: 'sk_xyz789',             // Required for verifyEmail()/resendVerification()
 });
 ```
 

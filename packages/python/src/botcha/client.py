@@ -48,6 +48,7 @@ class BotchaClient:
         auto_token: bool = True,
         audience: Optional[str] = None,
         app_id: Optional[str] = None,
+        app_secret: Optional[str] = None,
     ):
         """
         Initialize the BotchaClient.
@@ -59,6 +60,7 @@ class BotchaClient:
             auto_token: Automatically acquire and attach Bearer tokens (default: True)
             audience: Optional audience claim for token verification
             app_id: Optional multi-tenant application ID
+            app_secret: Optional application secret for app-management endpoints
         """
         self.base_url = base_url.rstrip("/")
         self.agent_identity = agent_identity
@@ -66,6 +68,7 @@ class BotchaClient:
         self.auto_token = auto_token
         self.audience = audience
         self.app_id = app_id
+        self.app_secret = app_secret
 
         self._token: Optional[str] = None
         self._token_expires_at: float = 0
@@ -395,6 +398,8 @@ class BotchaClient:
         # Auto-set app_id for subsequent requests
         if "app_id" in data:
             self.app_id = data["app_id"]
+        if "app_secret" in data:
+            self.app_secret = data["app_secret"]
 
         return CreateAppResponse(
             success=data.get("success", False),
@@ -412,7 +417,10 @@ class BotchaClient:
         )
 
     async def verify_email(
-        self, code: str, app_id: Optional[str] = None
+        self,
+        code: str,
+        app_id: Optional[str] = None,
+        app_secret: Optional[str] = None,
     ) -> VerifyEmailResponse:
         """
         Verify the email address for an app using the 6-digit code.
@@ -420,6 +428,7 @@ class BotchaClient:
         Args:
             code: The 6-digit verification code from the email.
             app_id: The app ID (defaults to the client's app_id).
+            app_secret: The app secret (defaults to the client's app_secret).
 
         Returns:
             VerifyEmailResponse with verification status.
@@ -431,10 +440,15 @@ class BotchaClient:
         aid = app_id or self.app_id
         if not aid:
             raise ValueError("No app ID. Call create_app() first or pass app_id.")
+        secret = app_secret or self.app_secret
+        if not secret:
+            raise ValueError(
+                "No app secret. Call create_app() first or pass app_secret."
+            )
 
         response = await self._client.post(
             f"{self.base_url}/v1/apps/{quote(aid, safe='')}/verify-email",
-            json={"code": code},
+            json={"code": code, "app_secret": secret},
         )
         response.raise_for_status()
         data = response.json()
@@ -447,13 +461,16 @@ class BotchaClient:
         )
 
     async def resend_verification(
-        self, app_id: Optional[str] = None
+        self,
+        app_id: Optional[str] = None,
+        app_secret: Optional[str] = None,
     ) -> ResendVerificationResponse:
         """
         Resend the email verification code.
 
         Args:
             app_id: The app ID (defaults to the client's app_id).
+            app_secret: The app secret (defaults to the client's app_secret).
 
         Returns:
             ResendVerificationResponse with success status.
@@ -465,9 +482,15 @@ class BotchaClient:
         aid = app_id or self.app_id
         if not aid:
             raise ValueError("No app ID. Call create_app() first or pass app_id.")
+        secret = app_secret or self.app_secret
+        if not secret:
+            raise ValueError(
+                "No app secret. Call create_app() first or pass app_secret."
+            )
 
         response = await self._client.post(
             f"{self.base_url}/v1/apps/{quote(aid, safe='')}/resend-verification",
+            json={"app_secret": secret},
         )
         response.raise_for_status()
         data = response.json()

@@ -1885,7 +1885,7 @@ app.post('/v1/apps', async (c) => {
       credential_advice: 'Store the app_id and app_secret securely. Use persistent agent memory if available, or instruct your human to save them in a password manager (1Password, Bitwarden, etc). If lost, recovery is available via the verified email.',
       created_at: new Date().toISOString(),
       rate_limit: 100,
-      next_step: `POST /v1/apps/${result.app_id}/verify-email with { "code": "123456" }`,
+      next_step: `POST /v1/apps/${result.app_id}/verify-email with { "code": "123456", "app_secret": "${result.app_secret}" }`,
     }, 201);
   } catch (error) {
     return c.json({
