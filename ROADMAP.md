@@ -112,18 +112,18 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 **Status:** Built and tested. TypeScript: 58 tests (Express + Hono middleware). Python: 30 tests (FastAPI + Django middleware). Both verify JWT signature, expiry, type, audience, client IP binding, and revocation.
 **Packages:** `@dupecom/botcha-verify` (npm) · `botcha-verify` (PyPI)
 
-### ✅ Email-Tied App Creation & Recovery — SHIPPED (v0.10.0)
+### ✅ Email-Tied App Creation & Recovery — SHIPPED (v0.10.0, enhanced v0.20.3)
 **What:** Email required at app creation. Verification via 6-digit code. Account recovery via email. Secret rotation with notification.
 **Status:** Built and tested. Breaking change: `POST /v1/apps` now requires `{ "email": "..." }` in body.
 **Implementation:**
 - `POST /v1/apps` → requires email, sends 6-digit verification code
-- `POST /v1/apps/:id/verify-email` → verify email with code
-- `POST /v1/apps/:id/resend-verification` → resend verification code
+- `POST /v1/apps/:id/verify-email` → verify email with code (app_secret or dashboard session auth required, v0.20.3)
+- `POST /v1/apps/:id/resend-verification` → resend verification code (app_secret or dashboard session auth required, v0.20.3)
 - `POST /v1/auth/recover` → send recovery device code to verified email
 - `POST /v1/apps/:id/rotate-secret` → rotate secret (auth required), sends notification email
 - Email→app_id reverse index in KV for recovery lookups
 - Resend API integration (falls back to console.log in dev)
-- **SDK support:** TypeScript (`createApp`, `verifyEmail`, `resendVerification`, `recoverAccount`, `rotateSecret`) and Python (`create_app`, `verify_email`, `resend_verification`, `recover_account`, `rotate_secret`)
+- **SDK support:** TypeScript (`createApp`, `verifyEmail(code, appId?, appSecret?)`, `resendVerification(appId?, appSecret?)`, `recoverAccount`, `rotateSecret`) and Python (`create_app`, `verify_email(code, app_id?, app_secret?)`, `resend_verification(app_id?, app_secret?)`, `recover_account`, `rotate_secret`)
 **Effort:** Large
 
 ### ✅ Per-App Metrics Dashboard — SHIPPED (v0.10.0)

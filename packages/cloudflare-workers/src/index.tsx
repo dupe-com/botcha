@@ -525,7 +525,7 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
         '1. Ask your human operator for their email address.',
         `2. POST ${baseUrl}/v1/apps {"email":"human@example.com","name":"My App"} — returns app_id + name + app_secret (shown ONCE).`,
         '3. Human receives a 6-digit verification code via email — ask them for it.',
-        `4. POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456"} — enables account recovery.`,
+        `4. POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."} — enables account recovery.`,
         `5. Register yourself: POST ${baseUrl}/v1/agents/register {"name":"my-agent","operator":"my-org"} — persistent agent identity.`,
         `6. Solve challenges with your app: GET ${baseUrl}/v1/challenges?app_id=...`,
         `7. Dashboard for your human: POST ${baseUrl}/v1/auth/device-code {"app_id":"..."}, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code.`,
@@ -557,7 +557,8 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
         note: 'Create an app for isolated rate limits, scoped tokens, and dashboard access.',
         'POST /v1/apps': 'Create app (email required, name optional) → app_id + name + app_secret',
         'GET /v1/apps/:id': 'Get app info',
-        'POST /v1/apps/:id/verify-email': 'Verify email with 6-digit code',
+        'POST /v1/apps/:id/verify-email': 'Verify email with 6-digit code (app_secret auth required)',
+        'POST /v1/apps/:id/resend-verification': 'Resend verification email (app_secret auth required)',
         'POST /v1/apps/:id/rotate-secret': 'Rotate app secret (auth required)',
       },
       agents: {

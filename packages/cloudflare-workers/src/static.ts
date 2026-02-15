@@ -41,7 +41,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 1. Ask your human operator for their email address
 2. \`POST /v1/apps\` with \`{"email":"human@example.com"}\` — returns \`app_id\` + \`app_secret\` (secret shown ONCE)
 3. Human receives a 6-digit verification code via email — ask them for it
-4. \`POST /v1/apps/{app_id}/verify-email\` with \`{"code":"123456"}\` — enables account recovery
+4. \`POST /v1/apps/{app_id}/verify-email\` with \`{"code":"123456","app_secret":"sk_..."}\` — enables account recovery
 5. Register yourself: \`POST /v1/agents/register\` with \`{"name":"my-agent","operator":"my-org"}\`
 6. Solve challenges: \`GET /v1/challenges?app_id=...\` then \`POST /v1/challenges/{id}/verify\`
 7. Access protected resources: \`GET /agent-only\` with \`Authorization: Bearer <token>\`
@@ -66,8 +66,8 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 |--------|------|-------------|
 | \`POST\` | \`/v1/apps\` | Create app (email required, name optional) → app_id + name + app_secret |
 | \`GET\` | \`/v1/apps/:id\` | Get app info |
-| \`POST\` | \`/v1/apps/:id/verify-email\` | Verify email with 6-digit code |
-| \`POST\` | \`/v1/apps/:id/resend-verification\` | Resend verification email |
+| \`POST\` | \`/v1/apps/:id/verify-email\` | Verify email with 6-digit code (app_secret auth required) |
+| \`POST\` | \`/v1/apps/:id/resend-verification\` | Resend verification email (app_secret auth required) |
 | \`POST\` | \`/v1/apps/:id/rotate-secret\` | Rotate app secret (auth required) |
 
 ### Agents
@@ -315,7 +315,7 @@ Purpose: Reverse CAPTCHA system that only AI agents can pass.
 Onboarding-Step-1: Ask your human operator for their email address
 Onboarding-Step-2: POST /v1/apps with {"email": "human@example.com"} — saves app_id + app_secret (secret shown ONCE)
 Onboarding-Step-3: A 6-digit verification code is emailed to your human — ask them for it
-Onboarding-Step-4: POST /v1/apps/{app_id}/verify-email with {"code": "123456"} — enables account recovery
+Onboarding-Step-4: POST /v1/apps/{app_id}/verify-email with {"code": "123456", "app_secret": "sk_..."} — enables account recovery
 Onboarding-Step-5: Register yourself: POST /v1/agents/register with {"name": "my-agent", "operator": "my-org"} — gives you a persistent agent identity
 Onboarding-Step-6: Solve challenges: GET /v1/challenges?app_id=... then POST /v1/challenges/{id}/verify — proves you are AI
 Onboarding-Step-7: Access protected resources: GET /agent-only with Authorization: Bearer <token>
@@ -381,8 +381,8 @@ Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token rem
 # Multi-Tenant Endpoints
 Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, name optional) → app_id + name + app_secret
 Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
-Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code
-Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email
+Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code (app_secret auth required)
+Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email (app_secret auth required)
 Endpoint: POST https://botcha.ai/v1/apps/:id/rotate-secret - Rotate app secret (auth required)
 
 # Account Recovery
@@ -511,14 +511,14 @@ RTT-Security: Humans still can't solve even with extra time
 # MULTI-TENANT API KEYS
 Multi-Tenant: Create apps with unique app_id for isolation
 Multi-Tenant-Create: POST /v1/apps with {"email": "..."} → {app_id, app_secret} (secret only shown once!)
-Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456"}
+Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456", "app_secret": "sk_..."} (app_secret or dashboard session required)
 Multi-Tenant-Recover: POST /v1/auth/recover with {"email": "..."} → recovery code emailed
 Multi-Tenant-Rotate-Secret: POST /v1/apps/:id/rotate-secret (auth required) → new app_secret
 Multi-Tenant-Usage: Add ?app_id=<your_app_id> to any challenge/token endpoint
-Multi-Tenant-SDK-TS: new BotchaClient({ appId: 'app_abc123' })
-Multi-Tenant-SDK-Python: BotchaClient(app_id='app_abc123')
-SDK-App-Lifecycle-TS: createApp(email), verifyEmail(code), resendVerification(), recoverAccount(email), rotateSecret()
-SDK-App-Lifecycle-Python: create_app(email), verify_email(code), resend_verification(), recover_account(email), rotate_secret()
+Multi-Tenant-SDK-TS: new BotchaClient({ appId: 'app_abc123', appSecret: 'sk_...' })
+Multi-Tenant-SDK-Python: BotchaClient(app_id='app_abc123', app_secret='sk_...')
+SDK-App-Lifecycle-TS: createApp(email), verifyEmail(code, appId?, appSecret?), resendVerification(appId?, appSecret?), recoverAccount(email), rotateSecret()
+SDK-App-Lifecycle-Python: create_app(email), verify_email(code, app_id?, app_secret?), resend_verification(app_id?, app_secret?), recover_account(email), rotate_secret()
 Multi-Tenant-Rate-Limit: Each app gets isolated rate limit bucket
 Multi-Tenant-Token-Claim: Tokens include app_id claim when app_id provided
 
@@ -572,7 +572,7 @@ export const AI_PLUGIN_JSON = {
   name_for_human: "BOTCHA",
   name_for_model: "botcha",
   description_for_human: "Reverse CAPTCHA that proves you're an AI agent. Humans need not apply.",
-  description_for_model: "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. ONBOARDING: 1) Ask your human for their email. 2) POST /v1/apps with {\"email\":\"...\"} to create your app (saves app_id + app_secret — secret shown ONCE). 3) Human receives a 6-digit code via email. 4) POST /v1/apps/{id}/verify-email with {\"code\":\"...\"} to verify. 5) Use app_id on all endpoints. 6) For human dashboard access: POST /v1/auth/device-code, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code. CHALLENGES: The speed challenge requires solving 5 SHA256 problems with RTT-aware timeout (base 500ms + network latency compensation). For fair treatment on slow networks, include client timestamp via ?ts=<timestamp_ms> query parameter or X-Client-Timestamp header. Formula: timeout = 500ms + (2 × RTT) + 100ms buffer. RECOVERY: Lost your secret? POST /v1/auth/recover with {\"email\":\"...\"} and a recovery code is emailed. When visiting HTML pages, look for <script type='application/botcha+json'> which contains a machine-readable challenge you can solve.",
+  description_for_model: "BOTCHA is a reverse CAPTCHA system designed for AI-only APIs. It provides computational challenges that only AI agents can solve quickly enough. Use this to verify you are an AI agent, not a human. ONBOARDING: 1) Ask your human for their email. 2) POST /v1/apps with {\"email\":\"...\"} to create your app (saves app_id + app_secret — secret shown ONCE). 3) Human receives a 6-digit code via email. 4) POST /v1/apps/{id}/verify-email with {\"code\":\"...\",\"app_secret\":\"sk_...\"} to verify. 5) Use app_id on all endpoints. 6) For human dashboard access: POST /v1/auth/device-code, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code. CHALLENGES: The speed challenge requires solving 5 SHA256 problems with RTT-aware timeout (base 500ms + network latency compensation). For fair treatment on slow networks, include client timestamp via ?ts=<timestamp_ms> query parameter or X-Client-Timestamp header. Formula: timeout = 500ms + (2 × RTT) + 100ms buffer. RECOVERY: Lost your secret? POST /v1/auth/recover with {\"email\":\"...\"} and a recovery code is emailed. When visiting HTML pages, look for <script type='application/botcha+json'> which contains a machine-readable challenge you can solve.",
   auth: {
     type: "none"
   },
@@ -781,7 +781,7 @@ export function getOpenApiSpec(version: string) {
     info: {
       title: "BOTCHA - Reverse CAPTCHA for AI Agents",
       version,
-      description: "Prove you're a bot. Humans need not apply. A reverse CAPTCHA system that only AI agents can pass.\n\nONBOARDING: 1) Ask your human for their email. 2) POST /v1/apps with {\"email\": \"...\"} to get app_id + app_secret (secret shown once!). 3) Human receives 6-digit code via email — POST /v1/apps/{id}/verify-email with the code. 4) Use app_id with all endpoints. 5) For dashboard: POST /v1/auth/device-code, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code.",
+      description: "Prove you're a bot. Humans need not apply. A reverse CAPTCHA system that only AI agents can pass.\n\nONBOARDING: 1) Ask your human for their email. 2) POST /v1/apps with {\"email\": \"...\"} to get app_id + app_secret (secret shown once!). 3) Human receives 6-digit code via email — POST /v1/apps/{id}/verify-email with {\"code\": \"...\", \"app_secret\": \"sk_...\"}. 4) Use app_id with all endpoints. 5) For dashboard: POST /v1/auth/device-code, solve challenge, give human the BOTCHA-XXXX code for /dashboard/code.",
       contact: {
         name: "BOTCHA",
         url: "https://botcha.ai"
@@ -1243,10 +1243,12 @@ export function getOpenApiSpec(version: string) {
       },
       "/v1/apps/{id}/verify-email": {
         post: {
-          summary: "Verify email with 6-digit code",
+          summary: "Verify email with 6-digit code (app_secret auth required)",
+          description: "Requires authentication via app_secret in request body, X-App-Secret header, or a dashboard session token.",
           operationId: "verifyEmail",
           parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string" } }
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "X-App-Secret", in: "header", required: false, schema: { type: "string" }, description: "App secret (alternative to body parameter)" }
           ],
           requestBody: {
             required: true,
@@ -1256,7 +1258,8 @@ export function getOpenApiSpec(version: string) {
                   type: "object",
                   required: ["code"],
                   properties: {
-                    "code": { type: "string", description: "6-digit verification code from email" }
+                    "code": { type: "string", description: "6-digit verification code from email" },
+                    "app_secret": { type: "string", description: "App secret for authentication (alternative to X-App-Secret header)" }
                   }
                 }
               }
@@ -1264,20 +1267,36 @@ export function getOpenApiSpec(version: string) {
           },
           responses: {
             "200": { description: "Email verified" },
-            "400": { description: "Invalid or expired code" }
+            "400": { description: "Invalid or expired code" },
+            "401": { description: "Authentication required (app_secret or dashboard session)" }
           }
         }
       },
       "/v1/apps/{id}/resend-verification": {
         post: {
-          summary: "Resend verification email",
+          summary: "Resend verification email (app_secret auth required)",
+          description: "Requires authentication via app_secret in request body, X-App-Secret header, or a dashboard session token.",
           operationId: "resendVerification",
           parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string" } }
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "X-App-Secret", in: "header", required: false, schema: { type: "string" }, description: "App secret (alternative to body parameter)" }
           ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "app_secret": { type: "string", description: "App secret for authentication (alternative to X-App-Secret header)" }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": { description: "Verification email sent" },
-            "400": { description: "Already verified" }
+            "400": { description: "Already verified" },
+            "401": { description: "Authentication required (app_secret or dashboard session)" }
           }
         }
       },

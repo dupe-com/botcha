@@ -81,8 +81,8 @@ Endpoint: POST https://botcha.ai/v1/token/validate - Validate a BOTCHA token rem
 # Multi-Tenant Endpoints
 Endpoint: POST https://botcha.ai/v1/apps - Create new app (email required, name optional) → app_id + name + app_secret
 Endpoint: GET https://botcha.ai/v1/apps/:id - Get app info (with email + verification status)
-Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code
-Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email
+Endpoint: POST https://botcha.ai/v1/apps/:id/verify-email - Verify email with 6-digit code (app_secret auth required)
+Endpoint: POST https://botcha.ai/v1/apps/:id/resend-verification - Resend verification email (app_secret auth required)
 Endpoint: POST https://botcha.ai/v1/apps/:id/rotate-secret - Rotate app secret (auth required)
 
 # Account Recovery
@@ -203,14 +203,14 @@ RTT-Security: Humans still can't solve even with extra time
 # MULTI-TENANT API KEYS
 Multi-Tenant: Create apps with unique app_id for isolation
 Multi-Tenant-Create: POST /v1/apps with {"email": "...", "name": "My App"} → {app_id, name, app_secret} (secret only shown once!)
-Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456"}
+Multi-Tenant-Verify-Email: POST /v1/apps/:id/verify-email with {"code": "123456", "app_secret": "sk_..."} (app_secret or dashboard session required)
 Multi-Tenant-Recover: POST /v1/auth/recover with {"email": "..."} → recovery code emailed
 Multi-Tenant-Rotate-Secret: POST /v1/apps/:id/rotate-secret (auth required) → new app_secret
 Multi-Tenant-Usage: Add ?app_id=<your_app_id> to any challenge/token endpoint
 Multi-Tenant-SDK-TS: new BotchaClient({ appId: 'app_abc123' })
 Multi-Tenant-SDK-Python: BotchaClient(app_id='app_abc123')
-SDK-App-Lifecycle-TS: createApp(email), verifyEmail(code), resendVerification(), recoverAccount(email), rotateSecret()
-SDK-App-Lifecycle-Python: create_app(email), verify_email(code), resend_verification(), recover_account(email), rotate_secret()
+SDK-App-Lifecycle-TS: createApp(email), verifyEmail(code, appId?, appSecret?), resendVerification(appId?, appSecret?), recoverAccount(email), rotateSecret()
+SDK-App-Lifecycle-Python: create_app(email), verify_email(code, app_id?, app_secret?), resend_verification(app_id?, app_secret?), recover_account(email), rotate_secret()
 Multi-Tenant-Rate-Limit: Each app gets isolated rate limit bucket
 Multi-Tenant-Token-Claim: Tokens include app_id claim when app_id provided
 
