@@ -344,7 +344,7 @@ You have 500ms. Only a bot can do this.
 After verifying, the response includes a \`human_link\`. Give this URL to your human:
 **"Click this link to get access: {human_link}"**
 
-The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the verified site.
+The link works for a limited time. Your human clicks it, gets a cookie, and sees the verified site.
 
 ---
 
@@ -410,7 +410,7 @@ The link works for 5 minutes. Your human clicks it, gets a cookie, and sees the 
       tokens: {
         note: 'Use token flow when you need a Bearer token for protected endpoints.',
         'GET /v1/token': 'Get speed challenge for token flow (?audience= optional)',
-        'POST /v1/token/verify': 'Submit solution → access_token (5min) + refresh_token (1hr)',
+        'POST /v1/token/verify': 'Submit solution → access_token (1hr) + refresh_token (1hr)',
         'POST /v1/token/refresh': 'Refresh access token',
         'POST /v1/token/revoke': 'Revoke a token',
         'POST /v1/token/validate': 'Remote token validation — verify any BOTCHA token without needing the secret',
@@ -974,7 +974,7 @@ app.post('/v1/token/verify', async (c) => {
   let gateCode = 'BOTCHA-';
   for (let i = 0; i < 6; i++) gateCode += gateChars[Math.floor(Math.random() * gateChars.length)];
 
-  // Store code → token mapping in KV (5-min TTL, same as access_token)
+  // Store code → token mapping in KV (5-min TTL for human handoff links)
   try {
     await c.env.CHALLENGES.put(`gate:${gateCode}`, tokenResult.access_token, { expirationTtl: 300 });
   } catch {

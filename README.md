@@ -127,7 +127,7 @@ BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens and l
 ### Token Flow
 
 ```
-1. Solve challenge → receive access_token (5min) + refresh_token (1hr) + human_link
+1. Solve challenge → receive access_token (1hr) + refresh_token (1hr) + human_link
 2. Use access_token for API calls
 3. Give human_link to your human → they click it → instant browser access via /go/:code
 4. When access_token expires → POST /v1/token/refresh with refresh_token
@@ -138,8 +138,8 @@ BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens and l
 
 | Feature | What it does |
 |---------|-------------|
-| **5-minute access tokens** | Compromise window reduced from 1hr to 5min |
-| **Refresh tokens (1hr)** | Renew access without re-solving challenges |
+| **1-hour access tokens** | Short-lived tokens limit compromise window |
+| **Refresh tokens (1hr)** | Seamless token renewal without re-solving challenges |
 | **Audience (`aud`) scoping** | Token for `api.stripe.com` is rejected by `api.github.com` |
 | **Client IP binding** | Optional — solve on machine A, can't use on machine B |
 | **Token revocation** | `POST /v1/token/revoke` — KV-backed, fail-open |

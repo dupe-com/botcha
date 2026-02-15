@@ -27,7 +27,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - User-Agent pattern matching removed (trivially spoofable)
 - X-Agent-Identity header disabled by default with production warning
 - **JWT `aud` (audience) claims** — tokens scoped to specific services
-- **Token rotation** — 5-minute access tokens + 1-hour refresh tokens (OAuth2-style)
+- **Token rotation** — 1-hour access tokens + 1-hour refresh tokens (OAuth2-style)
 - **Client IP binding** — optional IP-based token binding
 - **Token revocation** — `POST /v1/token/revoke` with KV-backed revocation list
 - **Token refresh** — `POST /v1/token/refresh` for seamless token renewal
@@ -76,7 +76,7 @@ All critical JWT security holes have been closed.
 Tokens are scoped to specific services via `aud` claim. Verification checks audience match. Prevents cross-service token replay.
 
 ### ✅ Token rotation
-Short-lived access tokens (5min) + refresh tokens (1hr). `POST /v1/token/refresh` issues new access tokens. Compromise window reduced from 1 hour to 5 minutes.
+1-hour access tokens + 1-hour refresh tokens. `POST /v1/token/refresh` issues new access tokens without re-solving challenges.
 
 ### ✅ Client IP binding
 Optional IP-based token binding. Token includes `client_ip` claim, verification checks match. Prevents solve-on-A, use-on-B attacks.

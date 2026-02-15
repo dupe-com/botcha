@@ -335,7 +335,7 @@ BOTCHA uses short-lived JWTs for authenticated access:
 
 | Token | Lifetime | Purpose |
 |---|---|---|
-| Access token | 5 minutes | API access, embedded in `Authorization: Bearer` header |
+| Access token | 1 hour | API access, embedded in `Authorization: Bearer` header |
 | Refresh token | 1 hour | Obtain new access tokens without re-solving a challenge |
 
 Tokens are signed with HMAC-SHA256 (HS256) and include:
@@ -540,7 +540,7 @@ A financial services API needs to audit all AI agent interactions:
 | Feature | Description |
 |---|---|
 | **Speed, Reasoning, Hybrid, and Compute challenges** | Four challenge types testing different machine capabilities |
-| **JWT token system** | 5-minute access tokens, 1-hour refresh tokens, revocation, audience claims |
+| **JWT token system** | 1-hour access tokens, 1-hour refresh tokens, revocation, audience claims |
 | **Multi-tenant apps** | Per-app rate limits, scoped tokens, isolated analytics |
 | **Email verification and account recovery** | 6-digit codes, secret rotation, anti-enumeration |
 | **Agent Registry** | Persistent agent identities with names, operators, and versions |

@@ -799,7 +799,7 @@ signature: sig1=:BASE64_SIGNATURE:`}</code></pre>
             <tbody>
               <tr>
                 <td>Access token</td>
-                <td>5 minutes</td>
+                <td>1 hour</td>
                 <td>API access via Bearer header</td>
               </tr>
               <tr>
@@ -1007,7 +1007,7 @@ botcha tap session --action browse --resource products --duration 1h`}</code></p
             </thead>
             <tbody>
               <tr><td>Challenge types</td><td>Speed, Reasoning, Hybrid, and Compute</td></tr>
-              <tr><td>JWT token system</td><td>5-min access, 1-hr refresh, revocation, audience claims</td></tr>
+              <tr><td>JWT token system</td><td>1-hr access, 1-hr refresh, revocation, audience claims</td></tr>
               <tr><td>Multi-tenant apps</td><td>Per-app rate limits, scoped tokens, isolated analytics</td></tr>
               <tr><td>Agent Registry</td><td>Persistent identities with names and operators</td></tr>
               <tr><td>TAP</td><td>Cryptographic identity, capability scoping, intent sessions</td></tr>

@@ -155,7 +155,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | Method | Path | Description |
 |--------|------|-------------|
 | \`GET\` | \`/v1/token\` | Get challenge for JWT token flow |
-| \`POST\` | \`/v1/token/verify\` | Submit solution → access_token (5min) + refresh_token (1hr) |
+| \`POST\` | \`/v1/token/verify\` | Submit solution → access_token (1hr) + refresh_token (1hr) |
 | \`POST\` | \`/v1/token/refresh\` | Refresh access token |
 | \`POST\` | \`/v1/token/revoke\` | Revoke a token |
 | \`POST\` | \`/v1/token/validate\` | Validate a token remotely (no shared secret needed) |
@@ -182,7 +182,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 3. \`POST /v1/token/verify\` — submit solution, receive JWT
 4. Use \`Authorization: Bearer <token>\` on protected endpoints
 
-**Token lifetimes:** access_token = 5 minutes, refresh_token = 1 hour
+**Token lifetimes:** access_token = 1 hour, refresh_token = 1 hour
 
 **Token signing:** ES256 (ECDSA P-256) asymmetric signing. HS256 supported for backward compatibility.
 
@@ -342,7 +342,7 @@ Feature: Standard Challenge (5s time limit)
 Feature: Hybrid Challenge (speed + reasoning combined)
 Feature: Reasoning Challenge (LLM-only questions, 30s limit)
 Feature: RTT-Aware Fairness (automatic network latency compensation)
-Feature: Token Rotation (5-minute access tokens + 1-hour refresh tokens)
+Feature: Token Rotation (1-hour access tokens + 1-hour refresh tokens)
 Feature: Audience Claims (tokens scoped to specific services)
 Feature: Client IP Binding (optional token-to-IP binding)
 Feature: Token Revocation (invalidate tokens before expiry)
@@ -492,8 +492,8 @@ Token-Validate: POST /v1/token/validate with {"token": "<token>"} — remote val
 Token-Verify-Modes: 1. JWKS (recommended, offline) 2. Remote validation (/v1/token/validate) 3. Shared secret (legacy HS256)
 Token-Flow: 1. GET /v1/token (get challenge) → 2. Solve → 3. POST /v1/token/verify (get tokens + human_link)
 Token-Human-Link: /v1/token/verify response includes human_link — give this URL to your human for one-click browser access
-Token-Access-Expiry: 5 minutes (short-lived for security)
-Token-Refresh-Expiry: 1 hour (use to get new access tokens)
+Token-Access-Expiry: 1 hour
+Token-Refresh-Expiry: 1 hour (use to get new access tokens without re-solving challenges)
 Token-Refresh: POST /v1/token/refresh with {"refresh_token": "<token>"}
 Token-Revoke: POST /v1/token/revoke with {"token": "<token>"}
 Token-Audience: Include {"audience": "<service-url>"} in /v1/token/verify to scope token
@@ -712,7 +712,7 @@ Inspired by Visa's Trusted Agent Protocol (https://developer.visa.com/capabiliti
 
 - **Runtime:** Cloudflare Workers (300+ edge locations)
 - **Storage:** Workers KV with TTLs
-- **Tokens:** HMAC-SHA256 JWTs (5-min access, 1-hr refresh)
+- **Tokens:** HMAC-SHA256 JWTs (1-hr access, 1-hr refresh)
 - **TAP Signatures:** ECDSA P-256 or RSA-PSS SHA-256
 - **Rate Limits:** 100 challenges/hour/app (fail-open)
 
@@ -967,7 +967,7 @@ export function getOpenApiSpec(version: string) {
       "/v1/token/refresh": {
         post: {
           summary: "Refresh access token",
-          description: "Exchange a refresh token for a new short-lived access token (5 minutes). Avoids solving a new challenge.",
+          description: "Exchange a refresh token for a new access token (1 hour). Avoids solving a new challenge.",
           operationId: "refreshToken",
           requestBody: {
             required: true,
@@ -993,7 +993,7 @@ export function getOpenApiSpec(version: string) {
                     properties: {
                       "success": { type: "boolean" },
                       "access_token": { type: "string" },
-                      "expires_in": { type: "integer", description: "Token lifetime in seconds (300 = 5 minutes)" },
+                      "expires_in": { type: "integer", description: "Token lifetime in seconds (3600 = 1 hour)" },
                       "token_type": { type: "string", enum: ["Bearer"] }
                     }
                   }

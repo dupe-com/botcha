@@ -37,7 +37,7 @@ Feature: Speed Challenge (RTT-aware timeout — fair for all networks)
 Feature: Reasoning Challenge (LLM-only questions, 30s limit)
 Feature: Standard Challenge (5s time limit)
 Feature: RTT-Aware Fairness (automatic network latency compensation)
-Feature: Token Rotation (5-minute access tokens + 1-hour refresh tokens)
+Feature: Token Rotation (1-hour access tokens + 1-hour refresh tokens)
 Feature: Audience Claims (tokens scoped to specific services)
 Feature: Client IP Binding (optional token-to-IP binding)
 Feature: Token Revocation (invalidate tokens before expiry)
@@ -179,8 +179,8 @@ Token-Validate: POST /v1/token/validate with {"token": "<token>"} — remote val
 Token-Verify-Modes: 1. JWKS (recommended, offline) 2. Remote validation (/v1/token/validate) 3. Shared secret (legacy HS256)
 Token-Flow: 1. GET /v1/token (get challenge) → 2. Solve → 3. POST /v1/token/verify (get tokens + human_link)
 Token-Human-Link: /v1/token/verify response includes human_link — give this URL to your human for one-click browser access
-Token-Access-Expiry: 5 minutes (short-lived for security)
-Token-Refresh-Expiry: 1 hour (use to get new access tokens)
+Token-Access-Expiry: 1 hour
+Token-Refresh-Expiry: 1 hour (use to get new access tokens without re-solving challenges)
 Token-Refresh: POST /v1/token/refresh with {"refresh_token": "<token>"}
 Token-Revoke: POST /v1/token/revoke with {"token": "<token>"}
 Token-Audience: Include {"audience": "<service-url>"} in /v1/token/verify to scope token

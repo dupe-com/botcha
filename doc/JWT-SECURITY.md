@@ -10,7 +10,7 @@ BOTCHA uses **OAuth2-style JWT tokens** to prove an agent solved a challenge. On
 
 The token system is designed around three principles:
 
-1. **Short-lived by default** — access tokens expire in 5 minutes, not hours
+1. **Short-lived by default** — access tokens expire in 1 hour
 2. **Fail-open** — KV errors log warnings but never block requests
 3. **Backward compatible** — old tokens without `jti`/`aud` still work
 
@@ -26,7 +26,7 @@ The token system is designed around three principles:
 │  1. GET /v1/token              → get challenge           │
 │  2. Solve challenge locally    → SHA256 hashes           │
 │  3. POST /v1/token/verify      → get access + refresh    │
-│  4. Use access_token           → Bearer auth (5 min)     │
+│  4. Use access_token           → Bearer auth (1 hour)    │
 │  5. POST /v1/token/refresh     → renew access (repeat)   │
 │  6. POST /v1/token/revoke      → kill token early        │
 │                                                         │
@@ -37,7 +37,7 @@ The token system is designed around three principles:
 
 | Token | Lifetime | Purpose | Claims |
 |-------|----------|---------|--------|
-| **Access token** | 5 minutes | API access via `Authorization: Bearer <token>` | `sub`, `iat`, `exp`, `jti`, `type`, `solveTime`, `aud?`, `client_ip?` |
+| **Access token** | 1 hour | API access via `Authorization: Bearer <token>` | `sub`, `iat`, `exp`, `jti`, `type`, `solveTime`, `aud?`, `client_ip?` |
 | **Refresh token** | 1 hour | Get new access tokens without re-solving challenges | `sub`, `iat`, `exp`, `jti`, `type`, `solveTime` |
 
 ---
@@ -94,13 +94,13 @@ curl -X POST https://botcha.ai/v1/token/verify \
   "verified": true,
   "success": true,
   "access_token": "eyJhbGciOiJIUzI1NiJ9...",
-  "expires_in": 300,
+  "expires_in": 3600,
   "refresh_token": "eyJhbGciOiJIUzI1NiJ9...",
   "refresh_expires_in": 3600,
   "solveTimeMs": 42,
   "message": "🤖 Challenge verified in 42ms! You are a bot.",
   "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "expiresIn": "5m"
+  "expiresIn": "1h"
 }
 ```
 
@@ -121,7 +121,7 @@ curl -X POST https://botcha.ai/v1/token/refresh \
 {
   "success": true,
   "access_token": "eyJhbGciOiJIUzI1NiJ9...",
-  "expires_in": 300
+  "expires_in": 3600
 }
 ```
 
@@ -228,7 +228,7 @@ Every token gets a unique UUID as its `jti` claim:
   "aud": "https://api.example.com",
   "solveTime": 42,
   "iat": 1770768000,
-  "exp": 1770768300
+  "exp": 1770771600
 }
 ```
 
@@ -385,9 +385,9 @@ curl -X POST https://botcha.ai/v1/token/revoke \
 
 ## Design Decisions
 
-### Why 5-minute access tokens?
+### Why 1-hour access tokens?
 
-1-hour tokens (the previous default) mean a compromised token gives an attacker 1 hour of access. 5 minutes reduces the blast radius by 12x while refresh tokens ensure legitimate agents never need to re-solve challenges within the 1-hour window.
+1-hour tokens balance security with usability. Both access and refresh tokens share the same 1-hour lifetime — access tokens are used for API calls, while refresh tokens allow seamless renewal without re-solving challenges. Token revocation (`POST /v1/token/revoke`) provides immediate invalidation when a token is compromised, and the KV-backed revocation list ensures revoked tokens are rejected within seconds.
 
 ### Why fail-open on KV errors?
 

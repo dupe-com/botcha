@@ -713,7 +713,7 @@ async with BotchaClient() as client:
             <h2 class="docs-section-title">Authentication (Tokens)</h2>
             <p class="docs-section-desc">
               JWT token flow for accessing protected endpoints. Solve a speed challenge to
-              receive an access token (5 min) and refresh token (1 hr). Tokens are signed with
+              receive an access token (1 hr) and refresh token (1 hr). Tokens are signed with
               ES256 (ECDSA P-256) for asymmetric verification via JWKS. HS256 still supported
               for backward compatibility. Use <code>POST /v1/token/validate</code> for remote
               validation without a shared secret.
@@ -775,7 +775,7 @@ async with BotchaClient() as client:
               <pre><code>{`{
   "success": true,
   "access_token": "eyJ...",
-  "expires_in": 300,
+  "expires_in": 3600,
   "refresh_token": "eyJ...",
   "refresh_expires_in": 3600,
   "human_link": "https://botcha.ai/go/BOTCHA-ABC123",
@@ -791,7 +791,7 @@ async with BotchaClient() as client:
               <pre><code>{`{
   "success": true,
   "access_token": "eyJ...",
-  "expires_in": 300
+  "expires_in": 3600
 }`}</code></pre>
             </Endpoint>
 
@@ -1079,7 +1079,7 @@ async with BotchaClient() as client:
                 challenges / hour / IP
               </div>
               <div class="docs-rate-limit-item">
-                <div class="docs-rate-limit-value">5 min</div>
+                <div class="docs-rate-limit-value">1 hr</div>
                 access token lifetime
               </div>
               <div class="docs-rate-limit-item">

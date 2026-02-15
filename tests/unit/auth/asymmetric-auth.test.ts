@@ -139,7 +139,7 @@ describe('ES256 Token Generation', () => {
       undefined, undefined, es256PrivateJwk,
     );
 
-    expect(result.expires_in).toBe(300);
+    expect(result.expires_in).toBe(3600);
     expect(result.refresh_expires_in).toBe(3600);
   });
 });
@@ -378,7 +378,7 @@ describe('Token Refresh with ES256', () => {
     expect(refreshResult.success).toBe(true);
     expect(refreshResult.tokens).toBeDefined();
     expect(refreshResult.tokens!.access_token).toBeDefined();
-    expect(refreshResult.tokens!.expires_in).toBe(300);
+    expect(refreshResult.tokens!.expires_in).toBe(3600);
 
     // Verify the new access token is ES256
     const header = decodeProtectedHeader(refreshResult.tokens!.access_token);

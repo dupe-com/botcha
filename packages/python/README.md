@@ -75,7 +75,7 @@ async with BotchaClient() as client:
 
 Acquire or return cached JWT token.
 
-Implements token caching with 5-minute buffer before expiry. If token is cached and valid, returns the cached token. Otherwise, acquires a new token via the challenge flow:
+Implements token caching with a buffer before expiry. If token is cached and valid, returns the cached token. Otherwise, acquires a new token via the challenge flow:
 
 1. GET `/v1/token` to receive challenge
 2. Solve challenge problems

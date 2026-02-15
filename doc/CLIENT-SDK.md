@@ -16,7 +16,7 @@
 
 The client SDK allows AI agents to:
 1. ✅ Detect BOTCHA-protected endpoints
-2. ✅ Automatically acquire JWT tokens (5-minute access + 1-hour refresh)
+2. ✅ Automatically acquire JWT tokens (1-hour access + 1-hour refresh)
 3. ✅ Solve challenges and retry with tokens
 4. ✅ Handle different challenge types (speed, standard, hybrid, reasoning)
 5. ✅ Token rotation with automatic refresh on 401
@@ -385,14 +385,14 @@ BOTCHA uses **OAuth2-style token rotation** with short-lived access tokens:
 
 | Token Type | Expiry | Purpose |
 |------------|--------|---------|
-| Access Token | 5 minutes | Used for API requests |
-| Refresh Token | 1 hour | Used to get new access tokens |
+| Access Token | 1 hour | Used for API requests |
+| Refresh Token | 1 hour | Used to get new access tokens without re-solving challenges |
 
 ```typescript
 const client = new BotchaClient({ autoToken: true });
 
 // Tokens are automatically cached in-memory
-await client.fetch('/protected'); // Acquires access_token (5min) + refresh_token (1hr)
+await client.fetch('/protected'); // Acquires access_token (1hr) + refresh_token (1hr)
 await client.fetch('/protected'); // Reuses cached access_token
 
 // Auto-refreshes: when access_token expires, SDK uses refresh_token automatically
@@ -536,7 +536,7 @@ async with BotchaClient(
 from botcha import BotchaClient
 
 async with BotchaClient(audience="https://api.example.com") as client:
-    # Auto-handles token lifecycle (5min access + 1hr refresh)
+    # Auto-handles token lifecycle (1hr access + 1hr refresh)
     response = await client.fetch("https://api.example.com/data")
     
     # Manual refresh
