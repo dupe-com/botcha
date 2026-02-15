@@ -1122,3 +1122,807 @@ async def test_verify_browsing_iou_url_encodes():
     async with BotchaClient() as client:
         await client.verify_browsing_iou("inv/slash", {"invoiceId": "inv/slash"})
         assert route.called
+
+
+# ============ create_delegation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_delegation_happy_path():
+    """Test successful delegation creation."""
+    respx.post("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "delegation_id": "del_abc123",
+                "grantor_id": "agent_grantor",
+                "grantee_id": "agent_grantee",
+                "app_id": "app_test",
+                "capabilities": [{"action": "browse", "scope": ["products"]}],
+                "chain": ["agent_grantor", "agent_grantee"],
+                "depth": 0,
+                "max_depth": 3,
+                "parent_delegation_id": None,
+                "created_at": "2026-02-14T00:00:00Z",
+                "expires_at": "2026-02-14T01:00:00Z",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.create_delegation(
+            grantor_id="agent_grantor",
+            grantee_id="agent_grantee",
+            capabilities=[{"action": "browse", "scope": ["products"]}],
+        )
+
+        assert result["success"] is True
+        assert result["delegation_id"] == "del_abc123"
+        assert result["grantor_id"] == "agent_grantor"
+        assert result["grantee_id"] == "agent_grantee"
+        assert result["depth"] == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_delegation_with_all_options():
+    """Test delegation creation with all optional parameters."""
+    respx.post("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "delegation_id": "del_full",
+                "grantor_id": "agent_a",
+                "grantee_id": "agent_b",
+                "app_id": "app_test",
+                "capabilities": [{"action": "browse"}],
+                "chain": ["agent_a", "agent_b"],
+                "depth": 0,
+                "max_depth": 5,
+                "parent_delegation_id": None,
+                "created_at": "2026-02-14T00:00:00Z",
+                "expires_at": "2026-02-14T02:00:00Z",
+                "metadata": {"purpose": "testing"},
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.create_delegation(
+            grantor_id="agent_a",
+            grantee_id="agent_b",
+            capabilities=[{"action": "browse"}],
+            duration_seconds=7200,
+            max_depth=5,
+            metadata={"purpose": "testing"},
+        )
+
+        assert result["success"] is True
+        assert result["max_depth"] == 5
+        assert result["metadata"]["purpose"] == "testing"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_delegation_with_app_id():
+    """Test delegation creation attaches app_id query param."""
+    route = respx.post("https://botcha.ai/v1/delegations?app_id=app_myapp").mock(
+        return_value=httpx.Response(
+            201, json={"success": True, "delegation_id": "del_x"}
+        )
+    )
+
+    async with BotchaClient(app_id="app_myapp") as client:
+        await client.create_delegation(
+            grantor_id="a",
+            grantee_id="b",
+            capabilities=[{"action": "browse"}],
+        )
+        assert route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_delegation_with_parent():
+    """Test sub-delegation creation with parent_delegation_id."""
+    respx.post("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "delegation_id": "del_child",
+                "depth": 1,
+                "parent_delegation_id": "del_parent",
+                "chain": ["agent_a", "agent_b", "agent_c"],
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.create_delegation(
+            grantor_id="agent_b",
+            grantee_id="agent_c",
+            capabilities=[{"action": "browse"}],
+            parent_delegation_id="del_parent",
+        )
+
+        assert result["success"] is True
+        assert result["depth"] == 1
+        assert result["parent_delegation_id"] == "del_parent"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_delegation_server_error():
+    """Test delegation creation raises on server error."""
+    respx.post("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(500, json={"message": "Internal error"})
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.create_delegation(
+                grantor_id="a", grantee_id="b", capabilities=[{"action": "browse"}]
+            )
+
+
+# ============ get_delegation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_delegation_happy_path():
+    """Test successful delegation retrieval."""
+    respx.get("https://botcha.ai/v1/delegations/del_abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "delegation_id": "del_abc123",
+                "grantor_id": "agent_a",
+                "grantee_id": "agent_b",
+                "capabilities": [{"action": "browse"}],
+                "revoked": False,
+                "time_remaining": 3000000,
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.get_delegation("del_abc123")
+
+        assert result["success"] is True
+        assert result["delegation_id"] == "del_abc123"
+        assert result["revoked"] is False
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_delegation_not_found():
+    """Test delegation retrieval returns 404."""
+    respx.get("https://botcha.ai/v1/delegations/del_missing").mock(
+        return_value=httpx.Response(
+            404, json={"success": False, "error": "DELEGATION_NOT_FOUND"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.get_delegation("del_missing")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_delegation_url_encodes():
+    """Test delegation ID is URL-encoded."""
+    route = respx.get("https://botcha.ai/v1/delegations/del%2Fslash").mock(
+        return_value=httpx.Response(200, json={"success": True})
+    )
+
+    async with BotchaClient() as client:
+        await client.get_delegation("del/slash")
+        assert route.called
+
+
+# ============ list_delegations Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_delegations_happy_path():
+    """Test listing delegations for an agent."""
+    respx.get("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "delegations": [
+                    {
+                        "delegation_id": "del_1",
+                        "grantor_id": "agent_a",
+                        "grantee_id": "agent_b",
+                    },
+                    {
+                        "delegation_id": "del_2",
+                        "grantor_id": "agent_a",
+                        "grantee_id": "agent_c",
+                    },
+                ],
+                "count": 2,
+                "agent_id": "agent_a",
+                "direction": "out",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.list_delegations("agent_a", direction="out")
+
+        assert result["success"] is True
+        assert result["count"] == 2
+        assert len(result["delegations"]) == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_delegations_with_filters():
+    """Test listing delegations with include_revoked and include_expired."""
+    route = respx.get("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(
+            200, json={"success": True, "delegations": [], "count": 0}
+        )
+    )
+
+    async with BotchaClient() as client:
+        await client.list_delegations(
+            "agent_a",
+            direction="in",
+            include_revoked=True,
+            include_expired=True,
+        )
+        assert route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_delegations_empty():
+    """Test listing delegations returns empty list."""
+    respx.get("https://botcha.ai/v1/delegations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "delegations": [],
+                "count": 0,
+                "agent_id": "agent_x",
+                "direction": "both",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.list_delegations("agent_x")
+        assert result["count"] == 0
+
+
+# ============ revoke_delegation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_delegation_happy_path():
+    """Test successful delegation revocation."""
+    respx.post("https://botcha.ai/v1/delegations/del_abc123/revoke").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "delegation_id": "del_abc123",
+                "revoked": True,
+                "revoked_at": "2026-02-14T01:00:00Z",
+                "revocation_reason": "no longer needed",
+                "message": "Delegation revoked. Sub-delegations have been cascaded.",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.revoke_delegation("del_abc123", reason="no longer needed")
+
+        assert result["success"] is True
+        assert result["revoked"] is True
+        assert result["revocation_reason"] == "no longer needed"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_delegation_without_reason():
+    """Test delegation revocation without a reason."""
+    respx.post("https://botcha.ai/v1/delegations/del_xyz/revoke").mock(
+        return_value=httpx.Response(200, json={"success": True, "revoked": True})
+    )
+
+    async with BotchaClient() as client:
+        result = await client.revoke_delegation("del_xyz")
+        assert result["success"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_delegation_not_found():
+    """Test revocation of nonexistent delegation."""
+    respx.post("https://botcha.ai/v1/delegations/del_missing/revoke").mock(
+        return_value=httpx.Response(
+            404, json={"success": False, "error": "DELEGATION_NOT_FOUND"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.revoke_delegation("del_missing")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_delegation_url_encodes():
+    """Test delegation ID is URL-encoded in revoke."""
+    route = respx.post("https://botcha.ai/v1/delegations/del%2Fslash/revoke").mock(
+        return_value=httpx.Response(200, json={"success": True})
+    )
+
+    async with BotchaClient() as client:
+        await client.revoke_delegation("del/slash")
+        assert route.called
+
+
+# ============ verify_delegation_chain Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_delegation_chain_valid():
+    """Test successful delegation chain verification."""
+    respx.post("https://botcha.ai/v1/verify/delegation").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "valid": True,
+                "chain_length": 2,
+                "chain": [
+                    {
+                        "delegation_id": "del_1",
+                        "grantor_id": "a",
+                        "grantee_id": "b",
+                        "depth": 0,
+                    },
+                    {
+                        "delegation_id": "del_2",
+                        "grantor_id": "b",
+                        "grantee_id": "c",
+                        "depth": 1,
+                    },
+                ],
+                "effective_capabilities": [{"action": "browse", "scope": ["products"]}],
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.verify_delegation_chain("del_2")
+
+        assert result["success"] is True
+        assert result["valid"] is True
+        assert result["chain_length"] == 2
+        assert len(result["chain"]) == 2
+        assert result["effective_capabilities"][0]["action"] == "browse"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_delegation_chain_invalid():
+    """Test delegation chain verification fails for revoked chain."""
+    respx.post("https://botcha.ai/v1/verify/delegation").mock(
+        return_value=httpx.Response(
+            400,
+            json={
+                "success": False,
+                "valid": False,
+                "error": "Delegation del_abc has been revoked",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.verify_delegation_chain("del_abc")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_delegation_chain_server_error():
+    """Test chain verification raises on server error."""
+    respx.post("https://botcha.ai/v1/verify/delegation").mock(
+        return_value=httpx.Response(500, json={"message": "Internal error"})
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.verify_delegation_chain("del_err")
+
+
+# ============ issue_attestation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_issue_attestation_happy_path():
+    """Test successful attestation issuance."""
+    respx.post("https://botcha.ai/v1/attestations").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "attestation_id": "att_abc123",
+                "agent_id": "agent_a",
+                "app_id": "app_test",
+                "token": "eyJ...",
+                "can": ["read:invoices", "browse:*"],
+                "cannot": ["write:transfers"],
+                "created_at": "2026-02-14T00:00:00Z",
+                "expires_at": "2026-02-14T01:00:00Z",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.issue_attestation(
+            agent_id="agent_a",
+            can=["read:invoices", "browse:*"],
+            cannot=["write:transfers"],
+        )
+
+        assert result["success"] is True
+        assert result["attestation_id"] == "att_abc123"
+        assert result["token"] == "eyJ..."
+        assert result["can"] == ["read:invoices", "browse:*"]
+        assert result["cannot"] == ["write:transfers"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_issue_attestation_with_all_options():
+    """Test attestation issuance with all optional parameters."""
+    respx.post("https://botcha.ai/v1/attestations").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "success": True,
+                "attestation_id": "att_full",
+                "agent_id": "agent_a",
+                "token": "eyJ...",
+                "can": ["read:invoices"],
+                "cannot": [],
+                "restrictions": {"max_amount": 1000},
+                "delegation_id": "del_abc",
+                "metadata": {"purpose": "testing"},
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.issue_attestation(
+            agent_id="agent_a",
+            can=["read:invoices"],
+            restrictions={"max_amount": 1000},
+            duration_seconds=7200,
+            delegation_id="del_abc",
+            metadata={"purpose": "testing"},
+        )
+
+        assert result["success"] is True
+        assert result["restrictions"]["max_amount"] == 1000
+        assert result["delegation_id"] == "del_abc"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_issue_attestation_with_app_id():
+    """Test attestation issuance attaches app_id query param."""
+    route = respx.post("https://botcha.ai/v1/attestations?app_id=app_myapp").mock(
+        return_value=httpx.Response(
+            201, json={"success": True, "attestation_id": "att_x"}
+        )
+    )
+
+    async with BotchaClient(app_id="app_myapp") as client:
+        await client.issue_attestation(
+            agent_id="agent_a",
+            can=["browse:*"],
+        )
+        assert route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_issue_attestation_server_error():
+    """Test attestation issuance raises on server error."""
+    respx.post("https://botcha.ai/v1/attestations").mock(
+        return_value=httpx.Response(500, json={"message": "Internal error"})
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.issue_attestation(agent_id="agent_a", can=["read:invoices"])
+
+
+# ============ get_attestation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_attestation_happy_path():
+    """Test successful attestation retrieval."""
+    respx.get("https://botcha.ai/v1/attestations/att_abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "attestation_id": "att_abc123",
+                "can": ["read:invoices"],
+                "revoked": False,
+                "time_remaining": 3000000,
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.get_attestation("att_abc123")
+
+        assert result["success"] is True
+        assert result["attestation_id"] == "att_abc123"
+        assert result["revoked"] is False
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_attestation_not_found():
+    """Test attestation retrieval returns 404."""
+    respx.get("https://botcha.ai/v1/attestations/att_missing").mock(
+        return_value=httpx.Response(
+            404, json={"success": False, "error": "ATTESTATION_NOT_FOUND"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.get_attestation("att_missing")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_attestation_url_encodes():
+    """Test attestation ID is URL-encoded."""
+    route = respx.get("https://botcha.ai/v1/attestations/att%2Fslash").mock(
+        return_value=httpx.Response(200, json={"success": True})
+    )
+
+    async with BotchaClient() as client:
+        await client.get_attestation("att/slash")
+        assert route.called
+
+
+# ============ list_attestations Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_attestations_happy_path():
+    """Test listing attestations for an agent."""
+    respx.get("https://botcha.ai/v1/attestations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "attestations": [
+                    {"attestation_id": "att_1"},
+                    {"attestation_id": "att_2"},
+                ],
+                "count": 2,
+                "agent_id": "agent_a",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.list_attestations("agent_a")
+
+        assert result["success"] is True
+        assert result["count"] == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_attestations_empty():
+    """Test listing attestations returns empty list."""
+    respx.get("https://botcha.ai/v1/attestations").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "attestations": [],
+                "count": 0,
+                "agent_id": "agent_x",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.list_attestations("agent_x")
+        assert result["count"] == 0
+
+
+# ============ revoke_attestation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_attestation_happy_path():
+    """Test successful attestation revocation."""
+    respx.post("https://botcha.ai/v1/attestations/att_abc123/revoke").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "attestation_id": "att_abc123",
+                "revoked": True,
+                "revoked_at": "2026-02-14T01:00:00Z",
+                "revocation_reason": "abuse",
+                "message": "Attestation revoked.",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.revoke_attestation("att_abc123", reason="abuse")
+
+        assert result["success"] is True
+        assert result["revoked"] is True
+        assert result["revocation_reason"] == "abuse"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_attestation_without_reason():
+    """Test attestation revocation without a reason."""
+    respx.post("https://botcha.ai/v1/attestations/att_xyz/revoke").mock(
+        return_value=httpx.Response(200, json={"success": True, "revoked": True})
+    )
+
+    async with BotchaClient() as client:
+        result = await client.revoke_attestation("att_xyz")
+        assert result["success"] is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_attestation_not_found():
+    """Test revocation of nonexistent attestation."""
+    respx.post("https://botcha.ai/v1/attestations/att_missing/revoke").mock(
+        return_value=httpx.Response(
+            404, json={"success": False, "error": "ATTESTATION_NOT_FOUND"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.revoke_attestation("att_missing")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_revoke_attestation_url_encodes():
+    """Test attestation ID is URL-encoded in revoke."""
+    route = respx.post("https://botcha.ai/v1/attestations/att%2Fslash/revoke").mock(
+        return_value=httpx.Response(200, json={"success": True})
+    )
+
+    async with BotchaClient() as client:
+        await client.revoke_attestation("att/slash")
+        assert route.called
+
+
+# ============ verify_attestation Tests ============
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_attestation_token_only():
+    """Test verification of attestation token without capability check."""
+    respx.post("https://botcha.ai/v1/verify/attestation").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "valid": True,
+                "agent_id": "agent_a",
+                "can": ["read:invoices"],
+                "cannot": [],
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.verify_attestation("eyJ...")
+
+        assert result["success"] is True
+        assert result["valid"] is True
+        assert result["agent_id"] == "agent_a"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_attestation_with_capability_check():
+    """Test verification with capability check."""
+    respx.post("https://botcha.ai/v1/verify/attestation").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "valid": True,
+                "allowed": True,
+                "agent_id": "agent_a",
+                "matched_rule": "read:invoices",
+                "checked_capability": "read:invoices",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        result = await client.verify_attestation(
+            "eyJ...", action="read", resource="invoices"
+        )
+
+        assert result["allowed"] is True
+        assert result["matched_rule"] == "read:invoices"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_attestation_denied():
+    """Test verification fails when capability denied."""
+    respx.post("https://botcha.ai/v1/verify/attestation").mock(
+        return_value=httpx.Response(
+            403,
+            json={
+                "success": False,
+                "valid": False,
+                "allowed": False,
+                "error": "No matching allow rule",
+            },
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.verify_attestation(
+                "eyJ...", action="write", resource="transfers"
+            )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_attestation_invalid_token():
+    """Test verification fails with invalid token."""
+    respx.post("https://botcha.ai/v1/verify/attestation").mock(
+        return_value=httpx.Response(
+            401, json={"success": False, "valid": False, "error": "Invalid token"}
+        )
+    )
+
+    async with BotchaClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.verify_attestation("bad-token")

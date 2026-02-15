@@ -26,6 +26,8 @@ The client SDK allows AI agents to:
 9. ✅ Account recovery and secret rotation (SDK methods)
 10. ✅ TAP (Trusted Agent Protocol) — cryptographic agent auth with public keys and capability-scoped sessions (SDK: `registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`)
 11. ✅ TAP Full Spec (v0.16.0) — Ed25519, JWKS, Consumer Recognition (Layer 2), Payment Container (Layer 3), 402 micropayments, CDN edge verify, Visa key federation (SDK: `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`)
+12. ✅ Delegation Chains (v0.17.0) — signed, auditable chains of trust between TAP agents with capability subset enforcement, depth limits, cascading revocation, and cycle detection (SDK: `createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`)
+13. ✅ Capability Attestation (v0.17.0) — fine-grained `action:resource` permission tokens with explicit deny, signed JWT attestations, enforcement middleware, and online revocation (SDK: `issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`)
 
 ## Implemented API
 
@@ -1080,6 +1082,229 @@ curl -X POST https://botcha.ai/v1/verify/payment \
   "par": "Q1J4AwSWD4Dx6q1DTo0MB21XDAV76"
 }
 ```
+
+## Delegation Chains (v0.17.0+)
+
+Signed, auditable chains of trust between TAP agents. "User X authorized Agent Y to do Z until time T."
+
+### Create Delegation
+
+```typescript
+const delegation = await client.createDelegation({
+  grantor_id: 'agent_abc123',
+  grantee_id: 'agent_def456',
+  capabilities: [{ action: 'browse', scope: ['products'] }],
+  duration_seconds: 3600,      // optional, default 1 hour
+  max_depth: 3,                // optional, max sub-delegation depth
+  metadata: { purpose: 'search-comparison' },  // optional context
+});
+```
+
+**Python:**
+```python
+delegation = await client.create_delegation(
+    grantor_id="agent_abc123",
+    grantee_id="agent_def456",
+    capabilities=[{"action": "browse", "scope": ["products"]}],
+    duration_seconds=3600,
+)
+```
+
+### Sub-Delegation (Chaining)
+
+```typescript
+// B sub-delegates to C (capabilities can only narrow, never expand)
+const subDelegation = await client.createDelegation({
+  grantor_id: agentB,
+  grantee_id: agentC,
+  capabilities: [{ action: 'browse', scope: ['products'] }],
+  parent_delegation_id: delegation.delegation_id,
+});
+// subDelegation.chain = [agentA, agentB, agentC]
+// subDelegation.depth = 1
+```
+
+### Get / List Delegations
+
+```typescript
+const del = await client.getDelegation('del_abc123');
+
+// List outbound delegations
+const outbound = await client.listDelegations('agent_abc123', {
+  direction: 'out',
+  include_revoked: false,
+});
+
+// List inbound delegations
+const inbound = await client.listDelegations('agent_def456', {
+  direction: 'in',
+});
+```
+
+### Revoke Delegation (Cascading)
+
+```typescript
+// Revoking cascades to all sub-delegations
+await client.revokeDelegation('del_abc123', 'Access no longer needed');
+```
+
+### Verify Delegation Chain
+
+```typescript
+const result = await client.verifyDelegationChain('del_abc123');
+if (result.valid) {
+  console.log('Chain length:', result.chain_length);
+  console.log('Effective capabilities:', result.effective_capabilities);
+}
+```
+
+### Key Rules
+
+- Capabilities can only be **narrowed** (subset enforcement)
+- Chain depth is capped (default: 3, absolute max: 10)
+- Revoking a delegation **cascades** to all sub-delegations
+- Sub-delegations cannot outlive their parent
+- Cycle detection prevents circular chains
+- Both grantor and grantee must belong to the same app
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/delegations` | Create delegation |
+| `GET` | `/v1/delegations/:id` | Get delegation details |
+| `GET` | `/v1/delegations?agent_id=...&direction=in\|out\|both` | List delegations |
+| `POST` | `/v1/delegations/:id/revoke` | Revoke (cascades) |
+| `POST` | `/v1/verify/delegation` | Verify chain |
+
+### SDK Methods
+
+**TypeScript:** `createDelegation(options)`, `getDelegation(id)`, `listDelegations(agentId, options?)`, `revokeDelegation(id, reason?)`, `verifyDelegationChain(id)`
+
+**Python:** `create_delegation(grantor_id, grantee_id, capabilities, ...)`, `get_delegation(id)`, `list_delegations(agent_id, ...)`, `revoke_delegation(id, reason?)`, `verify_delegation_chain(id)`
+
+---
+
+## Capability Attestation (v0.17.0+)
+
+Fine-grained `action:resource` permission tokens with explicit deny rules. Attestations are signed JWTs that can be verified offline (signature) or online (revocation check via KV).
+
+### Permission Model
+
+```
+"action:resource" patterns with wildcards:
+  "read:invoices"    — specific action on specific resource
+  "browse:*"         — browse any resource
+  "*:invoices"       — any action on invoices
+  "*:*"              — unrestricted
+  "browse"           — bare action, expands to "browse:*"
+
+Deny rules override allow:
+  can: ["*:*"], cannot: ["write:transfers"]
+  → allowed to do everything EXCEPT write:transfers
+```
+
+### Issue Attestation
+
+```typescript
+const att = await client.issueAttestation({
+  agent_id: 'agent_abc123',
+  can: ['read:invoices', 'browse:*'],
+  cannot: ['write:transfers'],        // optional deny rules
+  restrictions: { max_amount: 1000 }, // optional restrictions
+  duration_seconds: 3600,             // optional, default 1 hour
+  delegation_id: 'del_xyz',           // optional link to delegation
+  metadata: { purpose: 'invoice-reader' },
+});
+// att.token — signed JWT to use in requests
+// att.attestation_id — for revocation/lookup
+```
+
+```python
+att = await client.issue_attestation(
+    agent_id="agent_abc123",
+    can=["read:invoices", "browse:*"],
+    cannot=["write:transfers"],
+    restrictions={"max_amount": 1000},
+    duration_seconds=3600,
+    delegation_id="del_xyz",
+    metadata={"purpose": "invoice-reader"},
+)
+```
+
+### Use Attestation Token
+
+```
+# In HTTP requests:
+X-Botcha-Attestation: <att.token>
+# or
+Authorization: Bearer <att.token>
+```
+
+### Get / List Attestations
+
+```typescript
+const details = await client.getAttestation('att_abc123');
+const list = await client.listAttestations('agent_abc123');
+```
+
+### Revoke Attestation
+
+```typescript
+await client.revokeAttestation('att_abc123', 'Session ended');
+// Token will be rejected on future verification
+```
+
+### Verify Attestation
+
+```typescript
+// Verify token only (no capability check)
+const result = await client.verifyAttestation(token);
+// result.valid, result.agent_id, result.can, result.cannot
+
+// Verify token + check specific capability
+const check = await client.verifyAttestation(token, 'read', 'invoices');
+// check.allowed, check.matched_rule
+```
+
+### Enforcement Middleware (Server-Side)
+
+```typescript
+import { requireCapability } from '@dupecom/botcha-cloudflare/tap-attestation';
+
+// Protect routes with capability checks
+app.get('/api/invoices', requireCapability('read:invoices'), handler);
+app.post('/api/transfers', requireCapability('write:transfers'), handler);
+// Returns 401 if no attestation token, 403 if capability denied
+```
+
+### Key Rules
+
+- `cannot` rules **always take precedence** over `can` rules
+- Bare actions expand to wildcards: `"browse"` → `"browse:*"`
+- Default deny: if no `can` rule matches, access is denied
+- Attestation tokens expire (default: 1 hour, max: 30 days)
+- Revoked attestations are rejected immediately (KV-backed, fail-open)
+- Can optionally link to a delegation chain via `delegation_id`
+- Max 100 total rules (can + cannot combined)
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/attestations` | Issue attestation token |
+| `GET` | `/v1/attestations/:id` | Get attestation details |
+| `GET` | `/v1/attestations?agent_id=...` | List attestations for agent |
+| `POST` | `/v1/attestations/:id/revoke` | Revoke attestation |
+| `POST` | `/v1/verify/attestation` | Verify token + check capability |
+
+### SDK Methods
+
+**TypeScript:** `issueAttestation(options)`, `getAttestation(id)`, `listAttestations(agentId)`, `revokeAttestation(id, reason?)`, `verifyAttestation(token, action?, resource?)`
+
+**Python:** `issue_attestation(agent_id, can, cannot?, ...)`, `get_attestation(id)`, `list_attestations(agent_id)`, `revoke_attestation(id, reason?)`, `verify_attestation(token, action?, resource?)`
+
+---
 
 ## Future: Go SDK
 

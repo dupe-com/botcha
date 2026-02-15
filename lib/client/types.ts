@@ -348,3 +348,162 @@ export interface VerifyIOUResponse {
   expires_at?: string;
   error?: string;
 }
+
+// ============ Delegation Chain Types ============
+
+export interface CreateDelegationOptions {
+  grantor_id: string;
+  grantee_id: string;
+  capabilities: TAPCapability[];
+  duration_seconds?: number;
+  max_depth?: number;
+  parent_delegation_id?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface DelegationResponse {
+  success: boolean;
+  delegation_id: string;
+  grantor_id: string;
+  grantee_id: string;
+  app_id: string;
+  capabilities: TAPCapability[];
+  chain: string[];
+  depth: number;
+  max_depth: number;
+  parent_delegation_id: string | null;
+  created_at: string;
+  expires_at: string;
+  revoked?: boolean;
+  revoked_at?: string | null;
+  revocation_reason?: string | null;
+  metadata?: Record<string, string> | null;
+  time_remaining?: number;
+}
+
+export interface DelegationListResponse {
+  success: boolean;
+  delegations: Array<{
+    delegation_id: string;
+    grantor_id: string;
+    grantee_id: string;
+    capabilities: TAPCapability[];
+    chain: string[];
+    depth: number;
+    created_at: string;
+    expires_at: string;
+    revoked: boolean;
+    parent_delegation_id: string | null;
+  }>;
+  count: number;
+  agent_id: string;
+  direction: string;
+}
+
+export interface RevokeDelegationResponse {
+  success: boolean;
+  delegation_id: string;
+  revoked: boolean;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  message: string;
+}
+
+export interface DelegationVerifyResponse {
+  success: boolean;
+  valid: boolean;
+  chain_length?: number;
+  chain?: Array<{
+    delegation_id: string;
+    grantor_id: string;
+    grantee_id: string;
+    capabilities: TAPCapability[];
+    depth: number;
+    created_at: string;
+    expires_at: string;
+  }>;
+  effective_capabilities?: TAPCapability[];
+  error?: string;
+}
+
+// ============ Capability Attestation Types ============
+
+export interface IssueAttestationOptions {
+  agent_id: string;
+  can: string[];
+  cannot?: string[];
+  restrictions?: {
+    max_amount?: number;
+    rate_limit?: number;
+    [key: string]: any;
+  };
+  duration_seconds?: number;
+  delegation_id?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface AttestationResponse {
+  success: boolean;
+  attestation_id: string;
+  agent_id: string;
+  app_id: string;
+  token: string;
+  can: string[];
+  cannot: string[];
+  restrictions?: {
+    max_amount?: number;
+    rate_limit?: number;
+    [key: string]: any;
+  } | null;
+  delegation_id?: string | null;
+  metadata?: Record<string, string> | null;
+  created_at: string;
+  expires_at: string;
+  revoked?: boolean;
+  revoked_at?: string | null;
+  revocation_reason?: string | null;
+  time_remaining?: number;
+}
+
+export interface AttestationListResponse {
+  success: boolean;
+  attestations: Array<{
+    attestation_id: string;
+    agent_id: string;
+    can: string[];
+    cannot: string[];
+    created_at: string;
+    expires_at: string;
+    revoked: boolean;
+    delegation_id: string | null;
+  }>;
+  count: number;
+  agent_id: string;
+}
+
+export interface RevokeAttestationResponse {
+  success: boolean;
+  attestation_id: string;
+  revoked: boolean;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  message: string;
+}
+
+export interface AttestationVerifyResponse {
+  success: boolean;
+  valid: boolean;
+  allowed?: boolean;
+  agent_id?: string | null;
+  issuer?: string;
+  can?: string[];
+  cannot?: string[];
+  restrictions?: any | null;
+  delegation_id?: string | null;
+  issued_at?: string;
+  expires_at?: string;
+  reason?: string;
+  matched_rule?: string | null;
+  checked_capability?: string;
+  error?: string;
+}

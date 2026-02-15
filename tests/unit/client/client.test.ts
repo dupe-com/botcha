@@ -1202,4 +1202,521 @@ describe('BotchaClient', () => {
       ).rejects.toThrow('Internal server error');
     });
   });
+
+  // ============ Delegation Chain SDK Methods ============
+
+  describe('createDelegation', () => {
+    test('creates a delegation successfully', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          delegation_id: 'del_abc123',
+          grantor_id: 'agent_a',
+          grantee_id: 'agent_b',
+          app_id: 'app_test',
+          capabilities: [{ action: 'browse', scope: ['products'] }],
+          chain: ['agent_a', 'agent_b'],
+          depth: 0,
+          max_depth: 3,
+          parent_delegation_id: null,
+          created_at: '2026-02-14T00:00:00Z',
+          expires_at: '2026-02-14T01:00:00Z',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.createDelegation({
+        grantor_id: 'agent_a',
+        grantee_id: 'agent_b',
+        capabilities: [{ action: 'browse', scope: ['products'] }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.delegation_id).toBe('del_abc123');
+      expect(result.chain).toEqual(['agent_a', 'agent_b']);
+    });
+
+    test('sends correct request body', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.createDelegation({
+        grantor_id: 'agent_a',
+        grantee_id: 'agent_b',
+        capabilities: [{ action: 'browse' }],
+        duration_seconds: 7200,
+        max_depth: 5,
+        parent_delegation_id: 'del_parent',
+        metadata: { purpose: 'test' },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.grantor_id).toBe('agent_a');
+      expect(body.grantee_id).toBe('agent_b');
+      expect(body.duration_seconds).toBe(7200);
+      expect(body.max_depth).toBe(5);
+      expect(body.parent_delegation_id).toBe('del_parent');
+      expect(body.metadata.purpose).toBe('test');
+    });
+
+    test('throws on server error', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Cannot delegate to self' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.createDelegation({
+          grantor_id: 'agent_a',
+          grantee_id: 'agent_a',
+          capabilities: [{ action: 'browse' }],
+        })
+      ).rejects.toThrow('Cannot delegate to self');
+    });
+  });
+
+  describe('getDelegation', () => {
+    test('retrieves delegation by ID', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          delegation_id: 'del_abc123',
+          revoked: false,
+          time_remaining: 3000000,
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.getDelegation('del_abc123');
+
+      expect(result.success).toBe(true);
+      expect(result.delegation_id).toBe('del_abc123');
+      expect(result.revoked).toBe(false);
+    });
+
+    test('URL-encodes delegation ID', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.getDelegation('del/slash');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('del%2Fslash');
+    });
+  });
+
+  describe('listDelegations', () => {
+    test('lists delegations for an agent', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          delegations: [
+            { delegation_id: 'del_1' },
+            { delegation_id: 'del_2' },
+          ],
+          count: 2,
+          agent_id: 'agent_a',
+          direction: 'out',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.listDelegations('agent_a', { direction: 'out' });
+
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(2);
+    });
+
+    test('sends correct query parameters', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, delegations: [], count: 0 }),
+      });
+
+      const client = new BotchaClient();
+      await client.listDelegations('agent_a', {
+        direction: 'in',
+        include_revoked: true,
+        include_expired: true,
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('agent_id=agent_a');
+      expect(url).toContain('direction=in');
+      expect(url).toContain('include_revoked=true');
+      expect(url).toContain('include_expired=true');
+    });
+  });
+
+  describe('revokeDelegation', () => {
+    test('revokes a delegation with reason', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          delegation_id: 'del_abc123',
+          revoked: true,
+          revoked_at: '2026-02-14T01:00:00Z',
+          revocation_reason: 'no longer needed',
+          message: 'Delegation revoked.',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.revokeDelegation('del_abc123', 'no longer needed');
+
+      expect(result.success).toBe(true);
+      expect(result.revoked).toBe(true);
+      expect(result.revocation_reason).toBe('no longer needed');
+    });
+
+    test('revokes without reason', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, revoked: true }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.revokeDelegation('del_abc123');
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('verifyDelegationChain', () => {
+    test('verifies a valid chain', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          valid: true,
+          chain_length: 2,
+          chain: [
+            { delegation_id: 'del_1', grantor_id: 'a', grantee_id: 'b', depth: 0 },
+            { delegation_id: 'del_2', grantor_id: 'b', grantee_id: 'c', depth: 1 },
+          ],
+          effective_capabilities: [{ action: 'browse', scope: ['products'] }],
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.verifyDelegationChain('del_2');
+
+      expect(result.success).toBe(true);
+      expect(result.valid).toBe(true);
+      expect(result.chain_length).toBe(2);
+      expect(result.effective_capabilities![0].action).toBe('browse');
+    });
+
+    test('sends delegation_id in request body', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, valid: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.verifyDelegationChain('del_abc');
+
+      const call = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.delegation_id).toBe('del_abc');
+    });
+
+    test('throws on invalid chain', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ success: false, valid: false, error: 'Delegation revoked' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.verifyDelegationChain('del_revoked')
+      ).rejects.toThrow();
+    });
+  });
+
+  // ============ Capability Attestation SDK Methods ============
+
+  describe('issueAttestation', () => {
+    test('issues attestation successfully', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          attestation_id: 'att_abc123',
+          agent_id: 'agent_a',
+          app_id: 'app_test',
+          token: 'eyJ...',
+          can: ['read:invoices', 'browse:*'],
+          cannot: ['write:transfers'],
+          created_at: '2026-02-14T00:00:00Z',
+          expires_at: '2026-02-14T01:00:00Z',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.issueAttestation({
+        agent_id: 'agent_a',
+        can: ['read:invoices', 'browse:*'],
+        cannot: ['write:transfers'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.attestation_id).toBe('att_abc123');
+      expect(result.token).toBe('eyJ...');
+      expect(result.can).toEqual(['read:invoices', 'browse:*']);
+    });
+
+    test('sends correct request body', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 201,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.issueAttestation({
+        agent_id: 'agent_a',
+        can: ['read:invoices'],
+        cannot: ['write:transfers'],
+        restrictions: { max_amount: 1000 },
+        duration_seconds: 7200,
+        delegation_id: 'del_abc',
+        metadata: { purpose: 'test' },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.agent_id).toBe('agent_a');
+      expect(body.can).toEqual(['read:invoices']);
+      expect(body.cannot).toEqual(['write:transfers']);
+      expect(body.restrictions.max_amount).toBe(1000);
+      expect(body.duration_seconds).toBe(7200);
+      expect(body.delegation_id).toBe('del_abc');
+      expect(body.metadata.purpose).toBe('test');
+    });
+
+    test('throws on server error', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ message: 'Agent not found' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.issueAttestation({ agent_id: 'bad', can: ['read:x'] })
+      ).rejects.toThrow('Agent not found');
+    });
+  });
+
+  describe('getAttestation', () => {
+    test('retrieves attestation by ID', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          attestation_id: 'att_abc123',
+          can: ['read:invoices'],
+          revoked: false,
+          time_remaining: 3000000,
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.getAttestation('att_abc123');
+
+      expect(result.success).toBe(true);
+      expect(result.attestation_id).toBe('att_abc123');
+      expect(result.revoked).toBe(false);
+    });
+
+    test('URL-encodes attestation ID', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.getAttestation('att/slash');
+
+      const call = (global.fetch as any).mock.calls[0];
+      expect(call[0]).toContain('att%2Fslash');
+    });
+  });
+
+  describe('listAttestations', () => {
+    test('lists attestations for an agent', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          attestations: [
+            { attestation_id: 'att_1' },
+            { attestation_id: 'att_2' },
+          ],
+          count: 2,
+          agent_id: 'agent_a',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.listAttestations('agent_a');
+
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(2);
+    });
+
+    test('sends correct query parameters', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, attestations: [], count: 0 }),
+      });
+
+      const client = new BotchaClient();
+      await client.listAttestations('agent_a');
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('agent_id=agent_a');
+    });
+  });
+
+  describe('revokeAttestation', () => {
+    test('revokes an attestation with reason', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          attestation_id: 'att_abc123',
+          revoked: true,
+          revoked_at: '2026-02-14T01:00:00Z',
+          revocation_reason: 'abuse',
+          message: 'Attestation revoked.',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.revokeAttestation('att_abc123', 'abuse');
+
+      expect(result.success).toBe(true);
+      expect(result.revoked).toBe(true);
+      expect(result.revocation_reason).toBe('abuse');
+    });
+
+    test('revokes without reason', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, revoked: true }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.revokeAttestation('att_abc123');
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('verifyAttestation', () => {
+    test('verifies token only', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          valid: true,
+          agent_id: 'agent_a',
+          can: ['read:invoices'],
+          cannot: [],
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.verifyAttestation('eyJ...');
+
+      expect(result.success).toBe(true);
+      expect(result.valid).toBe(true);
+      expect(result.agent_id).toBe('agent_a');
+    });
+
+    test('verifies with capability check', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          valid: true,
+          allowed: true,
+          agent_id: 'agent_a',
+          matched_rule: 'read:invoices',
+          checked_capability: 'read:invoices',
+        }),
+      });
+
+      const client = new BotchaClient();
+      const result = await client.verifyAttestation('eyJ...', 'read', 'invoices');
+
+      expect(result.allowed).toBe(true);
+      expect(result.matched_rule).toBe('read:invoices');
+    });
+
+    test('sends correct request body', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true, valid: true }),
+      });
+
+      const client = new BotchaClient();
+      await client.verifyAttestation('mytoken', 'read', 'invoices');
+
+      const call = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(call[1].body);
+      expect(body.token).toBe('mytoken');
+      expect(body.action).toBe('read');
+      expect(body.resource).toBe('invoices');
+    });
+
+    test('throws on invalid token', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        status: 401,
+        ok: false,
+        json: vi.fn().mockResolvedValue({ success: false, valid: false, error: 'Invalid token' }),
+      });
+
+      const client = new BotchaClient();
+      await expect(
+        client.verifyAttestation('bad-token')
+      ).rejects.toThrow();
+    });
+  });
 });

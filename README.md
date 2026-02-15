@@ -359,7 +359,7 @@ curl -X POST "https://botcha.ai/v1/agents/register?app_id=app_abc123" \
 | `GET /v1/agents/:id` | Get agent info by ID (public, no auth) |
 | `GET /v1/agents` | List all agents for authenticated app |
 
-> **Note:** Agent Registry is the foundation for future features like delegation chains, capability attestation, and reputation scoring. See [ROADMAP.md](./ROADMAP.md) for details.
+> **Note:** Agent Registry is the foundation for delegation chains and capability attestation (both shipped in v0.17.0), and future features like reputation scoring. See [ROADMAP.md](./ROADMAP.md) for details.
 
 ## 🔏 Trusted Agent Protocol (TAP)
 
@@ -516,7 +516,91 @@ app.use('/api', createTAPVerifyMiddleware({ mode: 'challenge-only', secret: proc
 
 > **Supported algorithms:** `ed25519` (Visa recommended), `ecdsa-p256-sha256`, `rsa-pss-sha256`. See [ROADMAP.md](./ROADMAP.md) for details.
 
-## 🔄 SSE Streaming Flow (AI-Native)
+## Delegation Chains (v0.17.0)
+
+"User X authorized Agent Y to do Z until time T." Signed, auditable chains of trust between TAP agents.
+
+```typescript
+// Agent A delegates "browse products" to Agent B
+const delegation = await client.createDelegation({
+  grantor_id: agentA.agent_id,
+  grantee_id: agentB.agent_id,
+  capabilities: [{ action: 'browse', scope: ['products'] }],
+  duration_seconds: 3600,
+});
+
+// Agent B sub-delegates to Agent C (only narrower capabilities)
+const subDelegation = await client.createDelegation({
+  grantor_id: agentB.agent_id,
+  grantee_id: agentC.agent_id,
+  capabilities: [{ action: 'browse', scope: ['products'] }],
+  parent_delegation_id: delegation.delegation_id,
+});
+
+// Verify the full chain is valid
+const chain = await client.verifyDelegationChain(subDelegation.delegation_id);
+// chain.effective_capabilities = [{ action: 'browse', scope: ['products'] }]
+
+// Revoke — cascades to all sub-delegations
+await client.revokeDelegation(delegation.delegation_id, 'Access no longer needed');
+```
+
+**Key properties:**
+- Capabilities can only be **narrowed**, never expanded
+- Chain depth is capped (default: 3, max: 10)
+- Revoking a delegation **cascades** to all sub-delegations
+- Sub-delegations cannot outlive their parent
+- Cycle detection prevents circular chains
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST /v1/delegations` | Create delegation (grantor to grantee) |
+| `GET /v1/delegations/:id` | Get delegation details |
+| `GET /v1/delegations` | List delegations for agent |
+| `POST /v1/delegations/:id/revoke` | Revoke (cascades to sub-delegations) |
+| `POST /v1/verify/delegation` | Verify entire delegation chain |
+
+## Capability Attestation (v0.17.0)
+
+Fine-grained `action:resource` permission tokens with explicit deny rules:
+
+```typescript
+// Issue attestation with specific permissions
+const att = await client.issueAttestation({
+  agent_id: 'agent_abc123',
+  can: ['read:invoices', 'browse:*'],
+  cannot: ['write:transfers'],
+  duration_seconds: 3600,
+});
+
+// Use the token in requests
+// Header: X-Botcha-Attestation: <att.token>
+
+// Verify token and check specific capability
+const check = await client.verifyAttestation(att.token, 'read', 'invoices');
+// check.allowed === true
+
+// Revoke when no longer needed
+await client.revokeAttestation(att.attestation_id, 'Session ended');
+```
+
+**Key properties:**
+- Permission model: `action:resource` patterns with wildcards (`*:*`, `read:*`, `*:invoices`)
+- **Deny takes precedence** over allow — `cannot` rules always win
+- Backward compatible: bare actions like `"browse"` expand to `"browse:*"`
+- Signed JWT tokens with online revocation checking
+- Enforcement middleware: `requireCapability('read:invoices')` for Hono routes
+- Optional link to delegation chains via `delegation_id`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST /v1/attestations` | Issue attestation token |
+| `GET /v1/attestations/:id` | Get attestation details |
+| `GET /v1/attestations` | List attestations for agent |
+| `POST /v1/attestations/:id/revoke` | Revoke attestation |
+| `POST /v1/verify/attestation` | Verify token + check capability |
+
+## SSE Streaming Flow (AI-Native)
 
 For AI agents that prefer a **conversational handshake**, BOTCHA offers **Server-Sent Events (SSE)** streaming:
 

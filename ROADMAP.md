@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.16.0)
+## Current Status (v0.17.0)
 
 ### Shipped
 
@@ -46,8 +46,8 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 - `human_link` field in `/v1/token/verify` response (primary human handoff mechanism)
 
 #### SDKs & Integration
-- `@dupecom/botcha` npm package (v0.16.0) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`, `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`)
-- `botcha` PyPI package (v0.5.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`)
+- `@dupecom/botcha` npm package (v0.17.0) — TypeScript client SDK with app lifecycle methods + TAP methods (`registerTAPAgent`, `getTAPAgent`, `listTAPAgents`, `createTAPSession`, `getTAPSession`, `getJWKS`, `getKeyById`, `rotateAgentKey`, `createInvoice`, `getInvoice`, `verifyBrowsingIOU`, `createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`, `issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`)
+- `botcha` PyPI package (v0.6.0) — Python SDK with app lifecycle methods + TAP methods (`register_tap_agent`, `get_tap_agent`, `list_tap_agents`, `create_tap_session`, `get_tap_session`, `get_jwks`, `get_key_by_id`, `rotate_agent_key`, `create_invoice`, `get_invoice`, `verify_browsing_iou`, `create_delegation`, `get_delegation`, `list_delegations`, `revoke_delegation`, `verify_delegation_chain`, `issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`)
 - `@botcha/verify` npm package (v0.1.0) — Server-side verification (Express/Hono)
 - `botcha-verify` PyPI package (v0.1.0) — Server-side verification (FastAPI/Django)
 - Express middleware (`botcha.verify()`)
@@ -251,15 +251,43 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 
 ## Tier 3 — Moat (makes it defensible)
 
-### Delegation chains
-**What:** "User X authorized Agent Y to do Z until time T." Signed, auditable chains of trust.
+### ✅ Delegation Chains — SHIPPED (v0.17.0)
+**What:** "User X authorized Agent Y to do Z until time T." Signed, auditable chains of trust between TAP agents.
 **Why:** Solves Stripe's nightmare: "did the human actually authorize this $50k transfer?" Every API provider needs this.
-**How:** Signed delegation tokens. User → Agent → Sub-agent chain captured in token claims.
+**Status:** Built and tested. Agents can delegate subsets of their capabilities to other agents, with time bounds, depth limits, and cascading revocation.
+**Implementation:**
+- `POST /v1/delegations` → create delegation (grantor→grantee with capability subset)
+- `GET /v1/delegations/:id` → get delegation details
+- `GET /v1/delegations` → list delegations by agent (inbound/outbound)
+- `POST /v1/delegations/:id/revoke` → revoke delegation (cascades to sub-delegations)
+- `POST /v1/verify/delegation` → verify entire delegation chain
+- Capability subset enforcement: delegated capabilities can only narrow, never expand
+- Chain depth limits (configurable, default: 3, absolute max: 10)
+- Cycle detection prevents circular delegation chains
+- Sub-delegations cannot outlive parent delegations
+- Cascading revocation: revoking a delegation revokes all sub-delegations
+- KV storage: `delegation:{id}`, `agent_delegations_out:{agent_id}`, `agent_delegations_in:{agent_id}`
+- **SDK support:** TypeScript (`createDelegation`, `getDelegation`, `listDelegations`, `revokeDelegation`, `verifyDelegationChain`) and Python (`create_delegation`, `get_delegation`, `list_delegations`, `revoke_delegation`, `verify_delegation_chain`)
 **Effort:** Large
 
-### Capability attestation
-**What:** Token claims like `{"can": ["read:invoices"], "cannot": ["write:transfers"]}`. Server-side enforcement.
+### ✅ Capability Attestation — SHIPPED (v0.17.0)
+**What:** Signed JWT tokens with fine-grained `"action:resource"` permissions and explicit deny rules. Server-side enforcement middleware.
 **Why:** Beyond "this is a bot" — prove "this bot is authorized to do X but not Y." Granular permissions for agents.
+**Implementation:**
+- Permission model: `action:resource` patterns with wildcards (`read:invoices`, `*:products`, `browse:*`)
+- Explicit deny rules that override allows (`cannot` takes precedence over `can`)
+- Backward compatible: bare actions like "browse" expand to "browse:*"
+- Signed JWT attestation tokens (`type: 'botcha-attestation'`) with `can`/`cannot` arrays
+- Enforcement middleware: `requireCapability('read:invoices')` for Hono routes
+- `POST /v1/attestations` → issue attestation token for agent
+- `GET /v1/attestations/:id` → get attestation details
+- `GET /v1/attestations` → list attestations for agent
+- `POST /v1/attestations/:id/revoke` → revoke attestation (token rejected on future verification)
+- `POST /v1/verify/attestation` → verify token + optionally check specific capability
+- Online revocation checking via KV (fail-open)
+- Links to delegation chains via optional `delegation_id`
+- KV storage: `attestation:{id}`, `attestation_revoked:{id}`, `agent_attestations:{agent_id}`
+- **SDK support:** TypeScript (`issueAttestation`, `getAttestation`, `listAttestations`, `revokeAttestation`, `verifyAttestation`) and Python (`issue_attestation`, `get_attestation`, `list_attestations`, `revoke_attestation`, `verify_attestation`)
 **Effort:** Large
 
 ### Agent reputation scoring

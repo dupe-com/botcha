@@ -896,6 +896,310 @@ class BotchaClient:
         response.raise_for_status()
         return response.json()
 
+    # ============ Delegation Chain Methods ============
+
+    async def create_delegation(
+        self,
+        grantor_id: str,
+        grantee_id: str,
+        capabilities: list[dict],
+        duration_seconds: Optional[int] = None,
+        max_depth: Optional[int] = None,
+        parent_delegation_id: Optional[str] = None,
+        metadata: Optional[dict[str, str]] = None,
+    ) -> dict:
+        """Create a delegation from one agent to another.
+
+        Grants a subset of the grantor's capabilities to the grantee.
+
+        Args:
+            grantor_id: Agent granting capabilities
+            grantee_id: Agent receiving capabilities
+            capabilities: Capabilities to delegate (must be subset of grantor's)
+            duration_seconds: How long the delegation lasts (default: 3600)
+            max_depth: Max sub-delegation depth (default: 3)
+            parent_delegation_id: Parent delegation ID for sub-delegations
+            metadata: Optional context metadata
+
+        Returns:
+            Delegation details including delegation_id
+        """
+        url = f"{self.base_url}/v1/delegations"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        body: dict[str, Any] = {
+            "grantor_id": grantor_id,
+            "grantee_id": grantee_id,
+            "capabilities": capabilities,
+        }
+        if duration_seconds is not None:
+            body["duration_seconds"] = duration_seconds
+        if max_depth is not None:
+            body["max_depth"] = max_depth
+        if parent_delegation_id:
+            body["parent_delegation_id"] = parent_delegation_id
+        if metadata:
+            body["metadata"] = metadata
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def get_delegation(self, delegation_id: str) -> dict:
+        """Get delegation details by ID.
+
+        Args:
+            delegation_id: The delegation ID
+
+        Returns:
+            Delegation details
+        """
+        response = await self._client.get(
+            f"{self.base_url}/v1/delegations/{quote(delegation_id, safe='')}"
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def list_delegations(
+        self,
+        agent_id: str,
+        direction: Optional[str] = None,
+        include_revoked: bool = False,
+        include_expired: bool = False,
+    ) -> dict:
+        """List delegations for an agent.
+
+        Args:
+            agent_id: The agent to list delegations for
+            direction: 'in', 'out', or 'both' (default: 'both')
+            include_revoked: Include revoked delegations
+            include_expired: Include expired delegations
+
+        Returns:
+            List of delegations with count
+        """
+        params = {"agent_id": agent_id}
+        if self.app_id:
+            params["app_id"] = self.app_id
+        if direction:
+            params["direction"] = direction
+        if include_revoked:
+            params["include_revoked"] = "true"
+        if include_expired:
+            params["include_expired"] = "true"
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.get(
+            f"{self.base_url}/v1/delegations", params=params, headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def revoke_delegation(
+        self, delegation_id: str, reason: Optional[str] = None
+    ) -> dict:
+        """Revoke a delegation. Cascades to all sub-delegations.
+
+        Args:
+            delegation_id: The delegation to revoke
+            reason: Optional reason for revocation
+
+        Returns:
+            Revocation result
+        """
+        url = f"{self.base_url}/v1/delegations/{quote(delegation_id, safe='')}/revoke"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        body: dict[str, Any] = {}
+        if reason:
+            body["reason"] = reason
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def verify_delegation_chain(self, delegation_id: str) -> dict:
+        """Verify a delegation chain is valid.
+
+        Walks from the leaf delegation up through parent delegations to the root,
+        verifying each link is not revoked, not expired, and capabilities are
+        valid subsets.
+
+        Args:
+            delegation_id: The leaf delegation to verify
+
+        Returns:
+            Verification result with chain and effective capabilities
+        """
+        response = await self._client.post(
+            f"{self.base_url}/v1/verify/delegation",
+            json={"delegation_id": delegation_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # ============ Capability Attestation Methods ============
+
+    async def issue_attestation(
+        self,
+        agent_id: str,
+        can: list[str],
+        cannot: Optional[list[str]] = None,
+        restrictions: Optional[dict] = None,
+        duration_seconds: Optional[int] = None,
+        delegation_id: Optional[str] = None,
+        metadata: Optional[dict[str, str]] = None,
+    ) -> dict:
+        """Issue a capability attestation token for an agent.
+
+        Grants fine-grained "action:resource" permissions with explicit deny.
+
+        Args:
+            agent_id: Agent to issue attestation for
+            can: Allowed capability patterns (e.g. ["read:invoices", "browse:*"])
+            cannot: Denied capability patterns (overrides can)
+            restrictions: Optional restrictions (max_amount, rate_limit)
+            duration_seconds: How long the attestation lasts (default: 3600)
+            delegation_id: Optional link to a delegation chain
+            metadata: Optional context metadata
+
+        Returns:
+            Attestation details including token
+        """
+        url = f"{self.base_url}/v1/attestations"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        body: dict[str, Any] = {
+            "agent_id": agent_id,
+            "can": can,
+        }
+        if cannot is not None:
+            body["cannot"] = cannot
+        if restrictions is not None:
+            body["restrictions"] = restrictions
+        if duration_seconds is not None:
+            body["duration_seconds"] = duration_seconds
+        if delegation_id:
+            body["delegation_id"] = delegation_id
+        if metadata:
+            body["metadata"] = metadata
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def get_attestation(self, attestation_id: str) -> dict:
+        """Get attestation details by ID.
+
+        Args:
+            attestation_id: The attestation ID
+
+        Returns:
+            Attestation details
+        """
+        response = await self._client.get(
+            f"{self.base_url}/v1/attestations/{quote(attestation_id, safe='')}"
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def list_attestations(self, agent_id: str) -> dict:
+        """List attestations for an agent.
+
+        Args:
+            agent_id: The agent to list attestations for
+
+        Returns:
+            List of attestations with count
+        """
+        params = {"agent_id": agent_id}
+        if self.app_id:
+            params["app_id"] = self.app_id
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.get(
+            f"{self.base_url}/v1/attestations", params=params, headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def revoke_attestation(
+        self, attestation_id: str, reason: Optional[str] = None
+    ) -> dict:
+        """Revoke an attestation. Token will be rejected on future verification.
+
+        Args:
+            attestation_id: The attestation to revoke
+            reason: Optional reason for revocation
+
+        Returns:
+            Revocation result
+        """
+        url = f"{self.base_url}/v1/attestations/{quote(attestation_id, safe='')}/revoke"
+        if self.app_id:
+            url += f"?app_id={quote(self.app_id, safe='')}"
+
+        body: dict[str, Any] = {}
+        if reason:
+            body["reason"] = reason
+
+        headers: dict[str, str] = {}
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        response = await self._client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def verify_attestation(
+        self,
+        token: str,
+        action: Optional[str] = None,
+        resource: Optional[str] = None,
+    ) -> dict:
+        """Verify an attestation token and optionally check a specific capability.
+
+        Args:
+            token: The attestation JWT token
+            action: Optional action to check (e.g. "read")
+            resource: Optional resource to check (e.g. "invoices")
+
+        Returns:
+            Verification result with capability check if action specified
+        """
+        body: dict[str, str] = {"token": token}
+        if action:
+            body["action"] = action
+        if resource:
+            body["resource"] = resource
+
+        response = await self._client.post(
+            f"{self.base_url}/v1/verify/attestation", json=body
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def close(self) -> None:
         """Close the underlying HTTP client and clear cached tokens."""
         self._token = None

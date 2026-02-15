@@ -300,3 +300,132 @@ class VerifyIOUResponse:
     access_token: Optional[str] = None
     expires_at: Optional[str] = None
     error: Optional[str] = None
+
+
+# ============ Delegation Chain Types ============
+
+
+@dataclass
+class DelegationResponse:
+    """Response from delegation creation or retrieval."""
+
+    success: bool = False
+    delegation_id: str = ""
+    grantor_id: str = ""
+    grantee_id: str = ""
+    app_id: str = ""
+    capabilities: Optional[List[Dict[str, Any]]] = None
+    chain: Optional[List[str]] = None
+    depth: int = 0
+    max_depth: int = 3
+    parent_delegation_id: Optional[str] = None
+    created_at: str = ""
+    expires_at: str = ""
+    revoked: bool = False
+    revoked_at: Optional[str] = None
+    revocation_reason: Optional[str] = None
+    metadata: Optional[Dict[str, str]] = None
+    time_remaining: Optional[int] = None
+
+
+@dataclass
+class DelegationListResponse:
+    """Response from listing delegations."""
+
+    success: bool = False
+    delegations: Optional[List[Dict[str, Any]]] = None
+    count: int = 0
+    agent_id: str = ""
+    direction: str = "both"
+
+
+@dataclass
+class RevokeDelegationResponse:
+    """Response from revoking a delegation."""
+
+    success: bool = False
+    delegation_id: str = ""
+    revoked: bool = False
+    revoked_at: Optional[str] = None
+    revocation_reason: Optional[str] = None
+    message: str = ""
+
+
+@dataclass
+class DelegationVerifyResponse:
+    """Response from verifying a delegation chain."""
+
+    success: bool = False
+    valid: bool = False
+    chain_length: Optional[int] = None
+    chain: Optional[List[Dict[str, Any]]] = None
+    effective_capabilities: Optional[List[Dict[str, Any]]] = None
+    error: Optional[str] = None
+
+
+# ============ Capability Attestation Types ============
+
+
+@dataclass
+class AttestationResponse:
+    """Response from attestation issuance or retrieval."""
+
+    success: bool = False
+    attestation_id: str = ""
+    agent_id: str = ""
+    app_id: str = ""
+    token: str = ""
+    can: Optional[List[str]] = None
+    cannot: Optional[List[str]] = None
+    restrictions: Optional[Dict[str, Any]] = None
+    delegation_id: Optional[str] = None
+    metadata: Optional[Dict[str, str]] = None
+    created_at: str = ""
+    expires_at: str = ""
+    revoked: bool = False
+    revoked_at: Optional[str] = None
+    revocation_reason: Optional[str] = None
+    time_remaining: Optional[int] = None
+
+
+@dataclass
+class AttestationListResponse:
+    """Response from listing attestations."""
+
+    success: bool = False
+    attestations: Optional[List[Dict[str, Any]]] = None
+    count: int = 0
+    agent_id: str = ""
+
+
+@dataclass
+class RevokeAttestationResponse:
+    """Response from revoking an attestation."""
+
+    success: bool = False
+    attestation_id: str = ""
+    revoked: bool = False
+    revoked_at: Optional[str] = None
+    revocation_reason: Optional[str] = None
+    message: str = ""
+
+
+@dataclass
+class AttestationVerifyResponse:
+    """Response from verifying an attestation token."""
+
+    success: bool = False
+    valid: bool = False
+    allowed: Optional[bool] = None
+    agent_id: Optional[str] = None
+    issuer: Optional[str] = None
+    can: Optional[List[str]] = None
+    cannot: Optional[List[str]] = None
+    restrictions: Optional[Dict[str, Any]] = None
+    delegation_id: Optional[str] = None
+    issued_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    reason: Optional[str] = None
+    matched_rule: Optional[str] = None
+    checked_capability: Optional[str] = None
+    error: Optional[str] = None

@@ -111,6 +111,26 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 |--------|------|-------------|
 | \`POST\` | \`/v1/verify/consumer\` | Verify Agentic Consumer (Layer 2) |
 | \`POST\` | \`/v1/verify/payment\` | Verify Agentic Payment Container (Layer 3) |
+| \`POST\` | \`/v1/verify/delegation\` | Verify delegation chain validity |
+| \`POST\` | \`/v1/verify/attestation\` | Verify attestation token + check capability |
+
+### Delegation Chains
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`POST\` | \`/v1/delegations\` | Create delegation (grantor→grantee) |
+| \`GET\` | \`/v1/delegations/:id\` | Get delegation details |
+| \`GET\` | \`/v1/delegations\` | List delegations for agent |
+| \`POST\` | \`/v1/delegations/:id/revoke\` | Revoke delegation (cascades) |
+
+### Capability Attestation
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`POST\` | \`/v1/attestations\` | Issue attestation token (can/cannot rules) |
+| \`GET\` | \`/v1/attestations/:id\` | Get attestation details |
+| \`GET\` | \`/v1/attestations\` | List attestations for agent |
+| \`POST\` | \`/v1/attestations/:id/revoke\` | Revoke attestation |
 
 ### Challenges
 
@@ -386,6 +406,20 @@ Endpoint: POST https://botcha.ai/v1/invoices/:id/verify-iou - Verify Browsing IO
 Endpoint: POST https://botcha.ai/v1/verify/consumer - Verify Agentic Consumer object (Layer 2)
 Endpoint: POST https://botcha.ai/v1/verify/payment - Verify Agentic Payment Container (Layer 3)
 
+# TAP Delegation Chains (v0.17.0)
+Endpoint: POST https://botcha.ai/v1/delegations - Create delegation (grantor→grantee with capability subset)
+Endpoint: GET https://botcha.ai/v1/delegations/:id - Get delegation details
+Endpoint: GET https://botcha.ai/v1/delegations - List delegations for agent (?agent_id=&direction=in|out|both)
+Endpoint: POST https://botcha.ai/v1/delegations/:id/revoke - Revoke delegation (cascades to sub-delegations)
+Endpoint: POST https://botcha.ai/v1/verify/delegation - Verify entire delegation chain
+
+# TAP Capability Attestation (v0.17.0)
+Endpoint: POST https://botcha.ai/v1/attestations - Issue capability attestation token (can/cannot rules with action:resource patterns)
+Endpoint: GET https://botcha.ai/v1/attestations/:id - Get attestation details
+Endpoint: GET https://botcha.ai/v1/attestations - List attestations for agent (?agent_id=)
+Endpoint: POST https://botcha.ai/v1/attestations/:id/revoke - Revoke attestation (token rejected on future verification)
+Endpoint: POST https://botcha.ai/v1/verify/attestation - Verify attestation token + optionally check specific capability
+
 # Legacy Endpoints
 Endpoint: GET https://botcha.ai/api/challenge - Generate standard challenge
 Endpoint: POST https://botcha.ai/api/challenge - Verify standard challenge
@@ -464,8 +498,8 @@ TAP-Session-Get: GET /v1/sessions/:id/tap — includes time_remaining
 TAP-Get-Agent: GET /v1/agents/:id/tap — includes public_key for verification
 TAP-List-Agents: GET /v1/agents/tap?app_id=...&tap_only=true
 TAP-Middleware-Modes: tap, signature-only, challenge-only, flexible
-TAP-SDK-TS: registerTAPAgent(options), getTAPAgent(agentId), listTAPAgents(tapOnly?), createTAPSession(options), getTAPSession(sessionId), getJWKS(), getKeyById(keyId), rotateAgentKey(agentId), createInvoice(data), getInvoice(id), verifyBrowsingIOU(invoiceId, token)
-TAP-SDK-Python: register_tap_agent(name, ...), get_tap_agent(agent_id), list_tap_agents(tap_only?), create_tap_session(agent_id, user_context, intent), get_tap_session(session_id), get_jwks(), get_key_by_id(key_id), rotate_agent_key(agent_id), create_invoice(data), get_invoice(id), verify_browsing_iou(invoice_id, token)
+TAP-SDK-TS: registerTAPAgent(options), getTAPAgent(agentId), listTAPAgents(tapOnly?), createTAPSession(options), getTAPSession(sessionId), getJWKS(), getKeyById(keyId), rotateAgentKey(agentId), createInvoice(data), getInvoice(id), verifyBrowsingIOU(invoiceId, token), createDelegation(options), getDelegation(id), listDelegations(agentId, options?), revokeDelegation(id, reason?), verifyDelegationChain(id), issueAttestation(options), getAttestation(id), listAttestations(agentId), revokeAttestation(id, reason?), verifyAttestation(token, action?, resource?)
+TAP-SDK-Python: register_tap_agent(name, ...), get_tap_agent(agent_id), list_tap_agents(tap_only?), create_tap_session(agent_id, user_context, intent), get_tap_session(session_id), get_jwks(), get_key_by_id(key_id), rotate_agent_key(agent_id), create_invoice(data), get_invoice(id), verify_browsing_iou(invoice_id, token), create_delegation(grantor_id, grantee_id, capabilities, ...), get_delegation(id), list_delegations(agent_id, ...), revoke_delegation(id, reason?), verify_delegation_chain(id), issue_attestation(agent_id, can, cannot?, ...), get_attestation(id), list_attestations(agent_id), revoke_attestation(id, reason?), verify_attestation(token, action?, resource?)
 TAP-Middleware-Import: import { createTAPVerifyMiddleware } from '@dupecom/botcha/middleware'
 
 # TAP FULL SPEC v0.16.0
@@ -479,6 +513,10 @@ TAP-Key-Rotation: POST /v1/agents/:id/tap/rotate-key — rotate keys, invalidate
 TAP-402-Flow: POST /v1/invoices → GET /v1/invoices/:id → POST /v1/invoices/:id/verify-iou
 TAP-Edge-Verify: createTAPEdgeMiddleware for Cloudflare Workers CDN edge verification
 TAP-Visa-Federation: Trust keys from https://mcp.visa.com/.well-known/jwks (3-tier cache: memory → KV → HTTP)
+TAP-Delegation: POST /v1/delegations → GET /v1/delegations/:id → POST /v1/delegations/:id/revoke → POST /v1/verify/delegation
+TAP-Attestation: POST /v1/attestations → GET /v1/attestations/:id → POST /v1/attestations/:id/revoke → POST /v1/verify/attestation
+TAP-Attestation-Patterns: action:resource format with wildcards (*:*, read:*, *:invoices), deny takes precedence over allow
+TAP-Attestation-Middleware: requireCapability('read:invoices') — Hono middleware, extracts token from X-Botcha-Attestation or Authorization: Bearer
 
 # EMBEDDED CHALLENGE (for bots visiting HTML pages)
 Embedded-Challenge: <script type="application/botcha+json">
@@ -688,7 +726,7 @@ MCP gives agents tools. A2A lets agents communicate. TAP proves identity and sco
 
 **Shipped:** Challenge types, JWT tokens, multi-tenant apps, agent registry, TAP, dashboard, SDKs (TS/Python), CLI, LangChain, discovery standards.
 
-**Planned:** Delegation chains, capability attestation, agent reputation scoring, Agent SSO (cross-service verification), IETF RFC contribution.
+**Planned:** Agent reputation scoring, Agent SSO (cross-service verification), IETF RFC contribution.
 
 ---
 
@@ -1757,6 +1795,229 @@ export function getOpenApiSpec(version: string) {
           responses: {
             "200": { description: "Payment verified" },
             "400": { description: "Invalid payment container" }
+          }
+        }
+      },
+      "/v1/delegations": {
+        post: {
+          summary: "Create delegation",
+          description: "Create a delegation from one agent to another. Grants a subset of the grantor's capabilities to the grantee.",
+          operationId: "createDelegation",
+          parameters: [{ name: "app_id", in: "query", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["grantor_id", "grantee_id", "capabilities"],
+                  properties: {
+                    "grantor_id": { type: "string", description: "Agent granting capabilities" },
+                    "grantee_id": { type: "string", description: "Agent receiving capabilities" },
+                    "capabilities": { type: "array", items: { type: "object" }, description: "Capabilities to delegate (subset of grantor's)" },
+                    "duration_seconds": { type: "integer", description: "Duration in seconds (default: 3600)" },
+                    "max_depth": { type: "integer", description: "Max sub-delegation depth (default: 3)" },
+                    "parent_delegation_id": { type: "string", description: "Parent delegation ID for sub-delegation" },
+                    "metadata": { type: "object", description: "Optional context metadata" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "Delegation created" },
+            "400": { description: "Invalid request or capability escalation" },
+            "403": { description: "Insufficient capabilities or depth limit" },
+            "409": { description: "Cycle detected in chain" }
+          }
+        },
+        get: {
+          summary: "List delegations",
+          description: "List delegations for an agent.",
+          operationId: "listDelegations",
+          parameters: [
+            { name: "app_id", in: "query", required: true, schema: { type: "string" } },
+            { name: "agent_id", in: "query", required: true, schema: { type: "string" } },
+            { name: "direction", in: "query", schema: { type: "string", enum: ["in", "out", "both"] } },
+            { name: "include_revoked", in: "query", schema: { type: "boolean" } },
+            { name: "include_expired", in: "query", schema: { type: "boolean" } }
+          ],
+          responses: {
+            "200": { description: "Delegation list" }
+          }
+        }
+      },
+      "/v1/delegations/{id}": {
+        get: {
+          summary: "Get delegation details",
+          operationId: "getDelegation",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Delegation details" },
+            "404": { description: "Delegation not found or expired" }
+          }
+        }
+      },
+      "/v1/delegations/{id}/revoke": {
+        post: {
+          summary: "Revoke delegation",
+          description: "Revoke a delegation and cascade to all sub-delegations.",
+          operationId: "revokeDelegation",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "app_id", in: "query", required: true, schema: { type: "string" } }
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "reason": { type: "string", description: "Revocation reason" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Delegation revoked" },
+            "404": { description: "Delegation not found" }
+          }
+        }
+      },
+      "/v1/verify/delegation": {
+        post: {
+          summary: "Verify delegation chain",
+          description: "Verify an entire delegation chain is valid (not revoked, not expired, capabilities are valid subsets).",
+          operationId: "verifyDelegationChain",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["delegation_id"],
+                  properties: {
+                    "delegation_id": { type: "string", description: "The leaf delegation to verify" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Chain is valid — returns chain and effective capabilities" },
+            "400": { description: "Chain is invalid — returns error reason" }
+          }
+        }
+      },
+      "/v1/attestations": {
+        post: {
+          summary: "Issue attestation",
+          description: "Issue a capability attestation token for an agent. Grants fine-grained action:resource permissions with explicit deny.",
+          operationId: "issueAttestation",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["agent_id", "can"],
+                  properties: {
+                    "agent_id": { type: "string", description: "Agent to issue attestation for" },
+                    "can": { type: "array", items: { type: "string" }, description: "Allowed capability patterns (action:resource)" },
+                    "cannot": { type: "array", items: { type: "string" }, description: "Denied capability patterns (overrides can)" },
+                    "restrictions": { type: "object", description: "Optional restrictions (max_amount, rate_limit)" },
+                    "duration_seconds": { type: "integer", description: "Attestation lifetime (default: 3600)" },
+                    "delegation_id": { type: "string", description: "Optional link to delegation chain" },
+                    "metadata": { type: "object", description: "Optional context metadata" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "Attestation issued — includes signed JWT token" },
+            "400": { description: "Invalid request" },
+            "403": { description: "Agent does not belong to app" },
+            "404": { description: "Agent not found" }
+          }
+        },
+        get: {
+          summary: "List attestations",
+          description: "List attestations for an agent.",
+          operationId: "listAttestations",
+          parameters: [
+            { name: "app_id", in: "query", required: true, schema: { type: "string" } },
+            { name: "agent_id", in: "query", required: true, schema: { type: "string" } }
+          ],
+          responses: {
+            "200": { description: "Attestation list" }
+          }
+        }
+      },
+      "/v1/attestations/{id}": {
+        get: {
+          summary: "Get attestation details",
+          operationId: "getAttestation",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Attestation details" },
+            "404": { description: "Attestation not found or expired" }
+          }
+        }
+      },
+      "/v1/attestations/{id}/revoke": {
+        post: {
+          summary: "Revoke attestation",
+          description: "Revoke an attestation. Token will be rejected on future verification.",
+          operationId: "revokeAttestation",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "app_id", in: "query", required: true, schema: { type: "string" } }
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "reason": { type: "string", description: "Revocation reason" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Attestation revoked" },
+            "404": { description: "Attestation not found" }
+          }
+        }
+      },
+      "/v1/verify/attestation": {
+        post: {
+          summary: "Verify attestation token",
+          description: "Verify an attestation JWT token and optionally check a specific capability.",
+          operationId: "verifyAttestation",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["token"],
+                  properties: {
+                    "token": { type: "string", description: "Attestation JWT token" },
+                    "action": { type: "string", description: "Optional capability action to check (e.g. read)" },
+                    "resource": { type: "string", description: "Optional capability resource to check (e.g. invoices)" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Token valid — returns payload or capability check result" },
+            "401": { description: "Invalid or expired token" },
+            "403": { description: "Capability denied" }
           }
         }
       }

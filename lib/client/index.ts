@@ -37,6 +37,16 @@ export type {
   InvoiceResponse,
   BrowsingIOU,
   VerifyIOUResponse,
+  CreateDelegationOptions,
+  DelegationResponse,
+  DelegationListResponse,
+  RevokeDelegationResponse,
+  DelegationVerifyResponse,
+  IssueAttestationOptions,
+  AttestationResponse,
+  AttestationListResponse,
+  RevokeAttestationResponse,
+  AttestationVerifyResponse,
 } from './types.js';
 
 import type {
@@ -63,6 +73,16 @@ import type {
   InvoiceResponse,
   BrowsingIOU,
   VerifyIOUResponse,
+  CreateDelegationOptions,
+  DelegationResponse,
+  DelegationListResponse,
+  RevokeDelegationResponse,
+  DelegationVerifyResponse,
+  IssueAttestationOptions,
+  AttestationResponse,
+  AttestationListResponse,
+  RevokeAttestationResponse,
+  AttestationVerifyResponse,
 } from './types.js';
 
 // Export stream client
@@ -976,6 +996,137 @@ export class BotchaClient {
    */
   async verifyBrowsingIOU(invoiceId: string, iou: BrowsingIOU): Promise<VerifyIOUResponse> {
     return await this.request('POST', `/v1/invoices/${encodeURIComponent(invoiceId)}/verify-iou`, iou) as VerifyIOUResponse;
+  }
+
+  // ============ Delegation Chain Methods ============
+
+  /**
+   * Create a delegation from one agent to another.
+   * Grants a subset of the grantor's capabilities to the grantee.
+   * 
+   * @example
+   * ```typescript
+   * const delegation = await client.createDelegation({
+   *   grantor_id: 'agent_abc123',
+   *   grantee_id: 'agent_def456',
+   *   capabilities: [{ action: 'browse', scope: ['products'] }],
+   *   duration_seconds: 3600,
+   * });
+   * ```
+   */
+  async createDelegation(options: CreateDelegationOptions): Promise<DelegationResponse> {
+    return await this.request('POST', '/v1/delegations', options) as DelegationResponse;
+  }
+
+  /**
+   * Get delegation details by ID.
+   */
+  async getDelegation(delegationId: string): Promise<DelegationResponse> {
+    return await this.request('GET', `/v1/delegations/${encodeURIComponent(delegationId)}`) as DelegationResponse;
+  }
+
+  /**
+   * List delegations for an agent.
+   * 
+   * @param agentId - The agent to list delegations for
+   * @param options - Optional filters
+   */
+  async listDelegations(agentId: string, options?: {
+    direction?: 'in' | 'out' | 'both';
+    include_revoked?: boolean;
+    include_expired?: boolean;
+  }): Promise<DelegationListResponse> {
+    const params = new URLSearchParams({ agent_id: agentId });
+    if (options?.direction) params.set('direction', options.direction);
+    if (options?.include_revoked) params.set('include_revoked', 'true');
+    if (options?.include_expired) params.set('include_expired', 'true');
+    return await this.request('GET', `/v1/delegations?${params.toString()}`) as DelegationListResponse;
+  }
+
+  /**
+   * Revoke a delegation. Cascades to all sub-delegations.
+   * 
+   * @param delegationId - The delegation to revoke
+   * @param reason - Optional reason for revocation
+   */
+  async revokeDelegation(delegationId: string, reason?: string): Promise<RevokeDelegationResponse> {
+    return await this.request('POST', `/v1/delegations/${encodeURIComponent(delegationId)}/revoke`, 
+      reason ? { reason } : {}
+    ) as RevokeDelegationResponse;
+  }
+
+  /**
+   * Verify a delegation chain is valid.
+   * Returns the full chain and effective capabilities if valid.
+   * 
+   * @param delegationId - The leaf delegation to verify (walks up the chain)
+   */
+  async verifyDelegationChain(delegationId: string): Promise<DelegationVerifyResponse> {
+    return await this.request('POST', '/v1/verify/delegation', { delegation_id: delegationId }) as DelegationVerifyResponse;
+  }
+
+  // ============ Capability Attestation Methods ============
+
+  /**
+   * Issue a capability attestation token for an agent.
+   * Grants fine-grained "action:resource" permissions with explicit deny.
+   * 
+   * @example
+   * ```typescript
+   * const att = await client.issueAttestation({
+   *   agent_id: 'agent_abc123',
+   *   can: ['read:invoices', 'browse:*'],
+   *   cannot: ['write:transfers'],
+   *   duration_seconds: 3600,
+   * });
+   * // Use att.token in X-Botcha-Attestation header
+   * ```
+   */
+  async issueAttestation(options: IssueAttestationOptions): Promise<AttestationResponse> {
+    return await this.request('POST', '/v1/attestations', options) as AttestationResponse;
+  }
+
+  /**
+   * Get attestation details by ID.
+   */
+  async getAttestation(attestationId: string): Promise<AttestationResponse> {
+    return await this.request('GET', `/v1/attestations/${encodeURIComponent(attestationId)}`) as AttestationResponse;
+  }
+
+  /**
+   * List attestations for an agent.
+   * 
+   * @param agentId - The agent to list attestations for
+   */
+  async listAttestations(agentId: string): Promise<AttestationListResponse> {
+    const params = new URLSearchParams({ agent_id: agentId });
+    return await this.request('GET', `/v1/attestations?${params.toString()}`) as AttestationListResponse;
+  }
+
+  /**
+   * Revoke an attestation. Token will be rejected on future verification.
+   * 
+   * @param attestationId - The attestation to revoke
+   * @param reason - Optional reason for revocation
+   */
+  async revokeAttestation(attestationId: string, reason?: string): Promise<RevokeAttestationResponse> {
+    return await this.request('POST', `/v1/attestations/${encodeURIComponent(attestationId)}/revoke`,
+      reason ? { reason } : {}
+    ) as RevokeAttestationResponse;
+  }
+
+  /**
+   * Verify an attestation token and optionally check a specific capability.
+   * 
+   * @param token - The attestation JWT token
+   * @param action - Optional action to check (e.g. "read")
+   * @param resource - Optional resource to check (e.g. "invoices")
+   */
+  async verifyAttestation(token: string, action?: string, resource?: string): Promise<AttestationVerifyResponse> {
+    const body: Record<string, string> = { token };
+    if (action) body.action = action;
+    if (resource) body.resource = resource;
+    return await this.request('POST', '/v1/verify/attestation', body) as AttestationVerifyResponse;
   }
 }
 

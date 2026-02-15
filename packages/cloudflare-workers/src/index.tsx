@@ -58,6 +58,20 @@ import {
 } from './tap-routes.js';
 import { jwksRoute, getKeyRoute, listKeysRoute } from './tap-jwks.js';
 import {
+  createDelegationRoute,
+  getDelegationRoute,
+  listDelegationsRoute,
+  revokeDelegationRoute,
+  verifyDelegationRoute,
+} from './tap-delegation-routes.js';
+import {
+  issueAttestationRoute,
+  getAttestationRoute,
+  listAttestationsRoute,
+  revokeAttestationRoute,
+  verifyAttestationRoute,
+} from './tap-attestation-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -1874,9 +1888,23 @@ app.post('/v1/invoices', createInvoiceRoute);
 app.get('/v1/invoices/:id', getInvoiceRoute);
 app.post('/v1/invoices/:id/verify-iou', verifyIOURoute);
 
+// TAP Delegation Chains
+app.post('/v1/delegations', createDelegationRoute);
+app.get('/v1/delegations/:id', getDelegationRoute);
+app.get('/v1/delegations', listDelegationsRoute);
+app.post('/v1/delegations/:id/revoke', revokeDelegationRoute);
+
+// TAP Capability Attestation
+app.post('/v1/attestations', issueAttestationRoute);
+app.get('/v1/attestations/:id', getAttestationRoute);
+app.get('/v1/attestations', listAttestationsRoute);
+app.post('/v1/attestations/:id/revoke', revokeAttestationRoute);
+
 // TAP Verification Utility Endpoints
 app.post('/v1/verify/consumer', verifyConsumerRoute);
 app.post('/v1/verify/payment', verifyPaymentRoute);
+app.post('/v1/verify/delegation', verifyDelegationRoute);
+app.post('/v1/verify/attestation', verifyAttestationRoute);
 
 // ============ AGENT REGISTRY API ============
 
