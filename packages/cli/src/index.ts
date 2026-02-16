@@ -18,13 +18,14 @@ const program = new Command();
 program
   .name('botcha')
   .description('CLI tool for testing and debugging BOTCHA-protected endpoints')
-  .version('0.4.0');
+  .version('0.5.0');
 
 // Init command (one-time setup)
 program
   .command('init')
-  .description('One-time setup: create an app and save config to ~/.botcha')
+  .description('One-shot setup: create app, verify email, save config to ~/.botcha')
   .requiredOption('--email <email>', 'Email for your BOTCHA app')
+  .option('--name <name>', 'App name (e.g. "My Agent", "dupe-research")')
   .option('--url <url>', 'BOTCHA service URL (default: https://botcha.ai)')
   .option('--json', 'Output as JSON')
   .option('-v, --verbose', 'Show detailed output')
