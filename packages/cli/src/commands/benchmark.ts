@@ -3,6 +3,7 @@
  */
 import { BotchaClient } from '@dupecom/botcha/client';
 import { Output } from '../lib/output.js';
+import { loadConfig } from '../lib/config.js';
 
 export interface BenchmarkOptions {
   iterations?: number;
@@ -20,11 +21,12 @@ interface BenchmarkResult {
 
 export async function benchmarkCommand(url: string, options: BenchmarkOptions): Promise<void> {
   const output = new Output(options);
+  const config = loadConfig();
   const iterations = options.iterations || 10;
   
   output.header(`\n🏃 Running ${iterations} iterations...\n`);
 
-  const client = new BotchaClient({ baseUrl: new URL(url).origin });
+  const client = new BotchaClient({ baseUrl: new URL(url).origin, appId: config.app_id });
   const results: BenchmarkResult[] = [];
   const startTime = Date.now();
 

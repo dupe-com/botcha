@@ -3,6 +3,7 @@
  */
 import { BotchaClient } from '@dupecom/botcha/client';
 import { Output, formatUrl } from '../lib/output.js';
+import { loadConfig } from '../lib/config.js';
 
 export interface TestOptions {
   json?: boolean;
@@ -15,7 +16,8 @@ export async function testCommand(url: string, options: TestOptions): Promise<vo
   
   output.header(`\n🔍 Testing ${formatUrl(url)}...\n`);
 
-  const client = new BotchaClient({ baseUrl: new URL(url).origin });
+  const config = loadConfig();
+  const client = new BotchaClient({ baseUrl: new URL(url).origin, appId: config.app_id });
   const startTime = Date.now();
 
   try {

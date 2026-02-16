@@ -3,6 +3,7 @@
  */
 import { BotchaClient } from '@dupecom/botcha/client';
 import { Output } from '../lib/output.js';
+import { loadConfig } from '../lib/config.js';
 
 export interface SolveOptions {
   url: string;
@@ -13,13 +14,14 @@ export interface SolveOptions {
 
 export async function solveCommand(type: string, options: SolveOptions): Promise<void> {
   const output = new Output(options);
+  const config = loadConfig();
   
   if (!options.url) {
     output.error('--url is required');
     process.exit(1);
   }
 
-  const client = new BotchaClient({ baseUrl: new URL(options.url).origin });
+  const client = new BotchaClient({ baseUrl: new URL(options.url).origin, appId: config.app_id });
   const startTime = Date.now();
 
   try {
