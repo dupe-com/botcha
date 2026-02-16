@@ -1,6 +1,6 @@
 {
   "name": "@dupecom/botcha-cloudflare",
-  "version": "0.20.3",
+  "version": "0.21.0",
   "description": "BOTCHA for Cloudflare Workers - Prove you're a bot. Humans need not apply.",
   "type": "module",
   "main": "dist/index.js",

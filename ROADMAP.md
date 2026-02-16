@@ -334,7 +334,7 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - `requireAppId` middleware gates all `/v1/*` routes except registration, verification, and recovery
 - Open paths (no app_id needed): `POST /v1/apps`, `POST /v1/apps/:id/verify-email`, `POST /v1/apps/:id/resend-verification`, `GET /v1/apps/:id`, `POST /v1/auth/recover`
 - All other `/v1/*` routes return 401 `APP_REGISTRATION_REQUIRED` without a valid app_id
-- app_id can be provided via `?app_id=`, `X-App-Id` header, or JWT claim
+- app_id can be provided via `?app_id=`, `X-App-Id` header, request body, or JWT claim
 - Fail-open design: KV errors don't block requests (logged as warnings)
 - Homepage demo at botcha.ai still works without app_id (uses internal demo app)
 - Discovery docs updated: ai.txt, OpenAPI spec, root JSON response, static.ts markdown
