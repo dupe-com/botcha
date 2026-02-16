@@ -22,12 +22,12 @@
     },
     "packages/cli": {
       "name": "@dupecom/botcha-cli",
-      "version": "0.4.0",
+      "version": "0.5.1",
       "bin": {
         "botcha": "bin/botcha.js",
       },
       "dependencies": {
-        "@dupecom/botcha": "^0.13.1",
+        "@dupecom/botcha": "^0.21.0",
         "chalk": "^5.3.0",
         "commander": "^12.1.0",
       },
@@ -39,7 +39,7 @@
     },
     "packages/cloudflare-workers": {
       "name": "@dupecom/botcha-cloudflare",
-      "version": "0.16.0",
+      "version": "0.21.0",
       "dependencies": {
         "hono": "^4.7.0",
         "jose": "^5.9.6",
@@ -69,8 +69,8 @@
       },
     },
     "packages/verify": {
-      "name": "@botcha/verify",
-      "version": "0.1.0",
+      "name": "@dupecom/botcha-verify",
+      "version": "0.2.0",
       "dependencies": {
         "jose": "^5.9.6",
       },
@@ -93,8 +93,6 @@
     },
   },
   "packages": {
-    "@botcha/verify": ["@botcha/verify@workspace:packages/verify"],
-
     "@cfworker/json-schema": ["@cfworker/json-schema@4.1.1", "", {}, "sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og=="],
 
     "@cloudflare/kv-asset-handler": ["@cloudflare/kv-asset-handler@0.4.2", "", {}, "sha512-SIOD2DxrRRwQ+jgzlXCqoEFiKOFqaPjhnNTGKXSRLvp1HiOvapLaFG2kEr9dYQTYe8rKrd9uvDUzmAITeNyaHQ=="],
@@ -115,13 +113,15 @@
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 
-    "@dupecom/botcha": ["@dupecom/botcha@0.13.1", "", { "peerDependencies": { "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["express"] }, "sha512-/7jjmtSxDCoh80J8vVUm7eQxva/nTGzs94C3ce/Y/PKDUkVhoRNnIrEWdr8yg8n24G34RwNjdIp6kzc0dzvD1Q=="],
+    "@dupecom/botcha": ["@dupecom/botcha@0.21.0", "", { "peerDependencies": { "express": "^4.0.0 || ^5.0.0" }, "optionalPeers": ["express"] }, "sha512-MhUQppe28cbYOaOpbw9p0gFYwFVmGxBXHsvL8TE32wgMvnKLQGGXDEbnrwsclvczAAozjyTXCQdH3kkXPcNojQ=="],
 
     "@dupecom/botcha-cli": ["@dupecom/botcha-cli@workspace:packages/cli"],
 
     "@dupecom/botcha-cloudflare": ["@dupecom/botcha-cloudflare@workspace:packages/cloudflare-workers"],
 
     "@dupecom/botcha-langchain": ["@dupecom/botcha-langchain@workspace:packages/langchain"],
+
+    "@dupecom/botcha-verify": ["@dupecom/botcha-verify@workspace:packages/verify"],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.8.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-mehfKSMWjjNol8659Z8KxEMrdSJDDot5SXMq00dM8BN4o+CLNXQ0xH2V7EchNHV4RmbZLmmPdEaXZc5H2FXmDg=="],
 
