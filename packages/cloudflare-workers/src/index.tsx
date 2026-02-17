@@ -37,7 +37,7 @@ import {
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { OG_IMAGE_BASE64 } from './og-image';
-import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret } from './apps';
+import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret, EmailAlreadyRegisteredError } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
@@ -2029,6 +2029,15 @@ app.post('/v1/apps', async (c) => {
       next_step: `POST /v1/apps/${result.app_id}/verify-email with { "code": "${result.verification_code}", "app_secret": "${result.app_secret}" }`,
     }, 201);
   } catch (error) {
+    if (error instanceof EmailAlreadyRegisteredError) {
+      return c.json({
+        success: false,
+        error: 'EMAIL_ALREADY_REGISTERED',
+        message: `Email ${error.email} is already registered.`,
+        existing_app_id: error.existing_app_id,
+        recovery: `POST /v1/auth/recover with { "email": "${error.email}" } to recover your credentials.`,
+      }, 409);
+    }
     return c.json({
       success: false,
       error: 'Failed to create app',

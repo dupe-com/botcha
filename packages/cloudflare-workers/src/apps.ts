@@ -60,6 +60,24 @@ export type PublicAppConfig = {
   email_verified: boolean;
 };
 
+// ============ ERRORS ============
+
+/**
+ * Thrown when attempting to register an app with an email that's already in use.
+ * Callers should return a 409 Conflict with recovery instructions.
+ */
+export class EmailAlreadyRegisteredError extends Error {
+  public readonly email: string;
+  public readonly existing_app_id: string;
+
+  constructor(email: string, existing_app_id: string) {
+    super(`Email ${email} is already registered to app ${existing_app_id}`);
+    this.name = 'EmailAlreadyRegisteredError';
+    this.email = email;
+    this.existing_app_id = existing_app_id;
+  }
+}
+
 // ============ CRYPTO UTILITIES ============
 
 /**
@@ -139,6 +157,18 @@ export function generateVerificationCode(): string {
  * @returns {app_id, name, app_secret, email, email_verified, verification_required}
  */
 export async function createApp(kv: KVNamespace, email: string, name?: string): Promise<CreateAppResult> {
+  // Unique email constraint: one app per email
+  const existingAppId = await kv.get(`email:${email.toLowerCase()}`, 'text');
+  if (existingAppId) {
+    // Verify the app still exists (not an orphaned index)
+    const existingApp = await kv.get(`app:${existingAppId}`, 'text');
+    if (existingApp) {
+      throw new EmailAlreadyRegisteredError(email, existingAppId);
+    }
+    // Orphaned index — clean it up and proceed with creation
+    await kv.delete(`email:${email.toLowerCase()}`);
+  }
+
   const app_id = generateAppId();
   const app_secret = generateAppSecret();
   const secret_hash = await hashSecret(app_secret);

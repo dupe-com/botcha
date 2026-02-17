@@ -11,6 +11,7 @@ import {
   getAppByEmail,
   rotateAppSecret,
   regenerateVerificationCode,
+  EmailAlreadyRegisteredError,
   type KVNamespace,
 } from '../../../packages/cloudflare-workers/src/apps.js';
 
@@ -277,6 +278,49 @@ describe('Apps - Multi-Tenant Infrastructure', () => {
       const stored = await mockKV.get(`app:${result.app_id}`, 'text');
       const config = JSON.parse(stored);
       expect(config.name).toBeUndefined();
+    });
+
+    test('rejects duplicate email with EmailAlreadyRegisteredError', async () => {
+      await createApp(mockKV, TEST_EMAIL);
+
+      await expect(createApp(mockKV, TEST_EMAIL))
+        .rejects.toThrow(EmailAlreadyRegisteredError);
+    });
+
+    test('duplicate email error includes existing app_id', async () => {
+      const first = await createApp(mockKV, TEST_EMAIL);
+
+      try {
+        await createApp(mockKV, TEST_EMAIL);
+        expect.unreachable('Should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(EmailAlreadyRegisteredError);
+        expect((e as EmailAlreadyRegisteredError).existing_app_id).toBe(first.app_id);
+        expect((e as EmailAlreadyRegisteredError).email).toBe(TEST_EMAIL);
+      }
+    });
+
+    test('duplicate email check is case-insensitive', async () => {
+      await createApp(mockKV, 'Agent@Botcha.AI');
+
+      await expect(createApp(mockKV, 'agent@botcha.ai'))
+        .rejects.toThrow(EmailAlreadyRegisteredError);
+    });
+
+    test('allows creation if orphaned email index exists (app deleted)', async () => {
+      const first = await createApp(mockKV, TEST_EMAIL);
+
+      // Simulate app deletion but orphaned email index
+      await mockKV.delete(`app:${first.app_id}`);
+
+      // Should succeed — orphaned index gets cleaned up
+      const second = await createApp(mockKV, TEST_EMAIL);
+      expect(second.app_id).toBeDefined();
+      expect(second.email).toBe(TEST_EMAIL);
+
+      // Email index should now point to the new app
+      const storedAppId = await mockKV.get(`email:${TEST_EMAIL}`, 'text');
+      expect(storedAppId).toBe(second.app_id);
     });
   });
 
