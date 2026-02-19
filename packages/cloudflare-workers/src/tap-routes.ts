@@ -13,6 +13,7 @@ import {
   listTAPAgents, 
   createTAPSession,
   getTAPSession,
+  updateAgentVerification,
   validateCapability,
   TAPCapability,
   TAP_VALID_ACTIONS
@@ -394,6 +395,19 @@ export async function createTAPSessionRoute(c: Context) {
     }
     
     const agent = agentResult.agent!;
+
+    // Gate: agent must have TAP enabled (i.e. a registered public key).
+    // tap_enabled is set to true only when a public key is registered, so this
+    // check is the canonical guard. Without cryptographic identity, a TAP
+    // session has no trust anchor and would silently bypass the entire
+    // verification model.
+    if (!agent.tap_enabled) {
+      return c.json({
+        success: false,
+        error: 'TAP_NOT_ENABLED',
+        message: 'Agent does not have TAP enabled. Register a public key via POST /v1/agents/register/tap (with public_key field) or PUT /v1/agents/:id/tap/rotate-key to enable TAP sessions.'
+      }, 403);
+    }
     
     // Parse intent
     const intentResult = parseTAPIntent(JSON.stringify(body.intent));
@@ -439,6 +453,12 @@ export async function createTAPSessionRoute(c: Context) {
     }
     
     const session = sessionResult.session!;
+
+    // Update last_verified_at — session creation is a successful TAP verification event.
+    // Fire-and-forget: don't let a KV write failure break the session response.
+    updateAgentVerification(c.env.AGENTS, agent.agent_id, true).catch(err =>
+      console.error('Failed to update agent last_verified_at:', err)
+    );
     
     return c.json({
       success: true,

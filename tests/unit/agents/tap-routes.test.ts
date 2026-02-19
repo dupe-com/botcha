@@ -634,6 +634,8 @@ describe('TAP Routes - createTAPSessionRoute', () => {
       app_id: TEST_APP_ID,
       name: 'TestAgent',
       created_at: Date.now(),
+      tap_enabled: true, // must have TAP enabled to reach intent validation
+      capabilities: [{ action: 'browse', scope: ['*'] }],
     };
     agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
 
@@ -661,6 +663,8 @@ describe('TAP Routes - createTAPSessionRoute', () => {
       app_id: TEST_APP_ID,
       name: 'TestAgent',
       created_at: Date.now(),
+      tap_enabled: true, // must have TAP enabled to reach intent validation
+      capabilities: [{ action: 'browse', scope: ['*'] }],
     };
     agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
 
@@ -763,6 +767,109 @@ describe('TAP Routes - createTAPSessionRoute', () => {
     expect(response.status).toBe(404);
     expect(data.success).toBe(false);
     expect(data.error).toBe('AGENT_NOT_FOUND');
+  });
+
+  // ── New tests for tap_enabled gate and last_verified_at update ──
+
+  test('should return 403 TAP_NOT_ENABLED when agent has no public key (tap_enabled: false)', async () => {
+    const agentsKV = new MockKV();
+    const testAgent: TAPAgent = {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID,
+      name: 'KeylessAgent',
+      created_at: Date.now(),
+      tap_enabled: false, // explicitly no TAP support — no public key
+      capabilities: [{ action: 'browse', scope: ['*'] }],
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_abc',
+        intent: { action: 'browse', resource: 'products' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('TAP_NOT_ENABLED');
+    expect(data.message).toContain('public key');
+  });
+
+  test('should return 403 TAP_NOT_ENABLED when agent has tap_enabled undefined', async () => {
+    const agentsKV = new MockKV();
+    const testAgent: TAPAgent = {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID,
+      name: 'LegacyAgent',
+      created_at: Date.now(),
+      // tap_enabled not set (legacy agent registered before TAP)
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_xyz',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('TAP_NOT_ENABLED');
+  });
+
+  test('should update last_verified_at on agent after successful session creation', async () => {
+    const agentsKV = new MockKV();
+    const sessionsKV = new MockKV();
+
+    const testAgent: TAPAgent = {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID,
+      name: 'KeyedAgent',
+      created_at: Date.now(),
+      tap_enabled: true,
+      last_verified_at: undefined, // not set yet
+      capabilities: [{ action: 'browse', scope: ['*'] }],
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      sessionsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_123',
+        intent: { action: 'browse', resource: 'products' },
+      }),
+    });
+
+    const beforeMs = Date.now();
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+
+    // Give the fire-and-forget updateAgentVerification a tick to resolve
+    await new Promise(r => setTimeout(r, 10));
+
+    // Verify last_verified_at was written to KV
+    const updatedRaw = agentsKV.getRaw(`agent:${TEST_AGENT_ID}`);
+    expect(updatedRaw).toBeDefined();
+    const updatedAgent = JSON.parse(updatedRaw!) as TAPAgent;
+    expect(updatedAgent.last_verified_at).toBeDefined();
+    expect(updatedAgent.last_verified_at).toBeGreaterThanOrEqual(beforeMs);
   });
 });
 
