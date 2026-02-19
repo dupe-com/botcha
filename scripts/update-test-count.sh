@@ -28,7 +28,7 @@ TOTAL=$((TS_COUNT + PY_COUNT))
 echo "Tests: ${TS_COUNT} TS + ${PY_COUNT} Python = ${TOTAL} total"
 
 # ── Build the badge ──
-BADGE="[![Tests](https://img.shields.io/badge/tests-${TOTAL}%20passing-brightgreen)](./tests/)"
+BADGE="[![Tests](https://img.shields.io/badge/tests-${TOTAL}%20passing-brightgreen)](https://github.com/i8ramin/reverse-captcha/tree/main/tests)"
 
 # ── Update README between markers ──
 if grep -q '<!-- test-count -->' README.md; then

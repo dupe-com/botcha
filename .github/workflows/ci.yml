@@ -53,7 +53,7 @@ jobs:
           PY_COUNT=$(cd packages/python && source .venv/bin/activate && \
             pytest tests/ --collect-only -q 2>/dev/null | tail -1 | grep -oE '^[0-9]+')
           TOTAL=$((TS_COUNT + PY_COUNT))
-          BADGE="[![Tests](https://img.shields.io/badge/tests-${TOTAL}%20passing-brightgreen)](./tests/)"
+          BADGE="[![Tests](https://img.shields.io/badge/tests-${TOTAL}%20passing-brightgreen)](https://github.com/i8ramin/reverse-captcha/tree/main/tests)"
           sed -i "s|<!-- test-count -->.*<!-- /test-count -->|<!-- test-count -->${BADGE}<!-- /test-count -->|" README.md
           if git diff --quiet README.md; then
             echo "Badge already up to date (${TOTAL} tests)"
