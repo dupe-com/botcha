@@ -405,7 +405,7 @@ export async function createTAPSessionRoute(c: Context) {
       return c.json({
         success: false,
         error: 'TAP_NOT_ENABLED',
-        message: 'Agent does not have TAP enabled. Register a public key via POST /v1/agents/register/tap (with public_key field) or PUT /v1/agents/:id/tap/rotate-key to enable TAP sessions.'
+        message: 'Agent does not have TAP enabled. Register a public key via POST /v1/agents/register/tap (with public_key field) or POST /v1/agents/:id/tap/rotate-key to enable TAP sessions.'
       }, 403);
     }
     
@@ -455,10 +455,10 @@ export async function createTAPSessionRoute(c: Context) {
     const session = sessionResult.session!;
 
     // Update last_verified_at — session creation is a successful TAP verification event.
-    // Fire-and-forget: don't let a KV write failure break the session response.
-    updateAgentVerification(c.env.AGENTS, agent.agent_id, true).catch(err =>
-      console.error('Failed to update agent last_verified_at:', err)
-    );
+    // updateAgentVerification catches and logs internally; void signals intentional fire-and-forget.
+    // Note: this does a read-modify-write on the full agent KV record. A concurrent key rotation
+    // could clobber that write. Future work: store last_verified_at in a separate KV key.
+    void updateAgentVerification(c.env.AGENTS, agent.agent_id, true);
     
     return c.json({
       success: true,
