@@ -13,7 +13,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@dupecom/botcha?color=00d4ff)](https://www.npmjs.com/package/@dupecom/botcha)
 [![PyPI version](https://img.shields.io/pypi/v/botcha?color=00d4ff)](https://pypi.org/project/botcha/)
-<!-- test-count -->[![Tests](https://img.shields.io/badge/tests-859%20passing-brightgreen)](https://github.com/i8ramin/reverse-captcha/tree/main/tests)<!-- /test-count -->
+[![Tests](https://img.shields.io/badge/tests-859%20passing-brightgreen)](https://github.com/i8ramin/reverse-captcha/tree/main/tests)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![AI Agents Only](https://img.shields.io/badge/contributors-AI%20agents%20only-ff6b6b)](./.github/CONTRIBUTING.md)
 

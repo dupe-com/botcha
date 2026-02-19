@@ -7,7 +7,7 @@
 # How it works:
 #   1. Counts TS tests via `vitest run --reporter=json` (runs tests, ~3s)
 #   2. Counts Python tests via `pytest --collect-only -q` (instant, no execution)
-#   3. Replaces the badge in README.md between <!-- test-count --> markers
+#   3. Replaces the tests badge in README.md (matched by shields.io URL pattern)
 
 set -euo pipefail
 
@@ -30,14 +30,19 @@ echo "Tests: ${TS_COUNT} TS + ${PY_COUNT} Python = ${TOTAL} total"
 # ── Build the badge ──
 BADGE="[![Tests](https://img.shields.io/badge/tests-${TOTAL}%20passing-brightgreen)](https://github.com/i8ramin/reverse-captcha/tree/main/tests)"
 
-# ── Update README between markers ──
-if grep -q '<!-- test-count -->' README.md; then
-  # Replace content between markers
-  sed -i '' "s|<!-- test-count -->.*<!-- /test-count -->|<!-- test-count -->${BADGE}<!-- /test-count -->|" README.md
+# ── Update README ──
+if grep -q "img.shields.io/badge/tests-" README.md; then
+  # Replace the tests badge using Python (avoids shell escaping issues)
+  python3 -c "
+import re
+content = open('README.md').read()
+new = re.sub(r'\[!\[Tests\]\(https://img\.shields\.io/badge/tests-[^)]*-brightgreen\)\]\([^)]*\)', '${BADGE}', content)
+open('README.md', 'w').write(new)
+"
   echo "✓ README.md updated: ${TOTAL} tests"
 else
-  echo "⚠ No <!-- test-count --> marker found in README.md"
+  echo "⚠ No tests badge found in README.md"
   echo "  Add this line where you want the badge:"
-  echo "  <!-- test-count -->${BADGE}<!-- /test-count -->"
+  echo "  ${BADGE}"
   exit 1
 fi
