@@ -2727,6 +2727,28 @@ app.post('/api/verify-landing', async (c) => {
   });
 });
 
+// ============ 404 / ERROR HANDLERS ============
+
+// Return JSON 404 for unmatched routes (not plain-text)
+app.notFound((c) => {
+  return c.json({
+    success: false,
+    error: 'NOT_FOUND',
+    message: `Route ${c.req.method} ${c.req.path} not found`,
+    docs: 'https://botcha.ai',
+  }, 404);
+});
+
+// Catch-all error handler
+app.onError((err, c) => {
+  console.error('Unhandled error:', err);
+  return c.json({
+    success: false,
+    error: 'INTERNAL_ERROR',
+    message: 'An unexpected error occurred',
+  }, 500);
+});
+
 // ============ EXPORT ============
 export default app;
 

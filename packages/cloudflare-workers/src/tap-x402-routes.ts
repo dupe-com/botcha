@@ -13,6 +13,17 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+
+function getVerificationPublicKey(env: any) {
+  const rawSigningKey = env?.JWT_SIGNING_KEY;
+  if (!rawSigningKey) return undefined;
+  try {
+    const signingKey = JSON.parse(rawSigningKey) as ES256SigningKeyJWK;
+    return getSigningPublicKeyJWK(signingKey);
+  } catch {
+    return undefined;
+  }
+}
 import {
   buildPaymentRequiredDescriptor,
   parsePaymentHeader,
@@ -86,6 +97,26 @@ function extractAppId(c: Context): string | undefined {
  */
 export async function verifyPaymentRoute(c: Context): Promise<Response> {
   try {
+    // Auth check first — payment verification is a privileged operation
+    const authHeader = c.req.header('authorization');
+    const token = extractBearerToken(authHeader);
+    if (!token) {
+      return c.json({
+        verified: false,
+        error: 'UNAUTHORIZED',
+        message: 'Bearer token required. Get a token via the BOTCHA challenge flow.',
+      }, 401);
+    }
+    const publicKey = getVerificationPublicKey(c.env);
+    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    if (!tokenResult.valid) {
+      return c.json({
+        verified: false,
+        error: 'INVALID_TOKEN',
+        message: 'Bearer token is invalid or expired',
+      }, 401);
+    }
+
     const body = await c.req.json<{
       payment?: string;
       required_amount?: string;
