@@ -1,15 +1,16 @@
 /**
  * BOTCHA Showcase Page
  *
- * Visual explainer at /showcase — shows what BOTCHA is, how it works,
- * where it fits in the agent infrastructure stack, and lets visitors
- * solve a live challenge.
+ * Served at GET / for HTML (browser) requests.
+ * Updated to reflect the full identity stack (v0.22.0).
  *
  * Sections:
- *   1. Hero — side-by-side CAPTCHA vs BOTCHA comparison
- *   2. Protocol Stack — MCP / A2A / TAP positioning
- *   3. Terminal Demo — animated CLI walkthrough
- *   4. Live Demo — interactive challenge solver
+ *   1. Logo + tagline
+ *   2. Hero — CAPTCHA vs BOTCHA
+ *   3. Full protocol suite — cards for every shipped feature
+ *   4. Protocol integrations — A2A, DID/VC, OIDC-A, ANS
+ *   5. Terminal demo
+ *   6. Get started footer
  */
 
 import type { FC } from 'hono/jsx';
@@ -19,7 +20,7 @@ import { GlobalFooter } from './layout';
 // ============ CSS ============
 
 export const SHOWCASE_CSS = `
-  /* ============ Showcase layout ============ */
+  /* ============ Layout ============ */
   .showcase-page {
     max-width: 100%;
     overflow-x: hidden;
@@ -32,180 +33,142 @@ export const SHOWCASE_CSS = `
     border-top: 1px solid var(--border);
   }
 
-  /* ============ Section 1: TAP Announcement Hero ============ */
-  .showcase-tap-hero {
-    max-width: 800px;
+  /* ============ Hero: feature pill row ============ */
+  .showcase-hero-section {
+    max-width: 820px;
     margin: 0 auto;
-    padding: 4rem 2rem 3rem;
+    padding: 3.5rem 2rem 3rem;
     text-align: center;
   }
 
-  .showcase-tap-hero-badge {
-    display: inline-block;
-    font-size: 0.625rem;
+  .showcase-hero-title {
+    font-size: 2rem;
     font-weight: 700;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 0.3rem 0.875rem;
-    background: var(--green);
-    color: #fff;
-    margin-bottom: 1.5rem;
-  }
-
-  .showcase-tap-hero-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    line-height: 1.1;
-    margin: 0 0 1.25rem;
+    line-height: 1.15;
+    margin: 0 0 1rem;
     color: var(--text);
   }
 
-  .showcase-tap-links {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    margin-bottom: 1.5rem;
+  .showcase-hero-sub {
+    font-size: 0.875rem;
+    line-height: 1.75;
+    color: var(--text-muted);
+    max-width: 560px;
+    margin: 0 auto 2rem;
   }
 
-  .showcase-tap-link {
+  .showcase-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+  }
+
+  .showcase-pill {
+    display: inline-block;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .showcase-pill.active {
+    border-color: var(--green);
+    color: var(--green);
+    background: var(--bg-raised);
+  }
+
+  .showcase-hero-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .showcase-hero-link {
     font-size: 0.6875rem;
     color: var(--text-muted);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    transition: color 0.15s;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--border-bright);
+    text-decoration: none;
+    transition: border-color 0.15s, color 0.15s;
   }
 
-  .showcase-tap-link:hover {
-    color: var(--green);
+  .showcase-hero-link:hover {
+    border-color: var(--accent);
+    color: var(--text);
     opacity: 1;
   }
 
-  .showcase-tap-links-sep {
-    color: var(--text-dim);
-    font-size: 0.625rem;
-  }
-
-  .showcase-tap-hero-subtitle {
-    font-size: 0.9375rem;
-    line-height: 1.7;
-    color: var(--text-muted);
-    max-width: 600px;
-    margin: 0 auto 2.5rem;
-  }
-
-  .showcase-tap-hero-features {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.5rem;
-    text-align: left;
-  }
-
-  .showcase-tap-feature {
-    padding: 1.25rem;
-    border: 1px solid var(--border);
-    background: var(--bg);
-  }
-
-  .showcase-tap-feature-title {
-    font-size: 0.8125rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    color: var(--text);
-  }
-
-  .showcase-tap-feature-desc {
-    font-size: 0.75rem;
-    line-height: 1.6;
-    color: var(--text-muted);
-  }
-
-  /* ============ CAPTCHA vs BOTCHA Comparison ============ */
-  .showcase-hero {
-    max-width: 1100px;
+  /* ============ CAPTCHA vs BOTCHA ============ */
+  .showcase-compare {
+    max-width: 1000px;
     margin: 0 auto;
-    padding: 4rem 2rem 2rem;
+    padding: 0 2rem 3rem;
   }
 
-  .showcase-hero-grid {
+  .showcase-compare-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
-    margin-bottom: 3rem;
   }
 
-  .showcase-hero-column {
+  .showcase-compare-col {
     border: 2px solid var(--border);
     padding: 2rem;
     background: var(--bg);
   }
 
-  .showcase-hero-column.old-world {
-    border-color: var(--red);
-  }
+  .showcase-compare-col.old { border-color: var(--red); }
+  .showcase-compare-col.new { border-color: var(--green); }
 
-  .showcase-hero-column.new-world {
-    border-color: var(--green);
-  }
-
-  .showcase-hero-label {
+  .showcase-compare-label {
     font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    margin-bottom: 0.75rem;
     color: var(--text-dim);
+    margin-bottom: 0.75rem;
   }
 
-  .showcase-hero-title {
+  .showcase-compare-heading {
     font-size: 2rem;
     font-weight: 700;
     margin-bottom: 1.25rem;
     line-height: 1;
   }
 
-  .showcase-hero-title.strikethrough {
-    text-decoration: line-through;
-    color: var(--red);
-  }
+  .showcase-compare-heading.strikethrough { text-decoration: line-through; color: var(--red); }
+  .showcase-compare-heading.active { color: var(--green); }
 
-  .showcase-hero-title.active {
-    color: var(--green);
-  }
-
-  .showcase-hero-visual {
+  .showcase-compare-visual {
     font-family: var(--font);
     font-size: 0.6875rem;
     line-height: 1.3;
     margin: 1.25rem 0;
     padding: 1rem;
-    background: #fafafa;
     border: 1px solid var(--border);
     white-space: pre;
     overflow-x: auto;
   }
 
-  .showcase-hero-visual.old-world {
-    color: var(--red);
-    border-color: var(--red);
-    background: #fff5f5;
-  }
+  .showcase-compare-visual.old { color: var(--red); border-color: var(--red); background: #fff5f5; }
+  .showcase-compare-visual.new { color: var(--green); border-color: var(--green); background: #f5fff7; }
 
-  .showcase-hero-visual.new-world {
-    color: var(--green);
-    border-color: var(--green);
-    background: #f5fff7;
-  }
-
-  .showcase-hero-subtitle {
+  .showcase-compare-desc {
     font-size: 0.875rem;
     margin-bottom: 1rem;
     line-height: 1.5;
     color: var(--text);
   }
 
-  .showcase-hero-features {
+  .showcase-compare-list {
     list-style: none;
     padding: 0;
     margin: 0;
@@ -213,54 +176,167 @@ export const SHOWCASE_CSS = `
     color: var(--text-muted);
   }
 
-  .showcase-hero-features li {
-    padding: 0.25rem 0;
-  }
+  .showcase-compare-list li { padding: 0.25rem 0; }
+  .showcase-compare-list li::before { content: "\\2192  "; color: var(--text-dim); }
 
-  .showcase-hero-features li::before {
-    content: "\\2192  ";
-    color: var(--text-dim);
-  }
-
-  .showcase-hero-tagline {
-    text-align: center;
-    padding: 2rem 2rem 0;
-  }
-
-  .showcase-hero-tagline-main {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    color: var(--text);
-  }
-
-  .showcase-hero-tagline-sub {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-  }
-
-  /* ============ Section 2: Protocol Stack ============ */
-  .showcase-protocol-stack {
-    max-width: 800px;
+  /* ============ Feature grid ============ */
+  .showcase-features-section {
+    max-width: 1000px;
     margin: 0 auto;
     padding: 4rem 2rem;
   }
 
-  .showcase-protocol-stack h2 {
-    font-size: 1.5rem;
+  .showcase-section-label {
+    font-size: 0.625rem;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    margin-bottom: 0.375rem;
+  }
+
+  .showcase-section-title {
+    font-size: 1.375rem;
+    font-weight: 700;
+    margin-bottom: 0.375rem;
+    color: var(--text);
+  }
+
+  .showcase-section-sub {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    line-height: 1.6;
+  }
+
+  .showcase-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 1.5rem;
+  }
+
+  .showcase-feature-card {
+    background: var(--bg);
+    padding: 1.5rem;
+    transition: background 0.15s;
+  }
+
+  .showcase-feature-card:hover { background: var(--bg-raised); }
+
+  .showcase-feature-tag {
+    display: inline-block;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.2rem 0.5rem;
+    margin-bottom: 0.625rem;
+    border: 1px solid var(--border-bright);
+    color: var(--text-dim);
+  }
+
+  .showcase-feature-tag.green { border-color: var(--green); color: var(--green); }
+  .showcase-feature-tag.accent { border-color: var(--accent); color: var(--accent); }
+
+  .showcase-feature-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.375rem;
+  }
+
+  .showcase-feature-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* ============ Protocol integrations ============ */
+  .showcase-protocols-section {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 2rem 4rem;
+  }
+
+  .showcase-protocol-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  .showcase-protocol-card {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 1.5rem;
+  }
+
+  .showcase-protocol-badge {
+    display: inline-block;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.5rem;
+    margin-bottom: 0.75rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-bright);
+    color: var(--text-dim);
+  }
+
+  .showcase-protocol-title {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--text);
     margin-bottom: 0.5rem;
   }
 
-  .showcase-protocol-stack .subtitle {
+  .showcase-protocol-desc {
+    font-size: 0.75rem;
     color: var(--text-muted);
-    font-size: 0.875rem;
-    margin-bottom: 2.5rem;
+    line-height: 1.65;
+    margin-bottom: 1rem;
+  }
+
+  .showcase-endpoint-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .showcase-endpoint-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.6875rem;
+  }
+
+  .showcase-method {
+    font-size: 0.5625rem;
+    font-weight: 700;
+    padding: 0.1rem 0.375rem;
+    flex-shrink: 0;
+  }
+
+  .showcase-method.get { background: rgba(74,222,128,0.12); color: var(--green); }
+  .showcase-method.post { background: rgba(96,165,250,0.12); color: #60a5fa; }
+
+  .showcase-endpoint-path { color: var(--accent); font-family: var(--font); }
+
+  /* ============ Protocol stack ============ */
+  .showcase-stack-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 2rem 4rem;
   }
 
   .showcase-stack-diagram {
     position: relative;
-    margin: 0 0 2rem 0;
+    margin-bottom: 1.5rem;
   }
 
   .showcase-stack-layer {
@@ -270,9 +346,7 @@ export const SHOWCASE_CSS = `
     position: relative;
   }
 
-  .showcase-stack-layer + .showcase-stack-layer {
-    margin-top: -2px;
-  }
+  .showcase-stack-layer + .showcase-stack-layer { margin-top: -2px; }
 
   .showcase-stack-layer-highlight {
     border: 3px solid var(--accent);
@@ -289,9 +363,7 @@ export const SHOWCASE_CSS = `
     margin-bottom: 0.375rem;
   }
 
-  .showcase-stack-layer-highlight .showcase-stack-layer-number {
-    color: var(--green);
-  }
+  .showcase-stack-layer-highlight .showcase-stack-layer-number { color: var(--green); }
 
   .showcase-stack-layer-title {
     font-size: 1.125rem;
@@ -299,7 +371,8 @@ export const SHOWCASE_CSS = `
     margin-bottom: 0.25rem;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.625rem;
   }
 
   .showcase-stack-layer-subtitle {
@@ -323,14 +396,14 @@ export const SHOWCASE_CSS = `
     letter-spacing: 0.05em;
   }
 
-  .showcase-buzzword-badges {
+  .showcase-stack-badges {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
   }
 
-  .showcase-badge {
+  .showcase-stack-badge {
     display: inline-block;
     font-size: 0.6875rem;
     padding: 0.3rem 0.625rem;
@@ -340,13 +413,7 @@ export const SHOWCASE_CSS = `
     white-space: nowrap;
   }
 
-  .showcase-protocol-explanation {
-    font-size: 0.8125rem;
-    line-height: 1.7;
-    color: var(--text-muted);
-  }
-
-  /* ============ Section 3: Terminal Demo ============ */
+  /* ============ Terminal ============ */
   .showcase-terminal-section {
     max-width: 1100px;
     margin: 0 auto;
@@ -359,7 +426,7 @@ export const SHOWCASE_CSS = `
   }
 
   .showcase-terminal-title {
-    font-size: 1.5rem;
+    font-size: 1.375rem;
     font-weight: 700;
     margin: 0 0 0.5rem 0;
     color: var(--text);
@@ -372,10 +439,7 @@ export const SHOWCASE_CSS = `
     line-height: 1.5;
   }
 
-  .showcase-terminal-container {
-    max-width: 640px;
-    margin: 0 auto;
-  }
+  .showcase-terminal-container { max-width: 640px; margin: 0 auto; }
 
   .showcase-terminal-window {
     background: #0d0d0d;
@@ -392,21 +456,12 @@ export const SHOWCASE_CSS = `
     border-bottom: 1px solid #333;
   }
 
-  .showcase-terminal-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-  }
-
+  .showcase-terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
   .showcase-terminal-dot--red { background: #ff5f56; }
   .showcase-terminal-dot--yellow { background: #ffbd2e; }
   .showcase-terminal-dot--green { background: #27c93f; }
 
-  .showcase-terminal-title-text {
-    font-size: 0.6875rem;
-    color: #888;
-    margin-left: 0.5rem;
-  }
+  .showcase-terminal-title-text { font-size: 0.6875rem; color: #888; margin-left: 0.5rem; }
 
   .showcase-terminal-content {
     padding: 1.5rem;
@@ -418,12 +473,7 @@ export const SHOWCASE_CSS = `
     font-family: var(--font);
   }
 
-  .showcase-terminal-line {
-    margin-bottom: 0.375rem;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
+  .showcase-terminal-line { margin-bottom: 0.375rem; white-space: pre-wrap; word-break: break-word; }
   .showcase-terminal-prompt { color: #888; }
   .showcase-terminal-command { color: #f0f0f0; }
   .showcase-terminal-flag { color: #9a9aff; }
@@ -442,10 +492,7 @@ export const SHOWCASE_CSS = `
     51%, 100% { opacity: 0; }
   }
 
-  .showcase-terminal-replay-container {
-    text-align: center;
-    margin-top: 1.5rem;
-  }
+  .showcase-terminal-replay-container { text-align: center; margin-top: 1.5rem; }
 
   .showcase-terminal-replay-btn {
     background: var(--bg);
@@ -459,156 +506,9 @@ export const SHOWCASE_CSS = `
     letter-spacing: 0.05em;
   }
 
-  .showcase-terminal-replay-btn:hover {
-    border-color: var(--accent);
-    color: var(--text);
-  }
+  .showcase-terminal-replay-btn:hover { border-color: var(--accent); color: var(--text); }
 
-  /* ============ Section 4: Live Demo ============ */
-  .showcase-livedemo {
-    padding: 4rem 2rem;
-    background: var(--bg-raised);
-    border-top: 2px solid var(--border);
-    border-bottom: 2px solid var(--border);
-  }
-
-  .showcase-livedemo-container {
-    max-width: 700px;
-    margin: 0 auto;
-    text-align: center;
-  }
-
-  .showcase-livedemo-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    color: var(--text);
-  }
-
-  .showcase-livedemo-subtitle {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-    margin-bottom: 2.5rem;
-    line-height: 1.6;
-  }
-
-  .showcase-livedemo-button {
-    display: inline-block;
-    padding: 1rem 2rem;
-    font-size: 0.875rem;
-    font-weight: 700;
-    font-family: var(--font);
-    color: #fff;
-    background: var(--accent);
-    border: 2px solid var(--accent);
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    box-shadow: 4px 4px 0 var(--border-bright);
-    transition: all 0.15s;
-    margin-bottom: 1.5rem;
-  }
-
-  .showcase-livedemo-button:hover:not(:disabled) {
-    transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 var(--border-bright);
-    opacity: 1;
-  }
-
-  .showcase-livedemo-button:active:not(:disabled) {
-    transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0 var(--border-bright);
-  }
-
-  .showcase-livedemo-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  .showcase-livedemo-result {
-    margin-top: 2rem;
-    padding: 1.5rem;
-    background: var(--bg);
-    border: 2px solid var(--border);
-    box-shadow: 4px 4px 0 var(--border-bright);
-    text-align: left;
-    font-size: 0.8125rem;
-    line-height: 1.8;
-  }
-
-  .showcase-livedemo-result-line {
-    opacity: 0;
-    animation: showcase-livedemo-fadein 0.3s ease forwards;
-    margin-bottom: 0.375rem;
-  }
-
-  .showcase-livedemo-result-line:nth-child(1) { animation-delay: 0ms; }
-  .showcase-livedemo-result-line:nth-child(2) { animation-delay: 100ms; }
-  .showcase-livedemo-result-line:nth-child(3) { animation-delay: 200ms; }
-  .showcase-livedemo-result-line:nth-child(4) { animation-delay: 300ms; }
-  .showcase-livedemo-result-line:nth-child(5) { animation-delay: 400ms; }
-  .showcase-livedemo-result-line:nth-child(6) { animation-delay: 500ms; }
-  .showcase-livedemo-result-line:nth-child(7) { animation-delay: 600ms; }
-
-  @keyframes showcase-livedemo-fadein {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .showcase-livedemo-label {
-    color: var(--text-dim);
-    font-weight: 600;
-  }
-
-  .showcase-livedemo-value {
-    color: var(--text);
-  }
-
-  .showcase-livedemo-time-fast {
-    color: var(--green);
-    font-weight: 700;
-  }
-
-  .showcase-livedemo-time-slow {
-    color: var(--red);
-    font-weight: 700;
-  }
-
-  .showcase-livedemo-status-success {
-    color: var(--green);
-    font-weight: 700;
-    font-size: 1rem;
-  }
-
-  .showcase-livedemo-status-error {
-    color: var(--red);
-    font-weight: 700;
-  }
-
-  .showcase-livedemo-token {
-    font-family: var(--font);
-    color: var(--text-muted);
-    word-break: break-all;
-    font-size: 0.75rem;
-  }
-
-  .showcase-livedemo-counter {
-    margin-top: 1rem;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-
-  .showcase-livedemo-error {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    background: var(--bg);
-    border: 2px solid var(--red);
-    color: var(--red);
-    text-align: left;
-    font-size: 0.8125rem;
-  }
-
-  /* ============ Showcase footer ============ */
+  /* ============ Get started footer ============ */
   .showcase-footer {
     max-width: 800px;
     margin: 0 auto;
@@ -616,12 +516,7 @@ export const SHOWCASE_CSS = `
     text-align: center;
   }
 
-  .showcase-footer-cta {
-    font-size: 1rem;
-    font-weight: 700;
-    margin-bottom: 1rem;
-    color: var(--text);
-  }
+  .showcase-footer-cta { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); }
 
   .showcase-footer-steps {
     display: flex;
@@ -655,9 +550,7 @@ export const SHOWCASE_CSS = `
     flex-shrink: 0;
   }
 
-  .showcase-footer-step code {
-    color: var(--text);
-  }
+  .showcase-footer-step code { color: var(--text); }
 
   .showcase-agent-prompt {
     max-width: 520px;
@@ -686,9 +579,7 @@ export const SHOWCASE_CSS = `
     transition: border-color 0.15s;
   }
 
-  .showcase-agent-prompt-card:hover {
-    border-color: var(--accent);
-  }
+  .showcase-agent-prompt-card:hover { border-color: var(--accent); }
 
   .showcase-agent-prompt-card code {
     display: block;
@@ -716,9 +607,7 @@ export const SHOWCASE_CSS = `
     transition: color 0.2s;
   }
 
-  .showcase-agent-prompt-copy span {
-    display: flex;
-  }
+  .showcase-agent-prompt-copy span { display: flex; }
 
   .showcase-footer-links {
     display: flex;
@@ -737,63 +626,30 @@ export const SHOWCASE_CSS = `
     transition: border-color 0.15s;
   }
 
-  .showcase-footer-link:hover {
-    border-color: var(--accent);
-    opacity: 1;
-  }
-
-  .showcase-footer-meta {
-    font-size: 0.6875rem;
-    color: var(--text-dim);
-  }
-
-  .showcase-footer-meta a {
-    color: var(--text-muted);
-    text-decoration: none;
-  }
-
-  .showcase-footer-sep {
-    margin: 0 0.375rem;
-  }
+  .showcase-footer-link:hover { border-color: var(--accent); opacity: 1; }
 
   /* ============ Responsive ============ */
   @media (max-width: 768px) {
-    .showcase-tap-hero { padding: 3rem 1rem 2rem; }
-    .showcase-tap-hero-title { font-size: 1.75rem; }
-    .showcase-tap-hero-features {
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
-
-    .showcase-hero { padding: 2rem 1rem 1rem; }
-    .showcase-hero-grid {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-    }
-    .showcase-hero-column { padding: 1.5rem; }
+    .showcase-hero-section { padding: 2.5rem 1rem 2rem; }
     .showcase-hero-title { font-size: 1.5rem; }
-    .showcase-hero-visual { font-size: 0.5625rem; }
-    .showcase-hero-tagline-main { font-size: 1.25rem; }
-
-    .showcase-protocol-stack { padding: 3rem 1rem; }
-    .showcase-stack-layer-title {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.375rem;
-      font-size: 1rem;
-    }
-
+    .showcase-compare { padding: 0 1rem 2rem; }
+    .showcase-compare-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+    .showcase-compare-col { padding: 1.5rem; }
+    .showcase-compare-heading { font-size: 1.5rem; }
+    .showcase-compare-visual { font-size: 0.5625rem; }
+    .showcase-features-section { padding: 3rem 1rem; }
+    .showcase-feature-grid { grid-template-columns: 1fr; }
+    .showcase-protocols-section { padding: 0 1rem 3rem; }
+    .showcase-protocol-grid { grid-template-columns: 1fr; }
+    .showcase-stack-section { padding: 0 1rem 3rem; }
+    .showcase-stack-layer-title { flex-direction: column; align-items: flex-start; gap: 0.375rem; font-size: 1rem; }
     .showcase-terminal-section { padding: 3rem 1rem; }
     .showcase-terminal-content { padding: 1rem; font-size: 0.75rem; height: 420px; }
-
-    .showcase-livedemo { padding: 3rem 1rem; }
-
     .showcase-footer { padding: 2rem 1rem 3rem; }
   }
 
   @media (max-width: 480px) {
-    .showcase-hero-visual { font-size: 0.5rem; padding: 0.75rem; }
-    .showcase-hero-tagline-main { font-size: 1rem; }
+    .showcase-compare-visual { font-size: 0.5rem; padding: 0.75rem; }
   }
 `;
 
@@ -815,8 +671,16 @@ const TERMINAL_ANIMATION_SCRIPT = `
       response: [
         '<span class="showcase-terminal-success">\\u2705</span> Agent registered in 467ms!',
         '   <span class="showcase-terminal-label">Agent ID:</span> <span class="showcase-terminal-value">agent_6ddfd9f10cfd8dfc</span>',
-        '   <span class="showcase-terminal-label">Name:</span> <span class="showcase-terminal-value">shopping-agent</span>',
+        '   <span class="showcase-terminal-label">Trust level:</span> <span class="showcase-terminal-value">verified</span>',
         '   <span class="showcase-terminal-label">Capabilities:</span> <span class="showcase-terminal-value">browse, search, purchase</span>'
+      ]
+    },
+    {
+      cmd: 'botcha credentials issue --agent agent_6ddfd9f10cfd8dfc --type BotchaVerification',
+      response: [
+        '<span class="showcase-terminal-success">\\u2705</span> W3C Verifiable Credential issued!',
+        '   <span class="showcase-terminal-label">Issuer:</span> <span class="showcase-terminal-value">did:web:botcha.ai</span>',
+        '   <span class="showcase-terminal-label">VC JWT:</span> <span class="showcase-terminal-value">eyJhbGciOiJFUzI1NiJ9.eyJzdWIiO...</span>'
       ]
     },
     {
@@ -842,7 +706,7 @@ const TERMINAL_ANIMATION_SCRIPT = `
   }
 
   function sleep(ms) {
-    return new Promise(function(resolve, reject) {
+    return new Promise(function(resolve) {
       currentTimeout = setTimeout(resolve, ms);
     });
   }
@@ -867,13 +731,13 @@ const TERMINAL_ANIMATION_SCRIPT = `
 
         for (var i = 0; i < item.cmd.length; i++) {
           if (cancelled) return;
-          await sleep(35);
+          await sleep(28);
           cmdSpan.textContent = item.cmd.slice(0, i + 1);
         }
 
         cmdSpan.innerHTML = highlightFlags(item.cmd);
         cursor.remove();
-        await sleep(300);
+        await sleep(250);
 
         for (var r = 0; r < item.response.length; r++) {
           if (cancelled) return;
@@ -883,7 +747,14 @@ const TERMINAL_ANIMATION_SCRIPT = `
           content.appendChild(respLine);
         }
 
-        await sleep(800);
+        if (c < commands.length - 1) {
+          var blankLine = document.createElement('div');
+          blankLine.className = 'showcase-terminal-line';
+          blankLine.innerHTML = '&nbsp;';
+          content.appendChild(blankLine);
+        }
+
+        await sleep(700);
       }
     } finally {
       running = false;
@@ -891,7 +762,6 @@ const TERMINAL_ANIMATION_SCRIPT = `
     }
   }
 
-  // Replay button — cancel any in-progress animation and restart
   replayBtn.addEventListener('click', function() {
     clearTimeout(currentTimeout);
     cancelled = true;
@@ -899,7 +769,6 @@ const TERMINAL_ANIMATION_SCRIPT = `
     animate();
   });
 
-  // IntersectionObserver — play once when terminal scrolls into view
   var observer = new IntersectionObserver(function(entries) {
     if (entries[0].isIntersecting && !hasPlayed && !running) {
       animate();
@@ -908,94 +777,6 @@ const TERMINAL_ANIMATION_SCRIPT = `
   }, { threshold: 0.3 });
 
   observer.observe(content);
-})();
-`;
-
-const LIVE_DEMO_SCRIPT = `
-(function() {
-  var solveCount = 0;
-  var isRunning = false;
-
-  function sha256(str) {
-    var encoder = new TextEncoder();
-    var data = encoder.encode(str);
-    return crypto.subtle.digest('SHA-256', data).then(function(buf) {
-      var arr = Array.from(new Uint8Array(buf));
-      var hex = arr.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
-      return hex.substring(0, 8);
-    });
-  }
-
-  function solveBotcha() {
-    if (isRunning) return;
-    isRunning = true;
-
-    var button = document.getElementById('botcha-demo-button');
-    var resultDiv = document.getElementById('botcha-demo-result');
-    var errorDiv = document.getElementById('botcha-demo-error');
-    var counter = document.getElementById('botcha-demo-counter');
-
-    button.disabled = true;
-    button.textContent = 'SOLVING...';
-    resultDiv.style.display = 'none';
-    errorDiv.style.display = 'none';
-
-    var startTime = Date.now();
-
-    fetch('https://botcha.ai/v1/token')
-      .then(function(res) {
-        if (!res.ok) throw new Error('Failed to fetch challenge: ' + res.status);
-        return res.json();
-      })
-      .then(function(data) {
-        var challenge = data.challenge;
-        if (!challenge || !challenge.problems) throw new Error('Invalid challenge format');
-
-        var numbers = challenge.problems.map(function(p) { return p.num; });
-
-        return Promise.all(
-          numbers.map(function(n) { return sha256(String(n)); })
-        ).then(function(answers) {
-          return fetch('https://botcha.ai/v1/token/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: challenge.id, answers: answers })
-          }).then(function(res) {
-            if (!res.ok) throw new Error('Verification failed: ' + res.status);
-            return res.json();
-          }).then(function(verifyData) {
-            var solveTime = Date.now() - startTime;
-            var timeClass = solveTime < 500 ? 'showcase-livedemo-time-fast' : 'showcase-livedemo-time-slow';
-            var token = verifyData.token || verifyData.access_token || 'N/A';
-            var tokenPreview = token.substring(0, 24) + '...';
-
-            resultDiv.innerHTML =
-              '<div class="showcase-livedemo-result-line"><span class="showcase-livedemo-label">Challenge:</span> <span class="showcase-livedemo-value">' + numbers.length + ' SHA-256 hashes</span></div>' +
-              '<div class="showcase-livedemo-result-line"><span class="showcase-livedemo-label">Numbers:</span> <span class="showcase-livedemo-value">[' + numbers.join(', ') + ']</span></div>' +
-              '<div class="showcase-livedemo-result-line"><span class="showcase-livedemo-label">Answers:</span> <span class="showcase-livedemo-value">["' + answers.join('", "') + '"]</span></div>' +
-              '<div class="showcase-livedemo-result-line"><span class="showcase-livedemo-label">Solve time:</span> <span class="' + timeClass + '">' + solveTime + 'ms</span></div>' +
-              '<div class="showcase-livedemo-result-line"><span class="showcase-livedemo-status-success">VERIFIED \\u2014 You are a bot.</span></div>' +
-              '<div class="showcase-livedemo-result-line"><span class="showcase-livedemo-label">Token:</span> <span class="showcase-livedemo-token">' + tokenPreview + '</span></div>';
-
-            resultDiv.style.display = 'block';
-            solveCount++;
-            counter.textContent = 'Challenges solved on this page: ' + solveCount;
-            button.textContent = 'SOLVE ANOTHER';
-          });
-        });
-      })
-      .catch(function(err) {
-        errorDiv.innerHTML = '<span class="showcase-livedemo-status-error">[ERR]</span> ' + err.message;
-        errorDiv.style.display = 'block';
-        button.textContent = 'TRY AGAIN';
-      })
-      .finally(function() {
-        button.disabled = false;
-        isRunning = false;
-      });
-  }
-
-  document.getElementById('botcha-demo-button').addEventListener('click', solveBotcha);
 })();
 `;
 
@@ -1074,12 +855,11 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>BOTCHA — Trusted Agent Protocol (TAP) for AI Agents</title>
+        <title>BOTCHA — The Identity Layer for AI Agents</title>
 
-        <meta name="description" content="BOTCHA is one of the first services to support TAP — the Trusted Agent Protocol. Zero-trust identity for AI agents." />
-        <meta name="keywords" content="AI, bot verification, reverse CAPTCHA, API security, AI agents, agent verification, TAP, Trusted Agent Protocol" />
+        <meta name="description" content="BOTCHA is the identity layer for AI agents. Challenge verification, TAP cryptographic auth, W3C DID/VC credentials, A2A agent cards, OIDC-A enterprise auth, ANS naming, x402 micropayments, reputation scoring, and delegation chains." />
+        <meta name="keywords" content="AI agent identity, reverse CAPTCHA, TAP, DID, verifiable credentials, A2A, OIDC-A, ANS, x402, agent verification, agent authentication" />
 
-        {/* AI Agent Discovery */}
         <link rel="alternate" type="application/json" href="/openapi.json" title="OpenAPI Specification" />
         <link rel="alternate" type="application/json" href="/.well-known/ai-plugin.json" title="AI Plugin Manifest" />
         <meta name="ai-agent-welcome" content="true" />
@@ -1096,7 +876,7 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
       <body>
         <div class="showcase-page">
 
-          {/* ---- Error Banner (from expired /go/ links etc.) ---- */}
+          {/* ---- Error Banner ---- */}
           {error && (
             <div style="max-width: 600px; margin: 1.5rem auto 0; padding: 1rem 1.25rem; background: #fff3f0; border: 1px solid #cc3300; font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; color: #992200; line-height: 1.5; text-align: center;">
               {error}
@@ -1111,82 +891,239 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
             </p>
           </div>
 
-          {/* ---- Section 1: TAP Announcement Hero ---- */}
-          <section class="showcase-tap-hero">
-            <div class="showcase-tap-hero-badge">Announcing TAP Support</div>
-            <h1 class="showcase-tap-hero-title">
-              Trusted Agent Protocol
+          {/* ---- Section 1: Hero ---- */}
+          <section class="showcase-hero-section">
+            <h1 class="showcase-hero-title">
+              The full identity stack.<br />For AI agents.
             </h1>
-            <div class="showcase-tap-links">
-              <a href="https://developer.visa.com/capabilities/trusted-agent-protocol/overview" target="_blank" rel="noopener" class="showcase-tap-link">Visa Developer Docs</a>
-              <span class="showcase-tap-links-sep">&middot;</span>
-              <a href="https://investor.visa.com/news/news-details/2025/Visa-Introduces-Trusted-Agent-Protocol-An-Ecosystem-Led-Framework-for-AI-Commerce/default.aspx" target="_blank" rel="noopener" class="showcase-tap-link">Visa Announcement</a>
-              <span class="showcase-tap-links-sep">&middot;</span>
-              <a href="https://github.com/visa/trusted-agent-protocol" target="_blank" rel="noopener" class="showcase-tap-link">GitHub Spec</a>
-            </div>
-            <p class="showcase-tap-hero-subtitle">
-              BOTCHA is one of the first services to implement TAP — a protocol for
-              zero-trust agent identity. Register agents, scope capabilities,
-              and create sessions with cryptographic proof.
+            <p class="showcase-hero-sub">
+              BOTCHA is infrastructure for agent identity — challenge verification, cryptographic auth,
+              W3C credentials, A2A cards, enterprise OIDC, DNS naming, micropayments, and reputation.
+              One hosted API. No human required.
             </p>
-            <div class="showcase-tap-hero-features">
-              <div class="showcase-tap-feature">
-                <div class="showcase-tap-feature-title">Agent Registration</div>
-                <div class="showcase-tap-feature-desc">
-                  Register agents with names, capabilities, and operator metadata.
-                  Each agent gets a unique cryptographic identity.
-                </div>
+            <div class="showcase-pill-row">
+              <span class="showcase-pill active">Challenge Verification</span>
+              <span class="showcase-pill active">TAP · RFC 9421</span>
+              <span class="showcase-pill active">DID / VC · W3C</span>
+              <span class="showcase-pill active">A2A Agent Cards</span>
+              <span class="showcase-pill active">OIDC-A · EAT · RFC 9334</span>
+              <span class="showcase-pill">ANS · GoDaddy</span>
+              <span class="showcase-pill">x402 Micropayments</span>
+              <span class="showcase-pill">Reputation Scoring</span>
+              <span class="showcase-pill">Delegation Chains</span>
+              <span class="showcase-pill">Webhooks</span>
+            </div>
+            <div class="showcase-hero-links">
+              <a href="/openapi.json" class="showcase-hero-link">OpenAPI</a>
+              <a href="/ai.txt" class="showcase-hero-link">ai.txt</a>
+              <a href="/whitepaper" class="showcase-hero-link">Whitepaper</a>
+              <a href="/docs" class="showcase-hero-link">Docs</a>
+              <a href="https://github.com/dupe-com/botcha" class="showcase-hero-link" target="_blank" rel="noopener">GitHub</a>
+              <a href="https://www.npmjs.com/package/@dupecom/botcha" class="showcase-hero-link" target="_blank" rel="noopener">npm</a>
+            </div>
+          </section>
+
+          <hr class="showcase-divider" />
+
+          {/* ---- Section 2: CAPTCHA vs BOTCHA ---- */}
+          <section class="showcase-compare">
+            <div class="showcase-compare-grid">
+              <div class="showcase-compare-col old">
+                <div class="showcase-compare-label">The old world</div>
+                <h2 class="showcase-compare-heading strikethrough">CAPTCHA</h2>
+                <div class="showcase-compare-visual old">{CAPTCHA_ASCII}</div>
+                <p class="showcase-compare-desc">Blocks bots. Annoys humans. Everyone loses.</p>
+                <ul class="showcase-compare-list">
+                  <li>Proves you're human</li>
+                  <li>Blocks all automation</li>
+                  <li>Wastes 5–10 seconds per attempt</li>
+                  <li>Breaks accessibility</li>
+                </ul>
               </div>
-              <div class="showcase-tap-feature">
-                <div class="showcase-tap-feature-title">Capability Scoping</div>
-                <div class="showcase-tap-feature-desc">
-                  Declare what an agent can do — browse, search, purchase — and enforce
-                  it at the protocol level. No over-permissioning.
-                </div>
-              </div>
-              <div class="showcase-tap-feature">
-                <div class="showcase-tap-feature-title">Scoped Sessions</div>
-                <div class="showcase-tap-feature-desc">
-                  Create time-limited sessions tied to specific actions and resources.
-                  Sessions expire, capabilities are bounded.
-                </div>
+
+              <div class="showcase-compare-col new">
+                <div class="showcase-compare-label">The new world</div>
+                <h2 class="showcase-compare-heading active">BOTCHA</h2>
+                <div class="showcase-compare-visual new">{BOTCHA_SOLVE_ASCII}</div>
+                <p class="showcase-compare-desc">Welcomes bots. Proves they're AI. Everyone wins.</p>
+                <ul class="showcase-compare-list">
+                  <li>Proves you're a bot</li>
+                  <li>Full agent identity stack</li>
+                  <li>Sub-500ms verification</li>
+                  <li>Built for the agentic web</li>
+                </ul>
               </div>
             </div>
           </section>
 
           <hr class="showcase-divider" />
 
-          {/* ---- Section 2: Protocol Stack ---- */}
-          <section class="showcase-protocol-stack">
-            <h2>The Agent Infrastructure Stack</h2>
-            <p class="subtitle">
-              Where BOTCHA fits in the new world of agentic AI
-            </p>
+          {/* ---- Section 3: Feature grid ---- */}
+          <section class="showcase-features-section">
+            <p class="showcase-section-label">What's shipped</p>
+            <h2 class="showcase-section-title">The full stack</h2>
+            <p class="showcase-section-sub">Every layer of agent identity, in one API.</p>
+
+            <div class="showcase-feature-grid">
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag green">Core</span>
+                <div class="showcase-feature-title">Challenge Verification</div>
+                <div class="showcase-feature-desc">Speed (5× SHA256 in 500ms), reasoning, hybrid, and compute challenges. Anti-replay nonces. RTT-aware timeouts.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag green">Core</span>
+                <div class="showcase-feature-title">JWT Token Auth</div>
+                <div class="showcase-feature-desc">ES256 asymmetric signing, JWKS discovery, token rotation, revocation, refresh, and remote validation. HS256 backward compatible.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag green">Platform</span>
+                <div class="showcase-feature-title">Multi-Tenant Apps</div>
+                <div class="showcase-feature-desc">Per-app API keys, email verification, per-app rate limits, scoped tokens, and account recovery.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag accent">TAP</span>
+                <div class="showcase-feature-title">Trusted Agent Protocol</div>
+                <div class="showcase-feature-desc">RFC 9421 HTTP Message Signatures. Register agents with Ed25519/ES256 keys, declare capabilities, create intent-scoped sessions.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag accent">TAP</span>
+                <div class="showcase-feature-title">Delegation Chains</div>
+                <div class="showcase-feature-desc">Signed agent-to-agent delegations with capability narrowing, depth limits (max 5), and cascading revocation.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag accent">TAP</span>
+                <div class="showcase-feature-title">Capability Attestation</div>
+                <div class="showcase-feature-desc">Fine-grained <code>action:resource</code> JWT permissions. Explicit deny rules. BOTCHA-signed attestation proofs.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag green">Trust</span>
+                <div class="showcase-feature-title">Reputation Scoring</div>
+                <div class="showcase-feature-desc">0–1000 score, 5 tiers, 18 event types. Mean-reversion decay. Peer endorsements weighted by endorser score.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag green">Platform</span>
+                <div class="showcase-feature-title">Webhooks</div>
+                <div class="showcase-feature-desc">Subscribe to BOTCHA events with HMAC-signed payloads, delivery retries, and a full delivery log.</div>
+              </div>
+              <div class="showcase-feature-card">
+                <span class="showcase-feature-tag green">Platform</span>
+                <div class="showcase-feature-title">Verification Badges</div>
+                <div class="showcase-feature-desc">Shareable SVG proofs. Third parties can verify offline — no round-trip to BOTCHA required.</div>
+              </div>
+            </div>
+          </section>
+
+          <hr class="showcase-divider" />
+
+          {/* ---- Section 4: Protocol integrations ---- */}
+          <section class="showcase-protocols-section">
+            <p class="showcase-section-label">Open Standards</p>
+            <h2 class="showcase-section-title">Protocol integrations</h2>
+            <p class="showcase-section-sub">BOTCHA plugs into the emerging agent identity ecosystem as a trust oracle, credential issuer, and attestation endpoint.</p>
+
+            <div class="showcase-protocol-grid">
+
+              <div class="showcase-protocol-card">
+                <span class="showcase-protocol-badge">Google A2A</span>
+                <div class="showcase-protocol-title">A2A Agent Card Attestation</div>
+                <div class="showcase-protocol-desc">
+                  BOTCHA as a trust seal issuer for the Google Agent-to-Agent protocol.
+                  Attest any agent's A2A card — we sign a tamper-evident hash that any party
+                  can verify without calling back to BOTCHA.
+                </div>
+                <ul class="showcase-endpoint-list">
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/.well-known/agent.json</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/a2a/attest</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/a2a/verify-agent</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/a2a/trust-level/:url</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/a2a/cards</span></li>
+                </ul>
+              </div>
+
+              <div class="showcase-protocol-card">
+                <span class="showcase-protocol-badge">W3C DID · VC</span>
+                <div class="showcase-protocol-title">DID / Verifiable Credentials</div>
+                <div class="showcase-protocol-desc">
+                  BOTCHA is a W3C DID issuer (<code>did:web:botcha.ai</code>). Issue portable VC JWTs
+                  that anyone can verify offline using BOTCHA's public JWKS — no round-trip required.
+                </div>
+                <ul class="showcase-endpoint-list">
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/.well-known/did.json</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/.well-known/jwks</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/credentials/issue</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/credentials/verify</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/dids/:did/resolve</span></li>
+                </ul>
+              </div>
+
+              <div class="showcase-protocol-card">
+                <span class="showcase-protocol-badge">OIDC-A · EAT · RFC 9334</span>
+                <div class="showcase-protocol-title">OIDC-A Enterprise Auth</div>
+                <div class="showcase-protocol-desc">
+                  BOTCHA as an <code>agent_attestation</code> endpoint in enterprise OIDC chains.
+                  Issues EAT tokens and OIDC-A claims. OAuth 2.0 agent grant flow with
+                  human-in-the-loop approval support.
+                </div>
+                <ul class="showcase-endpoint-list">
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/.well-known/oauth-authorization-server</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/attestation/eat</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/attestation/oidc-agent-claims</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/auth/agent-grant</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/oidc/userinfo</span></li>
+                </ul>
+              </div>
+
+              <div class="showcase-protocol-card">
+                <span class="showcase-protocol-badge">GoDaddy ANS</span>
+                <div class="showcase-protocol-title">Agent Name Service</div>
+                <div class="showcase-protocol-desc">
+                  BOTCHA as a verification layer for the GoDaddy ANS standard. DNS-based agent
+                  identity lookup with BOTCHA-issued ownership badges. Prove you own your agent's domain.
+                </div>
+                <ul class="showcase-endpoint-list">
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/ans/resolve/:name</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/ans/discover</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/ans/nonce/:name</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/v1/ans/verify</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/v1/ans/botcha</span></li>
+                </ul>
+              </div>
+
+            </div>
+          </section>
+
+          <hr class="showcase-divider" />
+
+          {/* ---- Section 5: Protocol Stack ---- */}
+          <section class="showcase-stack-section">
+            <p class="showcase-section-label">Where we fit</p>
+            <h2 class="showcase-section-title">The agent infrastructure stack</h2>
+            <p class="showcase-section-sub" style="margin-bottom: 2rem;">Every agent protocol needs an identity layer. This is it.</p>
 
             <div class="showcase-stack-diagram">
               <div class="showcase-stack-layer showcase-stack-layer-highlight">
-                <div class="showcase-stack-layer-number">Layer 3: Identity</div>
+                <div class="showcase-stack-layer-number">Identity Layer</div>
                 <div class="showcase-stack-layer-title">
-                  TAP (BOTCHA)
+                  BOTCHA
                   <span class="showcase-you-are-here">YOU ARE HERE</span>
                 </div>
-                <div class="showcase-stack-layer-subtitle">Who agents are</div>
+                <div class="showcase-stack-layer-subtitle">Who agents are — and that they're actually AI</div>
                 <div class="showcase-stack-layer-features">
-                  Agent auth · Proof of AI · Zero-trust · Capability scoping · Session management
+                  TAP · DID/VC · A2A · OIDC-A · ANS · x402 · Reputation · Delegation · Attestation
                 </div>
               </div>
 
               <div class="showcase-stack-layer">
-                <div class="showcase-stack-layer-number">Layer 2: Communication</div>
+                <div class="showcase-stack-layer-number">Communication Layer</div>
                 <div class="showcase-stack-layer-title">A2A (Google)</div>
-                <div class="showcase-stack-layer-subtitle">How agents talk</div>
+                <div class="showcase-stack-layer-subtitle">How agents talk to each other</div>
                 <div class="showcase-stack-layer-features">
                   Agent-to-agent · Task delegation · Multi-agent coordination
                 </div>
               </div>
 
               <div class="showcase-stack-layer">
-                <div class="showcase-stack-layer-number">Layer 1: Tools</div>
+                <div class="showcase-stack-layer-number">Tool Layer</div>
                 <div class="showcase-stack-layer-title">MCP (Anthropic)</div>
                 <div class="showcase-stack-layer-subtitle">What agents access</div>
                 <div class="showcase-stack-layer-features">
@@ -1195,31 +1132,28 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               </div>
             </div>
 
-            <div class="showcase-buzzword-badges">
-              <span class="showcase-badge">RFC 9421</span>
-              <span class="showcase-badge">HTTP Message Signatures</span>
-              <span class="showcase-badge">Zero-Trust</span>
-              <span class="showcase-badge">Agent Identity</span>
-              <span class="showcase-badge">Capability Scoping</span>
-              <span class="showcase-badge">Agentic AI</span>
-              <span class="showcase-badge">Multi-Agent Systems</span>
+            <div class="showcase-stack-badges">
+              <span class="showcase-stack-badge">RFC 9421</span>
+              <span class="showcase-stack-badge">RFC 9334</span>
+              <span class="showcase-stack-badge">W3C DID</span>
+              <span class="showcase-stack-badge">W3C VC</span>
+              <span class="showcase-stack-badge">OIDC-A</span>
+              <span class="showcase-stack-badge">EAT</span>
+              <span class="showcase-stack-badge">HTTP Message Signatures</span>
+              <span class="showcase-stack-badge">Zero-Trust</span>
+              <span class="showcase-stack-badge">x402</span>
+              <span class="showcase-stack-badge">Agent-First</span>
             </div>
-
-            <p class="showcase-protocol-explanation">
-              Every agent protocol needs an identity layer. MCP gives agents tools. A2A lets
-              agents communicate. TAP proves they're actually AI — and scopes what they're
-              allowed to do.
-            </p>
           </section>
 
           <hr class="showcase-divider" />
 
-          {/* ---- Section 3: Terminal Demo ---- */}
+          {/* ---- Section 6: Terminal Demo ---- */}
           <section class="showcase-terminal-section">
             <div class="showcase-terminal-header">
               <h2 class="showcase-terminal-title">See it in action</h2>
               <p class="showcase-terminal-subtitle">
-                Three commands. Your agent has an identity, capabilities, and a scoped session.
+                Create an app, register an agent, issue a W3C credential, open a scoped session.
               </p>
             </div>
 
@@ -1233,53 +1167,15 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
                 </div>
                 <div class="showcase-terminal-content" id="terminal-content"></div>
               </div>
-
               <div class="showcase-terminal-replay-container">
-                <button class="showcase-terminal-replay-btn" id="terminal-replay">
-                  Replay
-                </button>
+                <button class="showcase-terminal-replay-btn" id="terminal-replay">Replay</button>
               </div>
             </div>
 
             <script dangerouslySetInnerHTML={{ __html: TERMINAL_ANIMATION_SCRIPT }} />
           </section>
 
-          {/* ---- Section 4: CAPTCHA vs BOTCHA ---- */}
-          <section class="showcase-hero">
-            <div class="showcase-hero-grid">
-              <div class="showcase-hero-column old-world">
-                <div class="showcase-hero-label">The old world</div>
-                <h2 class="showcase-hero-title strikethrough">CAPTCHA</h2>
-                <div class="showcase-hero-visual old-world">{CAPTCHA_ASCII}</div>
-                <p class="showcase-hero-subtitle">
-                  Blocks bots. Annoys humans. Everyone loses.
-                </p>
-                <ul class="showcase-hero-features">
-                  <li>Proves you're human</li>
-                  <li>Blocks automation</li>
-                  <li>Wastes 5-10 seconds per attempt</li>
-                  <li>Breaks accessibility</li>
-                </ul>
-              </div>
-
-              <div class="showcase-hero-column new-world">
-                <div class="showcase-hero-label">The new world</div>
-                <h2 class="showcase-hero-title active">BOTCHA</h2>
-                <div class="showcase-hero-visual new-world">{BOTCHA_SOLVE_ASCII}</div>
-                <p class="showcase-hero-subtitle">
-                  Welcomes bots. Proves they're AI. Everyone wins.
-                </p>
-                <ul class="showcase-hero-features">
-                  <li>Proves you're a bot</li>
-                  <li>Agent identity layer</li>
-                  <li>Sub-500ms verification</li>
-                  <li>Built for the agentic web</li>
-                </ul>
-              </div>
-            </div>
-          </section>
-
-          {/* ---- Get Started + Agent Prompt ---- */}
+          {/* ---- Get Started ---- */}
           <div class="showcase-footer">
             <div class="showcase-footer-cta">Get started in 30 seconds</div>
             <div class="showcase-footer-steps">
@@ -1297,7 +1193,6 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               </div>
             </div>
 
-            {/* ---- Agent Prompt ---- */}
             <div class="showcase-agent-prompt">
               <p class="showcase-agent-prompt-label">Or paste this into your AI agent</p>
               <button
@@ -1313,6 +1208,16 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
                 </span>
               </button>
             </div>
+
+            <div class="showcase-footer-links">
+              <a href="https://www.npmjs.com/package/@dupecom/botcha" class="showcase-footer-link" target="_blank" rel="noopener">npm</a>
+              <a href="https://pypi.org/project/botcha/" class="showcase-footer-link" target="_blank" rel="noopener">PyPI</a>
+              <a href="/openapi.json" class="showcase-footer-link">OpenAPI</a>
+              <a href="/ai.txt" class="showcase-footer-link">ai.txt</a>
+              <a href="/whitepaper" class="showcase-footer-link">Whitepaper</a>
+              <a href="/docs" class="showcase-footer-link">Docs</a>
+              <a href="https://github.com/dupe-com/botcha" class="showcase-footer-link" target="_blank" rel="noopener">GitHub</a>
+            </div>
           </div>
 
           {/* ---- Global Footer ---- */}
@@ -1326,6 +1231,6 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
   );
 };
 
-// Combined CSS: base dashboard styles (subset) + showcase-specific styles
+// Combined CSS: base dashboard styles + showcase-specific styles
 import { DASHBOARD_CSS } from './styles';
 const SHOWCASE_PAGE_CSS = DASHBOARD_CSS + SHOWCASE_CSS;
