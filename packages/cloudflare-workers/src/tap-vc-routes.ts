@@ -154,34 +154,43 @@ export async function issueVCRoute(c: Context) {
     let trustLevel: 'basic' | 'verified' | 'enterprise' = 'basic';
 
     if (resolvedAgentId) {
-      try {
-        const agentResult = await getTAPAgent(c.env.AGENTS, resolvedAgentId);
-        if (agentResult.success && agentResult.agent) {
-          const agent = agentResult.agent;
-
-          // Only include agent DID if it has a registered `did` field (custom) or
-          // derive it from their agent_id in BOTCHA's namespace
-          if ((agent as any).did) {
-            agentDid = (agent as any).did;
-          } else if (agent.tap_enabled) {
-            // TAP-registered agents get a BOTCHA-namespace DID
-            agentDid = buildAgentDID(agent.agent_id);
-          }
-
-          // Collect capability strings
-          if (agent.capabilities && agent.capabilities.length > 0) {
-            capabilities = agent.capabilities.map((cap) =>
-              cap.scope && cap.scope.length > 0
-                ? `${cap.action}:${cap.scope.join(',')}`
-                : cap.action
-            );
-          }
-
-          trustLevel = agent.trust_level || 'basic';
-        }
-      } catch {
-        // Agent lookup failure is non-fatal — VC will still be issued without agent details
+      const agentResult = await getTAPAgent(c.env.AGENTS, resolvedAgentId);
+      if (!agentResult.success || !agentResult.agent) {
+        return c.json({
+          success: false,
+          error: 'AGENT_NOT_FOUND',
+          message: `Agent ${resolvedAgentId} not found in BOTCHA registry`,
+        }, 404);
       }
+
+      const agent = agentResult.agent;
+      if (agent.app_id !== appId) {
+        return c.json({
+          success: false,
+          error: 'APP_ID_MISMATCH',
+          message: 'Agent belongs to a different app. You can only issue credentials for agents in your own app.',
+        }, 403);
+      }
+
+      // Only include agent DID if it has a registered `did` field (custom) or
+      // derive it from their agent_id in BOTCHA's namespace
+      if ((agent as any).did) {
+        agentDid = (agent as any).did;
+      } else if (agent.tap_enabled) {
+        // TAP-registered agents get a BOTCHA-namespace DID
+        agentDid = buildAgentDID(agent.agent_id);
+      }
+
+      // Collect capability strings
+      if (agent.capabilities && agent.capabilities.length > 0) {
+        capabilities = agent.capabilities.map((cap) =>
+          cap.scope && cap.scope.length > 0
+            ? `${cap.action}:${cap.scope.join(',')}`
+            : cap.action
+        );
+      }
+
+      trustLevel = agent.trust_level || 'basic';
     }
 
     // 4. Issue the VC

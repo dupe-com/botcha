@@ -21,6 +21,9 @@
 
 import type { KVNamespace } from './agents.js';
 import { generateToken, type ES256SigningKeyJWK } from './auth.js';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { keccak_256 } from '@noble/hashes/sha3';
+import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 
 // ============ CONSTANTS ============
 
@@ -219,9 +222,8 @@ export function parsePaymentHeader(headerValue: string): X402PaymentProof | null
  * 5. Nonce has not been replayed (KV check)
  * 6. EIP-712 signature is valid (ERC-3009)
  *
- * Note: Full on-chain tx confirmation would require a Base RPC node.
- * For v1, we verify the signed authorization is structurally valid and
- * call through to a facilitator if configured. Future work: CDP API.
+ * Note: This verifies the ERC-3009 typed-data signature locally.
+ * It does not confirm on-chain settlement; use facilitator webhooks for that.
  */
 export async function verifyX402Payment(
   proof: X402PaymentProof,
@@ -273,9 +275,35 @@ export async function verifyX402Payment(
       };
     }
 
-    // 4. Deadline check
+    if (typeof payload.chainId === 'number' && payload.chainId !== BASE_CHAIN_ID) {
+      return {
+        verified: false,
+        valid: false,
+        error: `Unsupported chainId in payload: ${payload.chainId}. Use ${BASE_CHAIN_ID}.`,
+        errorCode: 'NETWORK_MISMATCH',
+      };
+    }
+
+    // 4. Time window checks
     const now = Math.floor(Date.now() / 1000);
+    const validAfter = parseInt(payload.validAfter || '0', 10);
     const validBefore = parseInt(payload.validBefore, 10);
+    if (!Number.isFinite(validAfter) || !Number.isFinite(validBefore) || validBefore <= validAfter) {
+      return {
+        verified: false,
+        valid: false,
+        error: 'Payment authorization has an invalid validity window',
+        errorCode: 'SIGNATURE_INVALID',
+      };
+    }
+    if (validAfter > now) {
+      return {
+        verified: false,
+        valid: false,
+        error: `Payment authorization is not active until ${new Date(validAfter * 1000).toISOString()}`,
+        errorCode: 'PAYMENT_NOT_YET_VALID',
+      };
+    }
     if (validBefore <= now) {
       return {
         verified: false,
@@ -348,45 +376,31 @@ export async function verifyX402Payment(
  * Types:
  *   TransferWithAuthorization: from, to, value, validAfter, validBefore, nonce
  *
- * Note: Full EIP-712 verification requires Ethereum-compatible keccak256 hashing.
- * Cloudflare Workers supports WebCrypto (SHA-256, ECDSA P-256) but NOT keccak256.
- * We use a compatible approach: verify structural integrity + forward to facilitator.
- * For production: use the Coinbase CDP facilitator or a keccak WASM module.
+ * Uses secp256k1 pubkey recovery over the EIP-712 digest and checks the
+ * recovered address matches payload.from.
  */
 async function verifyERC3009Signature(payload: ERC3009TransferPayload): Promise<boolean> {
   try {
-    // Validate signature format: must be 0x-prefixed hex, 65 bytes (r+s+v)
-    const sig = payload.signature;
-    if (!sig.startsWith('0x') && !sig.startsWith('0X')) return false;
-    
-    // Strip 0x prefix and validate hex
-    const sigHex = sig.slice(2);
-    if (!/^[0-9a-fA-F]+$/.test(sigHex)) return false;
-    
-    // EIP-712 signature is 65 bytes = 130 hex chars (r[32] + s[32] + v[1])
-    if (sigHex.length !== 130) return false;
+    if (!isHexAddress(payload.from) || !isHexAddress(payload.to)) return false;
+    if (!/^\d+$/.test(payload.value)) return false;
+    if (!/^\d+$/.test(payload.validBefore)) return false;
+    if (!/^\d+$/.test(payload.validAfter || '0')) return false;
+    if (BigInt(payload.value) <= 0n) return false;
 
-    // Validate payer and payee are valid Ethereum addresses (20 bytes = 40 hex chars)
-    const isAddress = (addr: string) => /^0x[0-9a-fA-F]{40}$/.test(addr);
-    if (!isAddress(payload.from)) return false;
-    if (!isAddress(payload.to)) return false;
+    const sigHex = normalizeHex(payload.signature);
+    if (!payload.signature.toLowerCase().startsWith('0x')) return false;
+    if (!/^[0-9a-fA-F]{130}$/.test(sigHex)) return false;
 
-    // Validate nonce is a 32-byte hex (with or without 0x)
-    const nonceHex = payload.nonce.replace(/^0x/i, '');
-    if (!/^[0-9a-fA-F]{64}$/.test(nonceHex)) return false;
+    const sigBytes = hexToBytes(sigHex);
+    const recoveryBit = normalizeRecoveryBit(sigBytes[64]);
+    if (recoveryBit === null) return false;
 
-    // Validate timestamps are reasonable
-    const validBefore = parseInt(payload.validBefore, 10);
-    const validAfter = parseInt(payload.validAfter || '0', 10);
-    if (isNaN(validBefore) || isNaN(validAfter)) return false;
-    if (validBefore <= validAfter) return false;
+    const digest = buildERC3009TransferDigest(payload);
+    const signature = secp256k1.Signature.fromCompact(sigBytes.slice(0, 64)).addRecoveryBit(recoveryBit);
+    const recovered = signature.recoverPublicKey(digest);
+    const recoveredAddress = publicKeyToAddress(recovered.toRawBytes(false));
 
-    // All structural checks pass.
-    // TODO: Full keccak256-based EIP-712 verification when a keccak WASM module
-    // is available in Cloudflare Workers, or when proxied through CDP facilitator.
-    // For now: structural validation is sufficient for the v1 implementation.
-    // The nonce replay protection is the primary anti-fraud mechanism.
-    return true;
+    return recoveredAddress.toLowerCase() === payload.from.toLowerCase();
   } catch {
     return false;
   }
@@ -394,16 +408,106 @@ async function verifyERC3009Signature(payload: ERC3009TransferPayload): Promise<
 
 /**
  * Compute a deterministic payment ID from ERC-3009 payload.
- * In production, this would be the actual on-chain tx hash.
+ * This is not an on-chain tx hash; it is an idempotent verifier-side ID.
  */
 async function computePaymentId(payload: ERC3009TransferPayload): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(
-    `${payload.from}:${payload.to}:${payload.value}:${payload.nonce}:${payload.validBefore}`
+  const digest = buildERC3009TransferDigest(payload);
+  const signature = hexToBytes(normalizeHex(payload.signature));
+  return `0x${bytesToHex(keccak_256(concatBytes(digest, signature)))}`;
+}
+
+const UINT256_MAX = (1n << 256n) - 1n;
+const EIP712_PREFIX = Uint8Array.from([0x19, 0x01]);
+const EIP712_DOMAIN_TYPEHASH = keccak_256(
+  utf8ToBytes('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
+);
+const ERC3009_TYPEHASH = keccak_256(
+  utf8ToBytes(
+    'TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)'
+  )
+);
+const USDC_NAME_HASH = keccak_256(utf8ToBytes('USD Coin'));
+const USDC_VERSION_HASH = keccak_256(utf8ToBytes('2'));
+
+function normalizeHex(value: string): string {
+  return value.replace(/^0x/i, '');
+}
+
+function isHexAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
+function normalizeRecoveryBit(v: number): number | null {
+  if (v === 0 || v === 1) return v;
+  if (v === 27 || v === 28) return v - 27;
+  return null;
+}
+
+function toUint256Word(value: bigint): Uint8Array {
+  if (value < 0n || value > UINT256_MAX) {
+    throw new Error('uint256 value out of range');
+  }
+  return hexToBytes(value.toString(16).padStart(64, '0'));
+}
+
+function toAddressWord(address: string): Uint8Array {
+  if (!isHexAddress(address)) {
+    throw new Error('invalid address');
+  }
+  return concatBytes(new Uint8Array(12), hexToBytes(normalizeHex(address)));
+}
+
+function toBytes32Word(value: string): Uint8Array {
+  const hex = normalizeHex(value);
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error('invalid bytes32');
+  }
+  return hexToBytes(hex);
+}
+
+function publicKeyToAddress(publicKey: Uint8Array): string {
+  const uncompressed = publicKey.length === 65 ? publicKey.slice(1) : publicKey;
+  const digest = keccak_256(uncompressed);
+  return `0x${bytesToHex(digest.slice(-20))}`;
+}
+
+export function buildERC3009TransferDigest(payload: ERC3009TransferPayload): Uint8Array {
+  const chainId = payload.chainId ?? BASE_CHAIN_ID;
+  if (!Number.isInteger(chainId) || chainId !== BASE_CHAIN_ID) {
+    throw new Error(`unsupported chainId: ${chainId}`);
+  }
+
+  if (!/^\d+$/.test(payload.value) || !/^\d+$/.test(payload.validAfter || '0') || !/^\d+$/.test(payload.validBefore)) {
+    throw new Error('invalid numeric fields');
+  }
+
+  const value = BigInt(payload.value);
+  const validAfter = BigInt(payload.validAfter || '0');
+  const validBefore = BigInt(payload.validBefore);
+
+  const domainSeparator = keccak_256(
+    concatBytes(
+      EIP712_DOMAIN_TYPEHASH,
+      USDC_NAME_HASH,
+      USDC_VERSION_HASH,
+      toUint256Word(BigInt(chainId)),
+      toAddressWord(USDC_BASE_ADDRESS)
+    )
   );
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  const structHash = keccak_256(
+    concatBytes(
+      ERC3009_TYPEHASH,
+      toAddressWord(payload.from),
+      toAddressWord(payload.to),
+      toUint256Word(value),
+      toUint256Word(validAfter),
+      toUint256Word(validBefore),
+      toBytes32Word(payload.nonce)
+    )
+  );
+
+  return keccak_256(concatBytes(EIP712_PREFIX, domainSeparator, structHash));
 }
 
 // ============ PAYMENT RECORDS ============

@@ -147,6 +147,27 @@ curl https://botcha.ai/agent-only/x402 \
 | \`POST\` | \`/v1/x402/webhook\` | Facilitator settlement webhook — PUBLIC |
 | \`GET\` | \`/agent-only/x402\` | Demo: BOTCHA token + x402 payment required |
 
+### ANS (Agent Name Service)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/v1/ans/botcha\` | BOTCHA's ANS identity record — PUBLIC |
+| \`GET\` | \`/v1/ans/resolve/:name\` | Resolve ANS name via DNS TXT — PUBLIC |
+| \`GET\` | \`/v1/ans/resolve/lookup?name=...\` | Resolve ANS name via query parameter — PUBLIC |
+| \`GET\` | \`/v1/ans/discover\` | List BOTCHA-verified ANS agents — PUBLIC |
+| \`GET\` | \`/v1/ans/nonce/:name\` | Get ANS ownership nonce — AUTH REQUIRED |
+| \`POST\` | \`/v1/ans/verify\` | Verify ANS ownership and issue badge — AUTH REQUIRED |
+
+### DID / Verifiable Credentials
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/.well-known/did.json\` | BOTCHA DID document (did:web:botcha.ai) — PUBLIC |
+| \`GET\` | \`/.well-known/jwks.json\` | JWKS alias for resolvers that append \`.json\` — PUBLIC |
+| \`POST\` | \`/v1/credentials/issue\` | Issue BOTCHA VC from access token — AUTH REQUIRED |
+| \`POST\` | \`/v1/credentials/verify\` | Verify BOTCHA VC JWT — PUBLIC |
+| \`GET\` | \`/v1/dids/:did/resolve\` | Resolve did:web DID documents — PUBLIC |
+
 ### TAP Full Spec — Verification (v0.16.0)
 
 | Method | Path | Description |
@@ -512,6 +533,7 @@ Feature: x402 HTTP Payment Required protocol — verified agents pay $0.001 USDC
 Feature: Pay-for-verification — agents that don't want to solve a challenge can pay instead
 Feature: Double-gated resources — requires BOTH BOTCHA token AND x402 micropayment
 Feature: Webhook settlement — x402 facilitators notify BOTCHA of on-chain payments
+Feature: Cryptographic EIP-712 signature verification (ERC-3009 transferWithAuthorization)
 Endpoint: GET https://botcha.ai/v1/x402/info - x402 payment configuration (wallet, amount, network) — PUBLIC
 Endpoint: GET https://botcha.ai/v1/x402/challenge - Pay $0.001 USDC → receive BOTCHA access_token — PUBLIC (x402 auth)
   Without X-Payment header: 402 + X-Payment-Required: { scheme, network, maxAmountRequired, payTo, asset }
@@ -529,6 +551,23 @@ x402-payment-method: ERC-3009 transferWithAuthorization (EIP-712 signed)
 x402-header: X-Payment: <base64-encoded X402PaymentProof JSON>
 x402-response-header: X-Payment-Response: { success, txHash, networkId }
 x402-spec: https://x402.org
+
+# ANS (Agent Name Service)
+Feature: ANS resolution + BOTCHA-issued ANS verification badges
+Endpoint: GET https://botcha.ai/v1/ans/botcha - BOTCHA ANS identity record — PUBLIC
+Endpoint: GET https://botcha.ai/v1/ans/resolve/:name - Resolve ANS DNS TXT metadata — PUBLIC
+Endpoint: GET https://botcha.ai/v1/ans/resolve/lookup?name=... - Resolve ANS name via query param — PUBLIC
+Endpoint: GET https://botcha.ai/v1/ans/discover - List BOTCHA-verified ANS agents — PUBLIC
+Endpoint: GET https://botcha.ai/v1/ans/nonce/:name - Get ownership nonce for key proof — AUTH REQUIRED
+Endpoint: POST https://botcha.ai/v1/ans/verify - Verify ownership + issue BOTCHA-ANS badge — AUTH REQUIRED
+
+# DID / Verifiable Credentials
+Feature: W3C DID + VC issuance for portable BOTCHA trust assertions
+Endpoint: GET https://botcha.ai/.well-known/did.json - BOTCHA DID document (did:web:botcha.ai) — PUBLIC
+Endpoint: GET https://botcha.ai/.well-known/jwks.json - JWKS alias for DID/VC resolvers — PUBLIC
+Endpoint: POST https://botcha.ai/v1/credentials/issue - Exchange BOTCHA access token for VC JWT — AUTH REQUIRED
+Endpoint: POST https://botcha.ai/v1/credentials/verify - Verify BOTCHA VC JWT — PUBLIC
+Endpoint: GET https://botcha.ai/v1/dids/:did/resolve - Resolve did:web DID documents — PUBLIC
 
 # Protected Resources
 Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource (BOTCHA token required)

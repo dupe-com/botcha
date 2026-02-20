@@ -50,6 +50,29 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
+      - name: Sync preview auth secrets
+        run: |
+          cd packages/cloudflare-workers
+          WORKER_NAME="botcha-pr-${{ github.event.pull_request.number }}"
+
+          if [ -z "$PREVIEW_JWT_SECRET" ]; then
+            echo "PREVIEW_JWT_SECRET is not set; skipping preview secret sync."
+            exit 0
+          fi
+
+          printf '%s' "$PREVIEW_JWT_SECRET" | bunx wrangler secret put JWT_SECRET --env preview --name "$WORKER_NAME"
+
+          if [ -n "$PREVIEW_JWT_SIGNING_KEY" ]; then
+            printf '%s' "$PREVIEW_JWT_SIGNING_KEY" | bunx wrangler secret put JWT_SIGNING_KEY --env preview --name "$WORKER_NAME"
+          else
+            echo "PREVIEW_JWT_SIGNING_KEY is not set; skipping JWT_SIGNING_KEY sync."
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          PREVIEW_JWT_SECRET: ${{ secrets.PREVIEW_JWT_SECRET }}
+          PREVIEW_JWT_SIGNING_KEY: ${{ secrets.PREVIEW_JWT_SIGNING_KEY }}
+
       - name: Extract preview URL
         id: url
         run: |
@@ -87,7 +110,6 @@ jobs:
               ``,
               `# Challenge flow`,
               `APP_ID=app_c4e8aade83ce32f0`,
-              `APP_SECRET=sk_9d70ac2f1f28b224e8a49e3e1af62afb`,
               `curl "$BASE/v1/challenge?app_id=$APP_ID"`,
               ``,
               `# New endpoints on this PR (check EPIC.md for specifics)`,

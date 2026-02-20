@@ -531,7 +531,10 @@ export async function x402WebhookRoute(c: Context): Promise<Response> {
     const webhookSecret = c.env.BOTCHA_WEBHOOK_SECRET;
     const signatureHeader = c.req.header('x-botcha-signature') || c.req.header('x-webhook-signature');
 
-    if (webhookSecret && signatureHeader) {
+    if (webhookSecret) {
+      if (!signatureHeader) {
+        return c.json({ error: 'Missing webhook signature' }, 401);
+      }
       const sigValid = await verifyWebhookSignature(rawBody, signatureHeader, webhookSecret);
       if (!sigValid) {
         return c.json({ error: 'Invalid webhook signature' }, 401);
@@ -638,6 +641,7 @@ export async function x402InfoRoute(c: Context): Promise<Response> {
       confirmation_header: 'X-Payment-Response',
       spec: 'https://x402.org',
     },
+    verification_mode: 'cryptographic-signature-check + nonce replay protection',
   });
 }
 

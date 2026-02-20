@@ -6,6 +6,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import {
   buildPaymentRequiredDescriptor,
+  buildERC3009TransferDigest,
   parsePaymentHeader,
   verifyX402Payment,
   storePaymentRecord,
@@ -22,6 +23,9 @@ import {
   type X402WebhookEvent,
 } from '../../../packages/cloudflare-workers/src/tap-x402.js';
 import type { KVNamespace } from '../../../packages/cloudflare-workers/src/agents.js';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { keccak_256 } from '@noble/hashes/sha3';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
 // ============ MOCK KV ============
 
@@ -58,23 +62,49 @@ class MockKV implements KVNamespace {
 
 // ============ HELPERS ============
 
+const TEST_PRIVATE_KEY = hexToBytes('11'.repeat(32));
+const TEST_FROM_ADDRESS = toAddress(secp256k1.getPublicKey(TEST_PRIVATE_KEY, false));
+
+function toAddress(publicKey: Uint8Array): string {
+  const uncompressed = publicKey.length === 65 ? publicKey.slice(1) : publicKey;
+  const digest = keccak_256(uncompressed);
+  return `0x${bytesToHex(digest.slice(-20))}`;
+}
+
+function signPayload(payload: X402PaymentProof['payload']): string {
+  const digest = buildERC3009TransferDigest(payload);
+  const signature = secp256k1.sign(digest, TEST_PRIVATE_KEY);
+  const recovery = ((signature.recovery ?? 0) + 27).toString(16).padStart(2, '0');
+  return `0x${bytesToHex(signature.toCompactRawBytes())}${recovery}`;
+}
+
 /** Build a valid x402 payment proof for testing */
 function buildValidProof(overrides: Partial<X402PaymentProof['payload']> = {}): X402PaymentProof {
   const now = Math.floor(Date.now() / 1000);
+  const payload: X402PaymentProof['payload'] = {
+    from: TEST_FROM_ADDRESS,
+    to: BOTCHA_WALLET,
+    value: VERIFICATION_PRICE_USDC_UNITS,
+    validAfter: String(now - 60),
+    validBefore: String(now + PAYMENT_DEADLINE_SECONDS),
+    nonce: '0x' + 'a'.repeat(64),
+    signature: '',
+    chainId: BASE_CHAIN_ID,
+    ...overrides,
+  };
+
+  if (!overrides.signature) {
+    try {
+      payload.signature = signPayload(payload);
+    } catch {
+      payload.signature = '0x' + 'b'.repeat(130);
+    }
+  }
+
   return {
     scheme: 'exact',
     network: `eip155:${BASE_CHAIN_ID}`,
-    payload: {
-      from: '0x1234567890123456789012345678901234567890',
-      to: BOTCHA_WALLET,
-      value: VERIFICATION_PRICE_USDC_UNITS,
-      validAfter: String(now - 60),
-      validBefore: String(now + PAYMENT_DEADLINE_SECONDS),
-      nonce: '0x' + 'a'.repeat(64),
-      signature: '0x' + 'b'.repeat(130),
-      chainId: BASE_CHAIN_ID,
-      ...overrides,
-    },
+    payload,
   };
 }
 
@@ -204,6 +234,14 @@ describe('verifyX402Payment', () => {
     expect(result.verified).toBe(true);
   });
 
+  test('rejects unsupported payload chainId', async () => {
+    const proof = buildValidProof({ chainId: 1 });
+    const result = await verifyX402Payment(proof, nonces as any);
+
+    expect(result.verified).toBe(false);
+    expect(result.errorCode).toBe('NETWORK_MISMATCH');
+  });
+
   test('rejects wrong recipient', async () => {
     const proof = buildValidProof({ to: '0x0000000000000000000000000000000000000001' });
     const result = await verifyX402Payment(proof, nonces as any);
@@ -243,6 +281,15 @@ describe('verifyX402Payment', () => {
 
     expect(result.verified).toBe(false);
     expect(result.errorCode).toBe('PAYMENT_EXPIRED');
+  });
+
+  test('rejects payment that is not yet valid', async () => {
+    const futureStart = String(Math.floor(Date.now() / 1000) + 60);
+    const proof = buildValidProof({ validAfter: futureStart });
+    const result = await verifyX402Payment(proof, nonces as any);
+
+    expect(result.verified).toBe(false);
+    expect(result.errorCode).toBe('PAYMENT_NOT_YET_VALID');
   });
 
   test('rejects replayed nonce', async () => {

@@ -36,6 +36,11 @@ jobs:
       - name: Run type check
         run: bun run build
 
+      - name: Run Cloudflare Workers build
+        run: |
+          cd packages/cloudflare-workers
+          bun run build
+
       - name: Run TypeScript tests
         run: bun run test
 
@@ -86,3 +91,8 @@ open('README.md', 'w').write(new)
 
       - name: Check TypeScript
         run: bun run build
+
+      - name: Check Cloudflare Workers TypeScript
+        run: |
+          cd packages/cloudflare-workers
+          bun run build

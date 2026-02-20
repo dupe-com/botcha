@@ -290,6 +290,14 @@ export async function verifyANSNameRoute(c: Context) {
         message: 'Token is invalid or expired',
       }, 401);
     }
+    const tokenAppId = tokenResult.payload?.app_id;
+    if (!tokenAppId) {
+      return c.json({
+        success: false,
+        error: 'MISSING_APP_ID',
+        message: 'Token is missing app_id claim. Request a token scoped to your app.',
+      }, 403);
+    }
 
     const body = await c.req.json().catch(() => ({}));
 
@@ -364,6 +372,13 @@ export async function verifyANSNameRoute(c: Context) {
           error: 'AGENT_NOT_FOUND',
           message: `Agent ${agent_id} not found in BOTCHA registry`,
         }, 404);
+      }
+      if (agentResult.agent?.app_id !== tokenAppId) {
+        return c.json({
+          success: false,
+          error: 'APP_ID_MISMATCH',
+          message: 'Agent belongs to a different app. You can only verify ANS names for agents in your own app.',
+        }, 403);
       }
     }
 
