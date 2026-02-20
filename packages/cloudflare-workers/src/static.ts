@@ -442,6 +442,14 @@ API: https://botcha.ai/openapi.json
 API-Type: REST
 API-Format: OpenAPI 3.1.0
 
+# MCP Server (Model Context Protocol)
+MCP: https://botcha.ai/mcp
+MCP-Discovery: https://botcha.ai/.well-known/mcp.json
+MCP-Transport: Streamable HTTP (2025-03-26 spec)
+MCP-Protocol: JSON-RPC 2.0
+MCP-Tools: list_features, get_feature, search_docs, list_endpoints, get_endpoint, get_example
+MCP-Note: Ask the BOTCHA MCP server any question about features, endpoints, or code examples
+
 # Documentation
 Docs: https://botcha.ai
 Docs: https://botcha.ai/docs

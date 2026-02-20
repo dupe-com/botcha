@@ -36,6 +36,7 @@ import {
   handleDeviceCodeVerify,
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
+import { handleMCPRequest, handleMCPDiscovery } from './mcp';
 import { OG_IMAGE_BASE64 } from './og-image';
 import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret, EmailAlreadyRegisteredError } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
@@ -912,6 +913,22 @@ app.get('/.well-known/ai-plugin.json', (c) => {
   return c.json(AI_PLUGIN_JSON, 200, {
     'Cache-Control': 'public, max-age=86400',
   });
+});
+
+// MCP (Model Context Protocol) server — BOTCHA docs + API reference for AI agents
+app.get('/.well-known/mcp.json', (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.22.0';
+  return handleMCPDiscovery(version);
+});
+
+app.get('/mcp', (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.22.0';
+  return handleMCPRequest(c.req.raw, version);
+});
+
+app.post('/mcp', async (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.22.0';
+  return handleMCPRequest(c.req.raw, version);
 });
 
 // Sitemap
