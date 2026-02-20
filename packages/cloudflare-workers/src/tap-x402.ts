@@ -24,8 +24,12 @@ import { generateToken, type ES256SigningKeyJWK } from './auth.js';
 
 // ============ CONSTANTS ============
 
-/** BOTCHA's receiving wallet on Base. Set via BOTCHA_PAYMENT_WALLET env var. */
-export const BOTCHA_WALLET = '0xBotcha000000000000000000000000000000000';
+/**
+ * BOTCHA's receiving wallet on Base. Set via BOTCHA_PAYMENT_WALLET env var.
+ * Placeholder: in production, override with BOTCHA_PAYMENT_WALLET secret.
+ * This address (b07ca = "botcha" mapped to hex-safe chars) is not owned by anyone.
+ */
+export const BOTCHA_WALLET = '0xb07ca00000000000000000000000000000000001';
 
 /** USDC contract address on Base (mainnet) */
 export const USDC_BASE_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';

@@ -114,6 +114,39 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | \`GET\` | \`/v1/invoices/:id\` | Get invoice details |
 | \`POST\` | \`/v1/invoices/:id/verify-iou\` | Verify Browsing IOU |
 
+### x402 Payment Gating (Epic 3 — v0.22.0)
+
+Pay $0.001 USDC on Base to receive a BOTCHA verification token. No challenge required.
+
+\`\`\`bash
+# 1. Discover payment requirements
+curl https://botcha.ai/v1/x402/info
+
+# 2. Request without payment → 402
+curl https://botcha.ai/v1/x402/challenge
+# Response: 402 + X-Payment-Required: {"scheme":"exact","network":"eip155:8453",...}
+
+# 3. Sign ERC-3009 transferWithAuthorization and encode as base64 JSON
+PAYMENT_PROOF="base64({ scheme: 'exact', network: 'eip155:8453', payload: { from, to, value, validAfter, validBefore, nonce, signature } })"
+
+# 4. Pay and receive token
+curl https://botcha.ai/v1/x402/challenge -H "X-Payment: $PAYMENT_PROOF"
+# Response: 200 + { access_token, refresh_token, payment: { txHash, payer, amount } }
+
+# 5. Access double-gated resource (BOTCHA + x402)
+curl https://botcha.ai/agent-only/x402 \
+  -H "Authorization: Bearer <access_token>" \
+  -H "X-Payment: $RESOURCE_PAYMENT_PROOF"
+\`\`\`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/v1/x402/info\` | Payment configuration (wallet, amount, network) — PUBLIC |
+| \`GET\` | \`/v1/x402/challenge\` | Pay → BOTCHA token (no app_id needed) — PUBLIC |
+| \`POST\` | \`/v1/x402/verify-payment\` | Verify raw x402 payment proof — PUBLIC |
+| \`POST\` | \`/v1/x402/webhook\` | Facilitator settlement webhook — PUBLIC |
+| \`GET\` | \`/agent-only/x402\` | Demo: BOTCHA token + x402 payment required |
+
 ### TAP Full Spec — Verification (v0.16.0)
 
 | Method | Path | Description |
@@ -473,8 +506,32 @@ Endpoint: POST https://botcha.ai/api/challenge - Verify standard challenge
 Endpoint: GET https://botcha.ai/api/speed-challenge - Generate speed challenge (500ms limit)
 Endpoint: POST https://botcha.ai/api/speed-challenge - Verify speed challenge
 
+# x402 Payment Gating (Epic 3 — agents pay USDC, skip the challenge)
+# Payment IS the credential on these endpoints — no app_id required
+Feature: x402 HTTP Payment Required protocol — verified agents pay $0.001 USDC on Base and receive a BOTCHA token
+Feature: Pay-for-verification — agents that don't want to solve a challenge can pay instead
+Feature: Double-gated resources — requires BOTH BOTCHA token AND x402 micropayment
+Feature: Webhook settlement — x402 facilitators notify BOTCHA of on-chain payments
+Endpoint: GET https://botcha.ai/v1/x402/info - x402 payment configuration (wallet, amount, network) — PUBLIC
+Endpoint: GET https://botcha.ai/v1/x402/challenge - Pay $0.001 USDC → receive BOTCHA access_token — PUBLIC (x402 auth)
+  Without X-Payment header: 402 + X-Payment-Required: { scheme, network, maxAmountRequired, payTo, asset }
+  With valid X-Payment header: 200 + { access_token, refresh_token, payment: { txHash, payer, amount } }
+Endpoint: POST https://botcha.ai/v1/x402/verify-payment - Verify a raw x402 payment proof — PUBLIC (facilitator utility)
+Endpoint: POST https://botcha.ai/v1/x402/webhook - Settlement notifications from x402 facilitators — PUBLIC
+Endpoint: GET https://botcha.ai/agent-only/x402 - Double-gated resource (BOTCHA token + x402 payment) — DEMO
+
+# x402 Payment Details
+x402-scheme: exact
+x402-network: eip155:8453 (Base mainnet)
+x402-asset: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 (USDC on Base)
+x402-price-units: 1000 (USDC atomic units, 6 decimals = $0.001)
+x402-payment-method: ERC-3009 transferWithAuthorization (EIP-712 signed)
+x402-header: X-Payment: <base64-encoded X402PaymentProof JSON>
+x402-response-header: X-Payment-Response: { success, txHash, networkId }
+x402-spec: https://x402.org
+
 # Protected Resources
-Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource
+Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource (BOTCHA token required)
 
 # Usage
 Install-NPM: npm install @dupecom/botcha
