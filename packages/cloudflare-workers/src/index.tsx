@@ -106,6 +106,7 @@ import {
   trackRateLimitExceeded,
   getCountry,
 } from './analytics';
+import { shouldBypassAppGate } from './app-gate';
 
 // ============ TYPES ============
 type Bindings = {
@@ -156,44 +157,11 @@ app.use('*', async (c, next) => {
   c.header('X-Botcha-Runtime', 'cloudflare-workers');
 });
 
-// App gate: require registered app_id with verified email on /v1/* routes.
-// Open paths (registration, verification, recovery) are exempted.
-const APP_GATE_OPEN_PATHS = [
-  '/v1/apps',                       // POST: create app (registration)
-  '/v1/auth/recover',               // POST: account recovery
-  '/v1/token/validate',             // POST: public token validation — the token IS the credential
-  // x402 endpoints: payment IS the credential, no app_id gate
-  '/v1/x402/challenge',             // GET: pay-for-verification (x402 payment)
-  '/v1/x402/verify-payment',        // POST: facilitator payment verification
-  '/v1/x402/webhook',               // POST: settlement notifications
-  '/v1/x402/info',                  // GET: public payment configuration
-  // Public ANS + DID/VC endpoints under /v1/*
-  '/v1/ans/discover',
-  '/v1/ans/botcha',
-  '/v1/ans/resolve/lookup',
-  '/v1/credentials/verify',
-];
-
-// Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
-function isAppManagementPath(path: string): boolean {
-  return /^\/v1\/apps\/[^/]+\/(verify-email|resend-verification)$/.test(path);
-}
-
-function isPublicV1Path(path: string): boolean {
-  // Public ANS resolution paths: /v1/ans/resolve/:name
-  if (path.startsWith('/v1/ans/resolve/')) return true;
-
-  // Public DID resolution path: /v1/dids/:did/resolve
-  if (/^\/v1\/dids\/[^/]+\/resolve$/.test(path)) return true;
-
-  return false;
-}
-
 app.use('/v1/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
 
   // Allow open paths through without app_id
-  if (APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path) || isPublicV1Path(path)) {
+  if (shouldBypassAppGate(path)) {
     return next();
   }
 
