@@ -37,7 +37,10 @@ export interface TAPAgent extends Agent {
   ans_badge_id?: string;        // BOTCHA-issued ANS verification badge ID
   ans_trust_level?: 'domain-validated' | 'key-validated' | 'behavior-validated';
   ans_verified_at?: number;     // When ANS verification was last performed
-}
+  // W3C DID — optional self-sovereign identity for the agent
+  // When set, this DID is embedded as credentialSubject.id in issued VCs.
+  // Accepts any valid DID (e.g. did:web:example.com:agents:my-agent, did:key:z6Mk...).
+  did?: string;}
 
 /** Valid TAP capability actions — single source of truth */
 export const TAP_VALID_ACTIONS = ['browse', 'compare', 'purchase', 'audit', 'search'] as const;
@@ -89,7 +92,8 @@ export async function registerTAPAgent(
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
     ans_name?: string;   // optional ANS identity link
-  }
+    /** Optional W3C DID for this agent — embedded as credentialSubject.id in issued VCs */
+    did?: string;  }
 ): Promise<{ success: boolean; agent?: TAPAgent; error?: string }> {
   try {
     const agentId = generateAgentId();
@@ -115,7 +119,8 @@ export async function registerTAPAgent(
 
       // ANS fields
       ans_name: registration.ans_name,
-    };
+      // W3C DID (optional)
+      did: registration.did,    };
 
     // Validate TAP configuration
     if (agent.public_key) {

@@ -92,7 +92,11 @@ import {
   discoverANSAgentsRoute,
   getBotchaANSRoute,
 } from './tap-ans-routes.js';
-import {
+  didDocumentRoute,
+  issueVCRoute,
+  verifyVCRoute,
+  resolveDIDRoute,
+} from './tap-vc-routes.js';import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -2403,7 +2407,19 @@ app.get('/v1/ans/nonce', getANSNonceRoute);
 
 // Auth required: verify ANS ownership and issue badge
 app.post('/v1/ans/verify', verifyANSNameRoute);
+// ============ DID/VC (VERIFIABLE CREDENTIALS) ENDPOINTS ============
 
+// BOTCHA DID Document — public, no auth required
+app.get('/.well-known/did.json', didDocumentRoute);
+
+// VC Issuance — requires a valid BOTCHA access_token (from /v1/token/verify)
+app.post('/v1/credentials/issue', issueVCRoute);
+
+// VC Verification — public, no auth required (the VC JWT is the credential)
+app.post('/v1/credentials/verify', verifyVCRoute);
+
+// DID Resolution — public, resolves did:web DIDs
+app.get('/v1/dids/:did/resolve', resolveDIDRoute);
 // ============ AGENT REGISTRY API ============
 
 // Register a new agent
