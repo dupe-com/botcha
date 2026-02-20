@@ -20,7 +20,8 @@ import {
   TAP_VALID_ACTIONS
 } from './tap-agents.js';
 import { 
-  parseTAPIntent
+  parseTAPIntent,
+  verifyHTTPMessageSignature
 } from './tap-verify.js';
 import { 
   createInvoice, 
@@ -416,7 +417,76 @@ export async function createTAPSessionRoute(c: Context) {
         message: 'Agent does not have TAP enabled. Register a public key via POST /v1/agents/register/tap (with public_key field) or POST /v1/agents/:id/tap/rotate-key to enable TAP sessions.'
       }, 403);
     }
-    
+
+    // ── RFC 9421 HTTP Message Signature Enforcement ──────────────────────────
+    // For TAP-enabled agents, ALL session creation requests MUST carry a valid
+    // RFC 9421 signature. Without this check, any caller that knows an agent_id
+    // can impersonate it — defeating the entire cryptographic identity model.
+
+    // Collect lowercased request headers for signature verification
+    const reqHeaders: Record<string, string> = {};
+    c.req.raw.headers.forEach((value: string, key: string) => {
+      reqHeaders[key.toLowerCase()] = value;
+    });
+
+    const signatureHeader = reqHeaders['signature'];
+    const signatureInputHeader = reqHeaders['signature-input'];
+
+    // 1. No signature headers at all → SIGNATURE_REQUIRED
+    if (!signatureHeader || !signatureInputHeader) {
+      return c.json({
+        success: false,
+        error: 'SIGNATURE_REQUIRED',
+        message: 'TAP-enabled agents require RFC 9421 HTTP Message Signature headers (Signature and Signature-Input). See https://botcha.ai/docs/tap for signing instructions.'
+      }, 401);
+    }
+
+    // 2. Verify the signature (timestamp, nonce replay, and crypto all checked inside)
+    const requestUrl = new URL(c.req.url);
+    const verifyResult = await verifyHTTPMessageSignature(
+      {
+        method: c.req.method,
+        path: requestUrl.pathname,
+        headers: reqHeaders,
+      },
+      agent.public_key!,
+      agent.signature_algorithm!,
+      // Pass NONCES KV for replay protection (8-minute TTL per TAP spec)
+      c.env.NONCES ?? null
+    );
+
+    if (!verifyResult.valid) {
+      const errMsg = verifyResult.error ?? '';
+
+      // Distinguish specific failure modes for actionable client errors
+      if (errMsg.includes('expired') || errMsg.includes('Expired')) {
+        return c.json({
+          success: false,
+          error: 'SIGNATURE_EXPIRED',
+          message: 'The RFC 9421 signature has expired. Regenerate a fresh signature with a current timestamp.',
+          detail: errMsg
+        }, 401);
+      }
+
+      if (errMsg.includes('Nonce replay') || errMsg.includes('nonce replay')) {
+        return c.json({
+          success: false,
+          error: 'NONCE_REPLAYED',
+          message: 'This nonce has already been used. Generate a fresh unique nonce for each request.',
+          detail: errMsg
+        }, 401);
+      }
+
+      // All other verification failures (bad key, tampered data, malformed sig, etc.)
+      return c.json({
+        success: false,
+        error: 'SIGNATURE_INVALID',
+        message: 'RFC 9421 signature verification failed. Ensure you are signing the correct signature base string with the registered private key.',
+        detail: errMsg
+      }, 401);
+    }
+    // ── End RFC 9421 enforcement ─────────────────────────────────────────────
+
     // Parse intent
     const intentResult = parseTAPIntent(JSON.stringify(body.intent));
     if (!intentResult.valid) {
