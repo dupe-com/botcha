@@ -15,6 +15,7 @@ import {
   getTAPSession,
   updateAgentVerification,
   validateCapability,
+  isValidJWK,
   TAPCapability,
   TAP_VALID_ACTIONS
 } from './tap-agents.js';
@@ -100,27 +101,6 @@ async function validateAppAccess(c: Context, requireAuth: boolean = true): Promi
   }
 
   return { valid: true, appId: jwtAppId };
-}
-
-/**
- * Returns true if the string is a valid JWK JSON (EC or RSA public key).
- * Accepts both raw JWK JSON strings and serialized JWK objects.
- */
-function isValidJWK(key: string): boolean {
-  try {
-    const jwk = typeof key === 'string' ? JSON.parse(key) : key;
-    if (!jwk || typeof jwk !== 'object') return false;
-    if (!jwk.kty) return false;
-    // EC key: requires crv, x, y
-    if (jwk.kty === 'EC') return Boolean(jwk.crv && jwk.x && jwk.y);
-    // RSA key: requires n, e
-    if (jwk.kty === 'RSA') return Boolean(jwk.n && jwk.e);
-    // OKP (Ed25519): requires crv and x
-    if (jwk.kty === 'OKP') return Boolean(jwk.crv && jwk.x);
-    return false;
-  } catch {
-    return false;
-  }
 }
 
 function validateTAPRegistration(body: any): {

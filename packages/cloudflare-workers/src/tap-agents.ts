@@ -289,20 +289,31 @@ function generateSessionId(): string {
     .join('');
 }
 
+/**
+ * Returns true if the string is a valid JWK JSON (EC, RSA, or OKP public key).
+ * Accepts a raw JWK JSON string.
+ */
+export function isValidJWK(key: string): boolean {
+  try {
+    const jwk = JSON.parse(key);
+    if (!jwk || typeof jwk !== 'object') return false;
+    if (!jwk.kty) return false;
+    if (jwk.kty === 'EC') return Boolean(jwk.crv && jwk.x && jwk.y);
+    if (jwk.kty === 'RSA') return Boolean(jwk.n && jwk.e);
+    if (jwk.kty === 'OKP') return Boolean(jwk.crv && jwk.x);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function isValidPublicKey(key: string, algorithm?: string): boolean {
   // PEM format
   if (key.includes('BEGIN PUBLIC KEY') && key.includes('END PUBLIC KEY') && key.length > 100) {
     return true;
   }
   // JWK JSON string (EC P-256, RSA, or OKP/Ed25519)
-  try {
-    const jwk = JSON.parse(key);
-    if (jwk && typeof jwk === 'object' && jwk.kty) {
-      if (jwk.kty === 'EC' && jwk.crv && jwk.x && jwk.y) return true;
-      if (jwk.kty === 'RSA' && jwk.n && jwk.e) return true;
-      if (jwk.kty === 'OKP' && jwk.crv && jwk.x) return true;
-    }
-  } catch { /* not JSON, continue */ }
+  if (isValidJWK(key)) return true;
   // Raw Ed25519 key (32 bytes = ~44 base64 chars)
   if (algorithm === 'ed25519') {
     const stripped = key.replace(/[\s]/g, '');
