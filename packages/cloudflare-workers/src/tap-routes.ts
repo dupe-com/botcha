@@ -114,6 +114,7 @@ function validateTAPRegistration(body: any): {
     capabilities?: TAPCapability[];
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
+    ans_name?: string;
   };
   error?: string;
 } {
@@ -160,6 +161,18 @@ function validateTAPRegistration(body: any): {
     }
   }
   
+  // Validate ANS name format if provided
+  if (body.ans_name !== undefined && body.ans_name !== null) {
+    if (typeof body.ans_name !== 'string') {
+      return { valid: false, error: 'ans_name must be a string (e.g. "ans://v1.0.myagent.example.com")' };
+    }
+    // Basic format check — full validation happens in tap-ans module
+    const clean = body.ans_name.trim().replace(/^ans:\/\//, '');
+    if (clean.split('.').length < 2) {
+      return { valid: false, error: 'ans_name must include at least a label and domain (e.g. "myagent.example.com")' };
+    }
+  }
+
   return {
     valid: true,
     data: {
@@ -170,7 +183,8 @@ function validateTAPRegistration(body: any): {
       signature_algorithm: body.signature_algorithm,
       capabilities: body.capabilities,
       trust_level: body.trust_level || 'basic',
-      issuer: body.issuer
+      issuer: body.issuer,
+      ans_name: body.ans_name,
     }
   };
 }
@@ -239,6 +253,11 @@ export async function registerTAPAgentRoute(c: Context) {
       signature_algorithm: agent.signature_algorithm,
       issuer: agent.issuer,
       
+      // ANS fields
+      ans_name: agent.ans_name || null,
+      ans_badge_id: agent.ans_badge_id || null,
+      ans_trust_level: agent.ans_trust_level || null,
+      
       // Security info (don't expose full public key)
       has_public_key: Boolean(agent.public_key),
       key_fingerprint: agent.public_key ? 
@@ -299,6 +318,13 @@ export async function getTAPAgentRoute(c: Context) {
       issuer: agent.issuer,
       last_verified_at: agent.last_verified_at ? 
         new Date(agent.last_verified_at).toISOString() : null,
+      
+      // ANS identity
+      ans_name: agent.ans_name || null,
+      ans_badge_id: agent.ans_badge_id || null,
+      ans_trust_level: agent.ans_trust_level || null,
+      ans_verified_at: agent.ans_verified_at
+        ? new Date(agent.ans_verified_at).toISOString() : null,
       
       // Public key info (secure)
       has_public_key: Boolean(agent.public_key),
