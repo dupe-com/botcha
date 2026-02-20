@@ -6,7 +6,8 @@
 
 import { spawn } from 'child_process';
 
-const PORT = process.env.PORT || '8787';
+const portArgIdx = process.argv.indexOf('--port');
+const PORT = (portArgIdx !== -1 ? process.argv[portArgIdx + 1] : null) || process.env.PORT || '8787';
 const HOST = process.env.HOST || 'localhost';
 
 const intro = `
@@ -49,7 +50,7 @@ const intro = `
 console.log(intro);
 
 // Start wrangler dev from source (bypasses dist/ so changes hot-reload)
-const proc = spawn('wrangler', ['dev', 'src/index.tsx'], {
+const proc = spawn('wrangler', ['dev', 'src/index.tsx', '--port', PORT], {
   stdio: 'inherit',
 });
 

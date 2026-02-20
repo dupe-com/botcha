@@ -119,6 +119,15 @@ import {
   agentTrustLevelRoute,
 } from './tap-a2a-routes.js';
 import {
+  issueEATRoute,
+  issueOIDCAgentClaimsRoute,
+  oauthASMetadataRoute,
+  agentGrantRoute,
+  agentGrantStatusRoute,
+  agentGrantResolveRoute,
+  oidcUserInfoRoute,
+} from './tap-oidca-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -2479,6 +2488,27 @@ app.post('/v1/a2a/verify-agent', verifyAgentRoute);  // by card or agent_url sho
 app.get('/v1/a2a/trust-level/:agent_url', agentTrustLevelRoute);
 app.get('/v1/a2a/cards', listCardsRoute);
 app.get('/v1/a2a/cards/:id', getCardAttestationRoute);
+
+// ============ OIDC-A ATTESTATION (Epic 5) ============
+// Makes BOTCHA an agent_attestation endpoint in enterprise OIDC-A token chains.
+// Standards: draft-ietf-rats-eat-25, draft-aap-oauth-profile, RFC 8414, OIDC-A 1.0
+
+// OAuth 2.0 AS Discovery (RFC 8414) — no auth required, public
+app.get('/.well-known/oauth-authorization-server', oauthASMetadataRoute);
+
+// EAT (Entity Attestation Token) issuance — RFC 9334 / draft-ietf-rats-eat-25
+app.post('/v1/attestation/eat', issueEATRoute);
+
+// OIDC-A claims block — for embedding in enterprise ID tokens
+app.post('/v1/attestation/oidc-agent-claims', issueOIDCAgentClaimsRoute);
+
+// Agent Authorization Grant — draft-rosenberg-oauth-aauth
+app.post('/v1/auth/agent-grant', agentGrantRoute);
+app.get('/v1/auth/agent-grant/:id/status', agentGrantStatusRoute);
+app.post('/v1/auth/agent-grant/:id/resolve', agentGrantResolveRoute);
+
+// OIDC-A UserInfo endpoint
+app.get('/v1/oidc/userinfo', oidcUserInfoRoute);
 // ============ AGENT REGISTRY API ============
 
 // Register a new agent

@@ -18,6 +18,8 @@ vi.mock('../../../packages/cloudflare-workers/src/auth.js', () => ({
 
 // Import mocked functions
 import { extractBearerToken, verifyToken } from '../../../packages/cloudflare-workers/src/auth.js';
+const mockExtractBearerToken = extractBearerToken as unknown as ReturnType<typeof vi.fn>;
+const mockVerifyToken = verifyToken as unknown as ReturnType<typeof vi.fn>;
 
 // Mock KV namespace using a simple Map
 class MockKV implements KVNamespace {
@@ -90,8 +92,8 @@ const TEST_SESSION_ID = 'session_test12345678';
 describe('TAP Routes - registerTAPAgentRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(extractBearerToken).mockReturnValue('mock-jwt-token');
-    vi.mocked(verifyToken).mockResolvedValue({
+    mockExtractBearerToken.mockReturnValue('mock-jwt-token');
+    mockVerifyToken.mockResolvedValue({
       valid: true,
       payload: { app_id: TEST_APP_ID } as any,
     });
@@ -122,8 +124,8 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
   });
 
   test('should register agent with JWT token authentication', async () => {
-    vi.mocked(extractBearerToken).mockReturnValue('mock-jwt-token');
-    vi.mocked(verifyToken).mockResolvedValue({
+    mockExtractBearerToken.mockReturnValue('mock-jwt-token');
+    mockVerifyToken.mockResolvedValue({
       valid: true,
       payload: { app_id: TEST_APP_ID } as any,
     });
@@ -141,7 +143,7 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
     expect(response.status).toBe(201);
     expect(data.success).toBe(true);
     expect(data.app_id).toBe(TEST_APP_ID);
-    expect(vi.mocked(extractBearerToken)).toHaveBeenCalledWith('Bearer mock-jwt-token');
+    expect(mockExtractBearerToken).toHaveBeenCalledWith('Bearer mock-jwt-token');
   });
 
   test('should register TAP-enabled agent with public key and capabilities', async () => {
@@ -176,7 +178,7 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
   });
 
   test('should return 401 when no authentication provided', async () => {
-    vi.mocked(extractBearerToken).mockReturnValue(null);
+    mockExtractBearerToken.mockReturnValue(null);
     
     const mockContext = createMockContext({
       header: vi.fn(() => undefined),
@@ -463,8 +465,8 @@ describe('TAP Routes - getTAPAgentRoute', () => {
 describe('TAP Routes - listTAPAgentsRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(extractBearerToken).mockReturnValue('mock-jwt-token');
-    vi.mocked(verifyToken).mockResolvedValue({
+    mockExtractBearerToken.mockReturnValue('mock-jwt-token');
+    mockVerifyToken.mockResolvedValue({
       valid: true,
       payload: { app_id: TEST_APP_ID } as any,
     });
@@ -552,7 +554,7 @@ describe('TAP Routes - listTAPAgentsRoute', () => {
   });
 
   test('should return 401 when no authentication provided', async () => {
-    vi.mocked(extractBearerToken).mockReturnValue(null);
+    mockExtractBearerToken.mockReturnValue(null);
     
     const agentsKV = new MockKV();
     // Empty list but still needs to return success with empty array
@@ -574,10 +576,10 @@ describe('TAP Routes - listTAPAgentsRoute', () => {
 
   test('should authenticate with JWT token', async () => {
     const agentsKV = new MockKV();
-    agentsKV.seed(`app:${TEST_APP_ID}:agents`, []);
+    agentsKV.seed(`app_agents:${TEST_APP_ID}`, []);
 
-    vi.mocked(extractBearerToken).mockReturnValue('mock-jwt-token');
-    vi.mocked(verifyToken).mockResolvedValue({
+    mockExtractBearerToken.mockReturnValue('mock-jwt-token');
+    mockVerifyToken.mockResolvedValue({
       valid: true,
       payload: { app_id: TEST_APP_ID } as any,
     });
@@ -1051,6 +1053,15 @@ describe('TAP Routes - getTAPSessionRoute', () => {
 describe('TAP Routes - rotateKeyRoute (JWK support)', () => {
   const TEST_AGENT_ID = 'agent_rotatejwktest';
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockExtractBearerToken.mockReturnValue('mock-jwt-token');
+    mockVerifyToken.mockResolvedValue({
+      valid: true,
+      payload: { app_id: TEST_APP_ID } as any,
+    });
+  });
+
   function seedAgent(agentsKV: MockKV, overrides: Partial<TAPAgent> = {}) {
     const agent: TAPAgent = {
       agent_id: TEST_AGENT_ID,
@@ -1084,6 +1095,7 @@ describe('TAP Routes - rotateKeyRoute (JWK support)', () => {
     const mockContext = createMockContext({
       agentsKV,
       param: vi.fn((key: string) => key === 'id' ? TEST_AGENT_ID : undefined),
+      header: vi.fn((key: string) => key === 'authorization' ? 'Bearer mock-jwt-token' : undefined),
       json: vi.fn().mockResolvedValue({
         public_key: jwkPublic,
         signature_algorithm: 'ecdsa-p256-sha256',
@@ -1119,6 +1131,7 @@ describe('TAP Routes - rotateKeyRoute (JWK support)', () => {
     const mockContext = createMockContext({
       agentsKV,
       param: vi.fn((key: string) => key === 'id' ? TEST_AGENT_ID : undefined),
+      header: vi.fn((key: string) => key === 'authorization' ? 'Bearer mock-jwt-token' : undefined),
       json: vi.fn().mockResolvedValue({
         public_key: jwkJson,
         signature_algorithm: 'ecdsa-p256-sha256',
@@ -1140,6 +1153,7 @@ describe('TAP Routes - rotateKeyRoute (JWK support)', () => {
     const mockContext = createMockContext({
       agentsKV,
       param: vi.fn((key: string) => key === 'id' ? TEST_AGENT_ID : undefined),
+      header: vi.fn((key: string) => key === 'authorization' ? 'Bearer mock-jwt-token' : undefined),
       json: vi.fn().mockResolvedValue({
         public_key: 'not-a-valid-key',
         signature_algorithm: 'ecdsa-p256-sha256',
