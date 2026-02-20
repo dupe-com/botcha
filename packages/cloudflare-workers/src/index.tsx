@@ -138,6 +138,7 @@ app.use('*', async (c, next) => {
 const APP_GATE_OPEN_PATHS = [
   '/v1/apps',                       // POST: create app (registration)
   '/v1/auth/recover',               // POST: account recovery
+  '/v1/token/validate',             // POST: public token validation — the token IS the credential
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
@@ -684,7 +685,7 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
         'POST /v1/token/verify': 'Submit solution → access_token (1hr) + refresh_token (1hr) — app_id required',
         'POST /v1/token/refresh': 'Refresh access token — app_id required',
         'POST /v1/token/revoke': 'Revoke a token — app_id required',
-        'POST /v1/token/validate': 'Remote token validation — verify any BOTCHA token without needing the secret — app_id required',
+        'POST /v1/token/validate': 'Remote token validation — verify any BOTCHA token without needing the secret. Public endpoint — the token itself is the credential, no app_id required.',
       },
       protected: {
         'GET /agent-only': 'Demo protected endpoint — requires Bearer token (app_id required)',

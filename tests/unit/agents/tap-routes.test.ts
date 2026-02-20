@@ -4,7 +4,8 @@ import {
   getTAPAgentRoute,
   listTAPAgentsRoute,
   createTAPSessionRoute,
-  getTAPSessionRoute
+  getTAPSessionRoute,
+  rotateKeyRoute
 } from '../../../packages/cloudflare-workers/src/tap-routes.js';
 import type { TAPAgent } from '../../../packages/cloudflare-workers/src/tap-agents.js';
 import type { KVNamespace } from '../../../packages/cloudflare-workers/src/agents.js';
@@ -257,6 +258,68 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
     expect(response.status).toBe(400);
     expect(data.success).toBe(false);
     expect(data.message).toContain('Invalid public key format');
+  });
+
+  test('should accept JWK object as public_key and store it as JSON string', async () => {
+    const jwkPublic = {
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+      y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+      use: 'sig',
+      alg: 'ES256',
+    };
+    const agentsKV = new MockKV();
+    const mockContext = createMockContext({
+      agentsKV,
+      query: vi.fn((key: string) => key === 'app_id' ? TEST_APP_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        name: 'JWK Agent',
+        public_key: jwkPublic,
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await registerTAPAgentRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    expect(data.has_public_key).toBe(true);
+    expect(data.tap_enabled).toBe(true);
+
+    // Verify the JWK object was serialized to a JSON string before storage
+    const storedRaw = agentsKV.getRaw(`agent:${data.agent_id}`);
+    expect(storedRaw).toBeDefined();
+    const storedAgent = JSON.parse(storedRaw!);
+    expect(typeof storedAgent.public_key).toBe('string');
+    const storedJwk = JSON.parse(storedAgent.public_key);
+    expect(storedJwk.kty).toBe('EC');
+    expect(storedJwk.crv).toBe('P-256');
+  });
+
+  test('should accept JWK JSON string as public_key', async () => {
+    const jwkJson = JSON.stringify({
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+      y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+    });
+    const mockContext = createMockContext({
+      query: vi.fn((key: string) => key === 'app_id' ? TEST_APP_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        name: 'JWK String Agent',
+        public_key: jwkJson,
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await registerTAPAgentRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    expect(data.has_public_key).toBe(true);
   });
 
   test('should return 400 when capabilities is not an array', async () => {
@@ -982,5 +1045,111 @@ describe('TAP Routes - getTAPSessionRoute', () => {
     expect(response.status).toBe(404);
     expect(data.success).toBe(false);
     expect(data.error).toBe('SESSION_NOT_FOUND');
+  });
+});
+
+describe('TAP Routes - rotateKeyRoute (JWK support)', () => {
+  const TEST_AGENT_ID = 'agent_rotatejwktest';
+
+  function seedAgent(agentsKV: MockKV, overrides: Partial<TAPAgent> = {}) {
+    const agent: TAPAgent = {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID,
+      name: 'Rotate Test Agent',
+      tap_enabled: true,
+      trust_level: 'basic',
+      capabilities: [],
+      public_key: '-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEold\n-----END PUBLIC KEY-----',
+      signature_algorithm: 'ecdsa-p256-sha256',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      key_created_at: Date.now(),
+      ...overrides,
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, agent);
+    return agent;
+  }
+
+  test('should accept JWK object as new_public_key during rotation', async () => {
+    const agentsKV = new MockKV();
+    seedAgent(agentsKV);
+
+    const jwkPublic = {
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+      y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+    };
+
+    const mockContext = createMockContext({
+      agentsKV,
+      param: vi.fn((key: string) => key === 'id' ? TEST_AGENT_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        public_key: jwkPublic,
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await rotateKeyRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.has_public_key).toBe(true);
+
+    // Verify JWK object was stored as JSON string
+    const storedRaw = agentsKV.getRaw(`agent:${TEST_AGENT_ID}`);
+    const storedAgent = JSON.parse(storedRaw!);
+    expect(typeof storedAgent.public_key).toBe('string');
+    const storedJwk = JSON.parse(storedAgent.public_key);
+    expect(storedJwk.kty).toBe('EC');
+  });
+
+  test('should accept JWK JSON string as new_public_key during rotation', async () => {
+    const agentsKV = new MockKV();
+    seedAgent(agentsKV);
+
+    const jwkJson = JSON.stringify({
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+      y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+    });
+
+    const mockContext = createMockContext({
+      agentsKV,
+      param: vi.fn((key: string) => key === 'id' ? TEST_AGENT_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        public_key: jwkJson,
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await rotateKeyRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.has_public_key).toBe(true);
+  });
+
+  test('should return 400 for invalid key format during rotation', async () => {
+    const agentsKV = new MockKV();
+    seedAgent(agentsKV);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      param: vi.fn((key: string) => key === 'id' ? TEST_AGENT_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        public_key: 'not-a-valid-key',
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await rotateKeyRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe('INVALID_KEY_FORMAT');
   });
 });
