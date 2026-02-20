@@ -780,9 +780,9 @@ BOTCHA as a trust seal issuer for the [Google A2A protocol](https://developers.g
 
 ---
 
-### 🏢 OIDC-A Attestation (PR #28 — in review)
+### 🏢 OIDC-A Attestation (PR #28 — merged)
 
-Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims.
+Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9334) and OIDC-A agent claims.
 
 | Endpoint | Auth | Description |
 |----------|------|-------------|

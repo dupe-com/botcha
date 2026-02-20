@@ -84,6 +84,15 @@ export const SHOWCASE_CSS = `
     background: var(--bg-raised);
   }
 
+  a.showcase-pill {
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  a.showcase-pill:hover {
+    opacity: 0.75;
+  }
+
   .showcase-hero-links {
     display: flex;
     flex-wrap: wrap;
@@ -284,6 +293,16 @@ export const SHOWCASE_CSS = `
     background: var(--bg-raised);
     border: 1px solid var(--border-bright);
     color: var(--text-dim);
+  }
+
+  a.showcase-protocol-badge {
+    text-decoration: none;
+  }
+
+  a.showcase-protocol-badge:hover {
+    border-color: var(--green);
+    color: var(--green);
+    opacity: 1;
   }
 
   .showcase-protocol-title {
@@ -903,12 +922,12 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
             </p>
             <div class="showcase-pill-row">
               <span class="showcase-pill active">Challenge Verification</span>
-              <span class="showcase-pill active">TAP · RFC 9421</span>
-              <span class="showcase-pill active">DID / VC · W3C</span>
-              <span class="showcase-pill active">A2A Agent Cards</span>
-              <span class="showcase-pill active">OIDC-A · EAT · RFC 9334</span>
-              <span class="showcase-pill">ANS · GoDaddy</span>
-              <span class="showcase-pill">x402 Micropayments</span>
+              <a class="showcase-pill active" href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">TAP · RFC 9421</a>
+              <a class="showcase-pill active" href="https://www.w3.org/TR/did-core/" target="_blank" rel="noopener">DID / VC · W3C</a>
+              <a class="showcase-pill active" href="https://google.github.io/A2A/" target="_blank" rel="noopener">A2A Agent Cards</a>
+              <a class="showcase-pill active" href="https://www.rfc-editor.org/rfc/rfc9334" target="_blank" rel="noopener">OIDC-A · EAT · RFC 9334</a>
+              <a class="showcase-pill" href="https://www.godaddy.com/engineering/2024/12/16/agent-name-service/" target="_blank" rel="noopener">ANS · GoDaddy</a>
+              <a class="showcase-pill" href="https://x402.org/" target="_blank" rel="noopener">x402 Micropayments</a>
               <span class="showcase-pill">Reputation Scoring</span>
               <span class="showcase-pill">Delegation Chains</span>
               <span class="showcase-pill">Webhooks</span>
@@ -1024,7 +1043,7 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
             <div class="showcase-protocol-grid">
 
               <div class="showcase-protocol-card">
-                <span class="showcase-protocol-badge">Google A2A</span>
+                <a class="showcase-protocol-badge" href="https://google.github.io/A2A/" target="_blank" rel="noopener">Google A2A</a>
                 <div class="showcase-protocol-title">A2A Agent Card Attestation</div>
                 <div class="showcase-protocol-desc">
                   BOTCHA as a trust seal issuer for the Google Agent-to-Agent protocol.
@@ -1041,7 +1060,7 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               </div>
 
               <div class="showcase-protocol-card">
-                <span class="showcase-protocol-badge">W3C DID · VC</span>
+                <a class="showcase-protocol-badge" href="https://www.w3.org/TR/did-core/" target="_blank" rel="noopener">W3C DID · VC</a>
                 <div class="showcase-protocol-title">DID / Verifiable Credentials</div>
                 <div class="showcase-protocol-desc">
                   BOTCHA is a W3C DID issuer (<code>did:web:botcha.ai</code>). Issue portable VC JWTs
@@ -1057,7 +1076,7 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               </div>
 
               <div class="showcase-protocol-card">
-                <span class="showcase-protocol-badge">OIDC-A · EAT · RFC 9334</span>
+                <a class="showcase-protocol-badge" href="https://www.rfc-editor.org/rfc/rfc9334" target="_blank" rel="noopener">OIDC-A · EAT · RFC 9334</a>
                 <div class="showcase-protocol-title">OIDC-A Enterprise Auth</div>
                 <div class="showcase-protocol-desc">
                   BOTCHA as an <code>agent_attestation</code> endpoint in enterprise OIDC chains.
@@ -1074,7 +1093,7 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               </div>
 
               <div class="showcase-protocol-card">
-                <span class="showcase-protocol-badge">GoDaddy ANS</span>
+                <a class="showcase-protocol-badge" href="https://www.godaddy.com/engineering/2024/12/16/agent-name-service/" target="_blank" rel="noopener">GoDaddy ANS</a>
                 <div class="showcase-protocol-title">Agent Name Service</div>
                 <div class="showcase-protocol-desc">
                   BOTCHA as a verification layer for the GoDaddy ANS standard. DNS-based agent

@@ -159,6 +159,204 @@ Create a TAP session with intent validation. The intent dict should include `act
 
 Get a TAP session by ID, including time remaining before expiry.
 
+##### `async rotate_agent_key(agent_id: str) -> RotateKeyResponse`
+
+Rotate the key pair for a TAP-registered agent. Returns the new public key.
+
+##### Delegation Methods
+
+##### `async create_delegation(grantor_id: str, grantee_id: str, capabilities: list, ttl: int = 3600, parent_delegation_id: str = None) -> DelegationResponse`
+
+Delegate capabilities from one agent to another. Capabilities can only be narrowed, never expanded. Supports chained delegation via `parent_delegation_id`.
+
+##### `async get_delegation(delegation_id: str) -> DelegationResponse`
+
+Get delegation details by ID.
+
+##### `async list_delegations(agent_id: str, direction: str = 'both') -> DelegationListResponse`
+
+List delegations for an agent. `direction` can be `'in'`, `'out'`, or `'both'`.
+
+##### `async revoke_delegation(delegation_id: str, reason: str = None) -> RevokeResponse`
+
+Revoke a delegation. Cascades to all sub-delegations.
+
+##### `async verify_delegation_chain(delegation_id: str) -> DelegationChainResponse`
+
+Verify the entire delegation chain and compute effective capabilities.
+
+##### Attestation Methods
+
+##### `async issue_attestation(agent_id: str, can: list[str], cannot: list[str] = None, ttl: int = 3600, delegation_id: str = None) -> AttestationResponse`
+
+Issue a capability attestation token with `action:resource` permission patterns and explicit deny rules. Wildcards supported (`browse:*`, `*:products`).
+
+##### `async get_attestation(attestation_id: str) -> AttestationResponse`
+
+Get attestation details by ID.
+
+##### `async list_attestations(agent_id: str) -> AttestationListResponse`
+
+List attestations for an agent.
+
+##### `async revoke_attestation(attestation_id: str, reason: str = None) -> RevokeResponse`
+
+Revoke an attestation token.
+
+##### `async verify_attestation(token: str, action: str, resource: str) -> AttestationVerifyResponse`
+
+Verify an attestation token and check if a specific capability is allowed.
+
+##### Reputation Methods
+
+##### `async get_reputation(agent_id: str) -> ReputationResponse`
+
+Get an agent's reputation score (0–1000) and tier (`untrusted`, `low`, `neutral`, `good`, `excellent`).
+
+##### `async record_reputation_event(agent_id: str, category: str, action: str, metadata: dict = None, source_agent_id: str = None) -> ReputationEventResponse`
+
+Record a reputation event. Categories: `verification`, `commerce`, `compliance`, `social`, `security`, `governance`.
+
+##### `async list_reputation_events(agent_id: str, category: str = None, limit: int = 50) -> ReputationEventListResponse`
+
+List reputation events for an agent, optionally filtered by category.
+
+##### `async reset_reputation(agent_id: str) -> ResetResponse`
+
+Reset an agent's reputation to the neutral base score (admin use).
+
+##### Webhook Methods
+
+##### `async create_webhook(url: str, events: list[str]) -> WebhookResponse`
+
+Register a webhook endpoint. Returns the signing secret once — save it.
+
+##### `async list_webhooks() -> WebhookListResponse`
+
+List all webhooks for the current app.
+
+##### `async get_webhook(webhook_id: str) -> WebhookResponse`
+
+Get webhook details by ID.
+
+##### `async update_webhook(webhook_id: str, url: str = None, events: list[str] = None, enabled: bool = None) -> WebhookResponse`
+
+Update webhook URL, event subscriptions, or enabled state.
+
+##### `async delete_webhook(webhook_id: str) -> DeleteResponse`
+
+Delete a webhook and all its delivery logs.
+
+##### `async test_webhook(webhook_id: str) -> WebhookTestResponse`
+
+Send a signed test event to the webhook endpoint.
+
+##### `async list_webhook_deliveries(webhook_id: str) -> WebhookDeliveryListResponse`
+
+List the last 100 delivery attempts for a webhook.
+
+##### x402 Methods
+
+##### `async get_x402_info() -> X402InfoResponse`
+
+Get payment configuration: amount, currency (USDC), chain (base), and recipient address.
+
+##### `async get_x402_challenge(payment_proof: str = None) -> X402ChallengeResponse`
+
+Initiate the x402 payment flow. Without a proof, returns a 402 with payment terms. With a valid `payment_proof`, returns a BOTCHA access token.
+
+##### `async verify_x402_payment(payment_proof: str, chain: str = 'base') -> X402VerifyResponse`
+
+Verify a raw x402 payment proof.
+
+##### ANS Methods
+
+##### `async get_ans_identity() -> ANSIdentityResponse`
+
+Get BOTCHA's own ANS identity record.
+
+##### `async resolve_ans_name(name: str) -> ANSResolveResponse`
+
+Resolve an agent name to its ANS record via DNS TXT lookup.
+
+##### `async discover_ans_agents() -> ANSDiscoverResponse`
+
+List all BOTCHA-verified ANS agents.
+
+##### `async get_ans_nonce(name: str) -> ANSNonceResponse`
+
+Get a one-time nonce for ANS ownership verification. Requires Bearer token.
+
+##### `async verify_ans_ownership(name: str, agent_url: str, nonce: str, proof: str) -> ANSVerifyResponse`
+
+Prove ownership of an ANS name and receive a BOTCHA-signed badge JWT.
+
+##### DID / Verifiable Credential Methods
+
+##### `async issue_credential(subject: dict, credential_type: list[str] = None, ttl_seconds: int = 3600) -> VCResponse`
+
+Issue a W3C Verifiable Credential JWT. Requires Bearer token. The VC is signed with BOTCHA's private key and can be verified by any party who resolves `did:web:botcha.ai`.
+
+##### `async verify_credential(vc: str) -> VCVerifyResponse`
+
+Verify a BOTCHA-issued VC JWT. Public endpoint — no auth required.
+
+##### `async resolve_did(did: str) -> DIDDocumentResponse`
+
+Resolve a `did:web` DID to its DID Document.
+
+##### A2A Methods
+
+##### `async get_agent_card() -> A2ACardResponse`
+
+Get BOTCHA's own A2A Agent Card.
+
+##### `async attest_agent_card(card: dict, duration_seconds: int = 86400, trust_level: str = 'verified') -> A2AAttestResponse`
+
+Submit an A2A Agent Card for BOTCHA attestation. Returns a tamper-evident trust seal. Requires Bearer token.
+
+##### `async verify_agent_card(card: dict) -> A2AVerifyResponse`
+
+Verify the BOTCHA trust seal on an attested agent card.
+
+##### `async verify_agent(agent_url: str = None, agent_card: dict = None) -> A2AVerifyResponse`
+
+Verify an agent by URL or full card with embedded attestation.
+
+##### `async get_trust_level(agent_url: str) -> A2ATrustLevelResponse`
+
+Get the current BOTCHA trust level for an agent URL. Returns `"unverified"` if no attestation exists.
+
+##### `async list_attested_cards() -> A2ACardListResponse`
+
+Browse the registry of all BOTCHA-attested A2A agent cards.
+
+##### OIDC-A Methods
+
+##### `async issue_eat(agent_model: str = None, ttl_seconds: int = 900, verification_method: str = None, nonce: str = None) -> EATResponse`
+
+Issue an Entity Attestation Token (EAT / RFC 9334). Requires Bearer token. Suitable for presentation to enterprise relying parties.
+
+##### `async issue_oidca_claims(agent_model: str = None, agent_version: str = None, agent_capabilities: list[str] = None, agent_operator: str = None, human_oversight_required: bool = False, task_id: str = None, task_purpose: str = None, nonce: str = None) -> OIDCAClaimsResponse`
+
+Issue an OIDC-A agent claims block JWT. Suitable for inclusion in OAuth2 token responses.
+
+##### `async create_agent_grant(scope: str, human_oversight_required: bool = False, agent_model: str = None, agent_operator: str = None, task_id: str = None, task_purpose: str = None) -> AgentGrantResponse`
+
+Initiate an OAuth2-style agent grant flow. If `human_oversight_required=True`, returns a pending grant with an `oversight_url` for the human to approve.
+
+##### `async get_agent_grant_status(grant_id: str) -> AgentGrantStatusResponse`
+
+Poll the status of an agent grant.
+
+##### `async resolve_agent_grant(grant_id: str, decision: str) -> AgentGrantResolveResponse`
+
+Approve or reject an agent grant. `decision` is `"approved"` or `"rejected"`.
+
+##### `async get_oidc_userinfo() -> OIDCUserInfoResponse`
+
+Get OIDC-A UserInfo claims for the currently authenticated agent.
+
 ---
 
 ### `solve_botcha(problems: list[int]) -> list[str]`
@@ -323,6 +521,180 @@ async def main():
             intent={"action": "browse", "resource": "products", "duration": 3600},
         )
         print(f"Session expires: {session.expires_at}")
+
+asyncio.run(main())
+```
+
+### Delegation Chains
+
+Delegate capabilities between agents with auditable, revocable chains:
+
+```python
+import asyncio
+from botcha import BotchaClient
+
+async def main():
+    async with BotchaClient(app_id="app_abc123") as client:
+        # Agent A delegates to Agent B
+        delegation = await client.create_delegation(
+            grantor_id="agent_aaa",
+            grantee_id="agent_bbb",
+            capabilities=[{"action": "browse", "resource": "products"}],
+            ttl=3600,
+        )
+
+        # Verify the full chain
+        chain = await client.verify_delegation_chain(delegation.delegation_id)
+        print(f"Effective capabilities: {chain.effective_capabilities}")
+
+        # Revoke (cascades to all sub-delegations)
+        await client.revoke_delegation(delegation.delegation_id, reason="Session ended")
+
+asyncio.run(main())
+```
+
+### Capability Attestation
+
+Fine-grained action:resource permission tokens with deny rules:
+
+```python
+import asyncio
+from botcha import BotchaClient
+
+async def main():
+    async with BotchaClient(app_id="app_abc123") as client:
+        # Issue attestation
+        att = await client.issue_attestation(
+            agent_id="agent_abc123",
+            can=["read:invoices", "browse:*"],
+            cannot=["purchase:*"],
+            ttl=3600,
+        )
+        print(f"Token: {att.token}")
+
+        # Verify capability
+        check = await client.verify_attestation(att.token, "read", "invoices")
+        print(f"Allowed: {check.allowed}")  # True
+
+asyncio.run(main())
+```
+
+### Agent Reputation
+
+Track agent trust scores over time:
+
+```python
+import asyncio
+from botcha import BotchaClient
+
+async def main():
+    async with BotchaClient(app_id="app_abc123") as client:
+        # Get reputation
+        rep = await client.get_reputation("agent_abc123")
+        print(f"Score: {rep.score}, Tier: {rep.tier}")
+
+        # Record positive event
+        await client.record_reputation_event(
+            agent_id="agent_abc123",
+            category="verification",
+            action="challenge_solved",
+        )
+
+        # Endorsement from another agent
+        await client.record_reputation_event(
+            agent_id="agent_abc123",
+            category="social",
+            action="endorsement_received",
+            source_agent_id="agent_def456",
+        )
+
+asyncio.run(main())
+```
+
+### DID / Verifiable Credentials
+
+Issue and verify portable W3C credential JWTs:
+
+```python
+import asyncio
+from botcha import BotchaClient
+
+async def main():
+    async with BotchaClient() as client:
+        # Issue a verifiable credential
+        vc_result = await client.issue_credential(
+            subject={"agentType": "llm", "operator": "Acme Corp"},
+            credential_type=["VerifiableCredential", "BotchaVerification"],
+            ttl_seconds=3600,
+        )
+        print(f"VC JWT: {vc_result.vc}")
+
+        # Anyone can verify — no auth required
+        verified = await client.verify_credential(vc_result.vc)
+        print(f"Valid: {verified.valid}")
+        print(f"Issuer: {verified.payload['iss']}")  # did:web:botcha.ai
+
+asyncio.run(main())
+```
+
+### A2A Agent Card Attestation
+
+Get a BOTCHA trust seal for your A2A Agent Card:
+
+```python
+import asyncio
+from botcha import BotchaClient
+
+async def main():
+    async with BotchaClient() as client:
+        # Attest your agent's card
+        result = await client.attest_agent_card(
+            card={
+                "name": "My Commerce Agent",
+                "url": "https://myagent.example",
+                "version": "1.0.0",
+                "capabilities": {"streaming": False},
+                "skills": [{"id": "browse", "name": "Browse"}],
+            },
+            trust_level="verified",
+        )
+        print(f"Trust seal: {result.attestation.token}")
+
+        # Verify an attested card
+        check = await client.verify_agent_card(result.attested_card)
+        print(f"Valid: {check.valid}")
+
+asyncio.run(main())
+```
+
+### OIDC-A Attestation
+
+Enterprise agent auth chains with EAT tokens and agent grants:
+
+```python
+import asyncio
+from botcha import BotchaClient
+
+async def main():
+    async with BotchaClient() as client:
+        # Issue an Entity Attestation Token (EAT)
+        eat = await client.issue_eat(
+            agent_model="gpt-5",
+            ttl_seconds=900,
+            verification_method="speed-challenge",
+        )
+        print(f"EAT token: {eat.token}")
+
+        # Initiate an agent grant (OAuth2-style)
+        grant = await client.create_agent_grant(
+            scope="agent:read openid",
+            human_oversight_required=True,
+            agent_model="gpt-5",
+            task_purpose="invoice reconciliation",
+        )
+        print(f"Grant status: {grant.status}")
+        if grant.oversight_url:
+            print(f"Human oversight required: {grant.oversight_url}")
 
 asyncio.run(main())
 ```

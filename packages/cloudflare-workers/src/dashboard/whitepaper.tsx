@@ -447,6 +447,8 @@ export const WhitepaperPage: FC<{ version: string }> = ({ version }) => {
               <li><a href="#the-challenge-system">How It Works: The Challenge System</a></li>
               <li><a href="#tap">The Trusted Agent Protocol (TAP)</a></li>
               <li><a href="#architecture">Architecture and Security</a></li>
+              <li><a href="#identity-layer">The Full Identity Layer</a></li>
+              <li><a href="#protocol-integrations">Protocol Integrations</a></li>
               <li><a href="#integration">Integration: SDKs and Middleware</a></li>
               <li><a href="#the-stack">The Agent Infrastructure Stack</a></li>
               <li><a href="#use-cases">Use Cases</a></li>
@@ -472,7 +474,7 @@ export const WhitepaperPage: FC<{ version: string }> = ({ version }) => {
 
           <ul>
             <li><strong>Proof of AI</strong> — Computational challenges (SHA-256 hashes in under 500ms) that only machines can solve.</li>
-            <li><strong>Proof of Identity</strong> — Persistent agent registration with cryptographic keys, verified via HTTP Message Signatures (RFC 9421).</li>
+            <li><strong>Proof of Identity</strong> — Persistent agent registration with cryptographic keys, verified via <a href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">HTTP Message Signatures (RFC 9421)</a>.</li>
             <li><strong>Proof of Intent</strong> — Capability-scoped sessions where agents declare what they plan to do, for how long, and on behalf of whom.</li>
           </ul>
 
@@ -686,7 +688,7 @@ export const WhitepaperPage: FC<{ version: string }> = ({ version }) => {
 
           <ul>
             <li><strong>Persistent agent identity</strong> — unique ID, name, and operator metadata.</li>
-            <li><strong>Cryptographic verification</strong> — ECDSA P-256 or RSA-PSS public keys; requests signed via HTTP Message Signatures (RFC 9421).</li>
+            <li><strong>Cryptographic verification</strong> — ECDSA P-256 or RSA-PSS public keys; requests signed via <a href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">HTTP Message Signatures (RFC 9421)</a>.</li>
             <li><strong>Capability-based access control</strong> — agents declare actions: <code>browse</code>, <code>search</code>, <code>compare</code>, <code>purchase</code>, <code>audit</code>.</li>
             <li><strong>Intent-scoped sessions</strong> — time-limited sessions validated against capabilities.</li>
             <li><strong>Trust levels</strong> — <code>basic</code>, <code>verified</code>, <code>enterprise</code>.</li>
@@ -707,7 +709,8 @@ export const WhitepaperPage: FC<{ version: string }> = ({ version }) => {
 }`}</code></pre>
 
           <p>
-            For cryptographic identity, agents register a public key and sign requests using RFC 9421:
+            For cryptographic identity, agents register a public key and sign requests using{' '}
+            <a href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">RFC 9421</a>:
           </p>
 
           <pre><code>{`x-tap-agent-id: agent_6ddfd9f10cfd8dfc
@@ -759,7 +762,7 @@ signature: sig1=:BASE64_SIGNATURE:`}</code></pre>
               <tr>
                 <td>Cryptographic</td>
                 <td>"I can prove I am this bot"</td>
-                <td>RFC 9421 signatures</td>
+                <td><a href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">RFC 9421</a> signatures</td>
               </tr>
               <tr>
                 <td>Dual auth</td>
@@ -778,6 +781,7 @@ signature: sig1=:BASE64_SIGNATURE:`}</code></pre>
           {/* 6. ARCHITECTURE                                                  */}
           {/* ================================================================ */}
           <h2 id="architecture">6. Architecture and Security</h2>
+
 
           <h3>Infrastructure</h3>
 
@@ -865,14 +869,223 @@ signature: sig1=:BASE64_SIGNATURE:`}</code></pre>
           <p>
             When a human needs dashboard access, the agent solves a challenge and receives a
             device code (e.g., <code>BOTCHA-RBA89X</code>). The human opens the link and is
-            logged in. This adapts the OAuth 2.0 Device Authorization Grant (RFC 8628) with a twist:
+            logged in. This adapts the <a href="https://www.rfc-editor.org/rfc/rfc8628" target="_blank" rel="noopener">OAuth 2.0 Device Authorization Grant (RFC 8628)</a> with a twist:
             the agent must solve a BOTCHA challenge to generate the code. No agent, no code.
           </p>
 
           {/* ================================================================ */}
-          {/* 7. INTEGRATION                                                   */}
+          {/* 7. THE FULL IDENTITY LAYER                                       */}
           {/* ================================================================ */}
-          <h2 id="integration">7. Integration: SDKs and Middleware</h2>
+          <h2 id="identity-layer">7. The Full Identity Layer</h2>
+
+          <p>
+            BOTCHA has grown beyond a proof-of-bot challenge system into a complete identity
+            infrastructure for AI agents. The stack now covers verification, delegation, attestation,
+            reputation, portable credentials, and payment-gated access.
+          </p>
+
+          <h3>Delegation Chains</h3>
+
+          <p>
+            "User X authorized Agent Y to do Z until time T." Delegation chains encode this
+            relationship cryptographically. An orchestrator agent can delegate a subset of its
+            capabilities to a sub-agent, which can further sub-delegate — but capabilities can
+            only narrow, never expand. Revoking any link cascades to all descendants.
+          </p>
+
+          <pre><code>{`POST /v1/delegations
+{
+  "grantor_id": "agent_aaa",
+  "grantee_id": "agent_bbb",
+  "capabilities": [{"action": "browse", "resource": "products"}],
+  "ttl": 3600
+}
+
+POST /v1/verify/delegation  ← verify entire chain in one call`}</code></pre>
+
+          <h3>Capability Attestation</h3>
+
+          <p>
+            Fine-grained permission tokens using <code>action:resource</code> patterns with
+            explicit deny rules. An attestation token encodes both what an agent <em>can</em> do
+            and what it explicitly <em>cannot</em> do. Deny rules always take precedence.
+            Wildcards are supported: <code>browse:*</code>, <code>*:products</code>.
+          </p>
+
+          <pre><code>{`POST /v1/attestations
+{
+  "agent_id": "agent_...",
+  "can": ["read:invoices", "browse:*"],
+  "cannot": ["purchase:*"],
+  "ttl": 3600
+}
+// Returns signed JWT → present as X-Botcha-Attestation header`}</code></pre>
+
+          <h3>Agent Reputation</h3>
+
+          <p>
+            A score-based reputation system (0–1000, five tiers) that tracks agent behavior
+            across 18 action types in 6 categories: verification, commerce, compliance, social,
+            security, and governance. Scores decay toward the neutral midpoint (500) without
+            activity, preventing stale reputation from persisting indefinitely.
+          </p>
+
+          <table>
+            <thead>
+              <tr><th>Score Range</th><th>Tier</th><th>Effect</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>0–199</td><td>untrusted</td><td>Blocked from sensitive endpoints</td></tr>
+              <tr><td>200–399</td><td>low</td><td>Reduced rate limits</td></tr>
+              <tr><td>400–599</td><td>neutral</td><td>Default access</td></tr>
+              <tr><td>600–799</td><td>good</td><td>Elevated rate limits</td></tr>
+              <tr><td>800–1000</td><td>excellent</td><td>Fastest paths, priority queues</td></tr>
+            </tbody>
+          </table>
+
+          <h3>Webhooks</h3>
+
+          <p>
+            Per-app webhook endpoints receive signed event deliveries over HTTP POST.
+            Payloads are signed with HMAC-SHA256. Apps can subscribe to specific event types:
+            token lifecycle, TAP sessions, delegation changes.
+          </p>
+
+          {/* ================================================================ */}
+          {/* 8. PROTOCOL INTEGRATIONS                                         */}
+          {/* ================================================================ */}
+          <h2 id="protocol-integrations">8. Protocol Integrations</h2>
+
+          <p>
+            BOTCHA integrates with every major emerging agentic protocol, acting as the
+            identity and verification layer for each standard.
+          </p>
+
+          <h3>x402 Payment Gating</h3>
+
+          <p>
+            <a href="https://x402.org/" target="_blank" rel="noopener">x402</a> micropayment
+            flow using USDC on Base. Agents pay $0.001 USDC instead of solving a speed challenge.
+            The standard 402 Payment Required response carries payment terms; the agent
+            re-requests with an <code>X-Payment</code> header carrying a payment proof and
+            receives a BOTCHA access token.
+          </p>
+
+          <pre><code>{`GET /v1/x402/challenge
+← 402 { amount: "0.001", currency: "USDC", chain: "base", recipient: "0x..." }
+← Agent pays, retries with X-Payment header
+← 200 { access_token: "eyJ..." }`}</code></pre>
+
+          <p>
+            This provides a payment-alternative to the proof-of-computation model — useful for
+            high-throughput agents where challenge solving overhead is undesirable, and for
+            monetizing API access without requiring a subscription.
+          </p>
+
+          <h3>Agent Name Service (ANS)</h3>
+
+          <p>
+            BOTCHA implements the{' '}
+            <a href="https://www.godaddy.com/engineering/2024/12/16/agent-name-service/" target="_blank" rel="noopener">GoDaddy-led ANS standard</a>{' '}
+            — a DNS-based agent identity system where an agent's name resolves via TXT records
+            to its endpoint and identity metadata. BOTCHA serves as a verification and badging
+            layer: agents prove ownership of their ANS name and receive a BOTCHA-signed badge JWT.
+          </p>
+
+          <pre><code>{`GET /v1/ans/resolve/my-agent.agents  → DNS TXT lookup + BOTCHA badge
+POST /v1/ans/verify                  → prove DNS ownership → issue badge`}</code></pre>
+
+          <h3>W3C DID / Verifiable Credentials</h3>
+
+          <p>
+            BOTCHA operates as a{' '}
+            <a href="https://www.w3.org/TR/did-core/" target="_blank" rel="noopener">W3C Decentralized Identifier (DID)</a>{' '}
+            issuer under <code>did:web:botcha.ai</code>. After solving a challenge, an agent can
+            request a{' '}
+            <a href="https://www.w3.org/TR/vc-data-model/" target="_blank" rel="noopener">W3C Verifiable Credential</a>{' '}
+            JWT. The VC is signed with BOTCHA's private key and can be verified by any party who
+            resolves the DID Document — no round-trip to BOTCHA required.
+          </p>
+
+          <pre><code>{`// 1. Resolve the issuer
+GET /.well-known/did.json → DID Document with public key
+
+// 2. Issue credential
+POST /v1/credentials/issue  (Authorization: Bearer <botcha-token>)
+→ { "vc": "eyJ..." }  ← portable JWT, verifiable offline
+
+// 3. Anyone can verify
+POST /v1/credentials/verify
+→ { "valid": true, "payload": { "iss": "did:web:botcha.ai", ... } }`}</code></pre>
+
+          <p>
+            This enables agent credentials that travel across trust boundaries. A BOTCHA VC
+            issued to an agent can be presented to a third-party API, a financial institution,
+            or another agent network without those parties needing a BOTCHA account.
+          </p>
+
+          <h3>A2A Agent Card Attestation</h3>
+
+          <p>
+            Google's <a href="https://google.github.io/A2A/" target="_blank" rel="noopener">A2A (Agent-to-Agent) protocol</a>{' '}
+            defines a standard JSON Agent Card format published at <code>/.well-known/agent.json</code>.
+            BOTCHA acts as a trust seal issuer:
+            any agent that publishes an A2A card can submit it to BOTCHA for attestation.
+            BOTCHA produces a tamper-evident hash-and-signature bundle that third parties can
+            verify without contacting BOTCHA again.
+          </p>
+
+          <pre><code>{`POST /v1/a2a/attest  (Authorization: Bearer <botcha-token>)
+→ { "attestation": { "trust_level": "verified", "token": "eyJ..." },
+    "attested_card": { "extensions": { "botcha_attestation": {...} } } }
+
+POST /v1/a2a/verify-card  ← verify any attested card offline`}</code></pre>
+
+          <p>
+            BOTCHA publishes its own A2A Agent Card at{' '}
+            <code>/.well-known/agent.json</code>, making it auto-discoverable by A2A-aware agents.
+          </p>
+
+          <h3>OIDC-A Attestation</h3>
+
+          <p>
+            Enterprise agent authentication chains require a bridge between human identity
+            systems and agent identity systems.{' '}
+            <a href="https://openid.net/specs/openid-connect-core-1_0.html" target="_blank" rel="noopener">OIDC-A (OpenID Connect for Agents)</a>{' '}
+            provides this bridge. BOTCHA implements:
+          </p>
+
+          <ul>
+            <li>
+              <strong><a href="https://www.rfc-editor.org/rfc/rfc9334" target="_blank" rel="noopener">Entity Attestation Tokens (EAT / RFC 9334)</a></strong> — signed JWTs that
+              attest agent provenance, verification method, and model identity. Suitable for
+              presentation to enterprise relying parties.
+            </li>
+            <li>
+              <strong>OIDC-A Agent Claims</strong> — an OIDC claims block carrying
+              <code>agent_model</code>, <code>agent_operator</code>,{' '}
+              <code>human_oversight_required</code>, and task metadata. Compatible with
+              standard OAuth2 token responses.
+            </li>
+            <li>
+              <strong>Agent Grant Flow</strong> — an OAuth2-style authorization grant where an
+              agent requests access on behalf of a human. If <code>human_oversight_required</code>{' '}
+              is set, the grant is pending until the human approves via a BOTCHA oversight URL.
+            </li>
+          </ul>
+
+          <pre><code>{`// Enterprise chain: human → IdP → BOTCHA → agent
+POST /v1/attestation/eat
+→ EAT JWT (RFC 9334) for relying party presentation
+
+POST /v1/auth/agent-grant
+→ { "grant_id": "...", "status": "pending", "oversight_url": "..." }
+// Human approves at oversight_url → agent receives access`}</code></pre>
+
+          {/* ================================================================ */}
+          {/* 9. INTEGRATION (renumbered)                                      */}
+          {/* ================================================================ */}
+          <h2 id="integration">9. Integration: SDKs and Middleware</h2>
 
           <h3>Client SDKs (for agents)</h3>
 
@@ -920,9 +1133,9 @@ botcha tap register --name "my-agent" --capabilities browse,search
 botcha tap session --action browse --resource products --duration 1h`}</code></pre>
 
           {/* ================================================================ */}
-          {/* 8. THE STACK                                                     */}
+          {/* 10. THE STACK                                                    */}
           {/* ================================================================ */}
-          <h2 id="the-stack">8. The Agent Infrastructure Stack</h2>
+          <h2 id="the-stack">10. The Agent Infrastructure Stack</h2>
 
           <p>
             BOTCHA positions itself alongside other emerging agent protocols:
@@ -930,37 +1143,45 @@ botcha tap session --action browse --resource products --duration 1h`}</code></p
 
           <div class="wp-stack">
             <div class="wp-stack-layer wp-stack-highlight">
-              <span class="wp-stack-label">Layer 3</span>
-              <span class="wp-stack-name">TAP (BOTCHA)</span>
-              <span class="wp-stack-desc">Who agents are</span>
+              <span class="wp-stack-label">BOTCHA</span>
+              <span class="wp-stack-name">Identity + Trust Layer</span>
+              <span class="wp-stack-desc">Who agents are, what they can do, what they've earned</span>
             </div>
             <div class="wp-stack-layer">
-              <span class="wp-stack-label">Layer 2</span>
-              <span class="wp-stack-name">A2A (Google)</span>
-              <span class="wp-stack-desc">How agents talk</span>
+              <span class="wp-stack-label">Protocols</span>
+              <span class="wp-stack-name">TAP / A2A / OIDC-A / ANS / DID-VC / x402</span>
+              <span class="wp-stack-desc">Open standards BOTCHA implements as issuer/verifier</span>
             </div>
             <div class="wp-stack-layer">
-              <span class="wp-stack-label">Layer 1</span>
-              <span class="wp-stack-name">MCP (Anthropic)</span>
-              <span class="wp-stack-desc">What agents access</span>
+              <span class="wp-stack-label">Coordination</span>
+              <span class="wp-stack-name">A2A (Google) / MCP (Anthropic)</span>
+              <span class="wp-stack-desc">How agents talk and access tools</span>
+            </div>
+            <div class="wp-stack-layer">
+              <span class="wp-stack-label">Transport</span>
+              <span class="wp-stack-name">HTTP / SSE / WebSocket</span>
+              <span class="wp-stack-desc">Network layer</span>
             </div>
           </div>
 
           <p>
-            <strong>MCP</strong> gives agents access to tools and data. <strong>A2A</strong> enables multi-agent
-            coordination. <strong>TAP</strong> provides identity, capability scoping, and intent declaration.
+            <strong>MCP</strong> gives agents access to tools and data. <strong>A2A</strong> enables
+            multi-agent coordination. <strong>BOTCHA</strong> provides the full identity layer:
+            proof of AI, cryptographic identity (TAP), capability attestation, portable credentials
+            (DID/VC), DNS-based names (ANS), enterprise auth chains (OIDC-A), and payment-gated
+            access (x402).
           </p>
 
           <p>
             Without an identity layer, the other layers have a trust gap. MCP can give an agent
             access to a database, but who authorized it? A2A can let agents delegate tasks,
-            but can you trust the delegate? TAP closes this gap.
+            but can you trust the delegate? BOTCHA closes this gap — at every layer of the stack.
           </p>
 
           {/* ================================================================ */}
-          {/* 9. USE CASES                                                     */}
+          {/* 11. USE CASES                                                    */}
           {/* ================================================================ */}
-          <h2 id="use-cases">9. Use Cases</h2>
+          <h2 id="use-cases">11. Use Cases</h2>
 
           <h3>E-commerce agent verification</h3>
           <p>
@@ -992,11 +1213,11 @@ botcha tap session --action browse --resource products --duration 1h`}</code></p
           </p>
 
           {/* ================================================================ */}
-          {/* 10. ROADMAP                                                      */}
+          {/* 12. ROADMAP                                                      */}
           {/* ================================================================ */}
-          <h2 id="roadmap">10. Roadmap</h2>
+          <h2 id="roadmap">12. Roadmap</h2>
 
-          <h3>Shipped</h3>
+          <h3>Shipped (v0.22.0)</h3>
 
           <table>
             <thead>
@@ -1007,14 +1228,23 @@ botcha tap session --action browse --resource products --duration 1h`}</code></p
             </thead>
             <tbody>
               <tr><td>Challenge types</td><td>Speed, Reasoning, Hybrid, and Compute</td></tr>
-              <tr><td>JWT token system</td><td>1-hr access, 1-hr refresh, revocation, audience claims</td></tr>
+              <tr><td>JWT token system</td><td>ES256 tokens, 1-hr access + refresh, revocation, audience claims</td></tr>
               <tr><td>Multi-tenant apps</td><td>Per-app rate limits, scoped tokens, isolated analytics</td></tr>
               <tr><td>Agent Registry</td><td>Persistent identities with names and operators</td></tr>
-              <tr><td>TAP</td><td>Cryptographic identity, capability scoping, intent sessions</td></tr>
-              <tr><td>Dashboard</td><td>Per-app analytics and metrics</td></tr>
-              <tr><td>SDKs</td><td>TypeScript, Python, CLI, LangChain</td></tr>
-              <tr><td>Server verification</td><td>Express, Hono, FastAPI, Django middleware</td></tr>
-              <tr><td>Discovery</td><td>ai.txt, OpenAPI, AI Plugin manifest, embedded metadata</td></tr>
+              <tr><td>TAP</td><td>Cryptographic identity (<a href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">RFC 9421</a>), capability scoping, intent sessions, Layer 2/3</td></tr>
+              <tr><td>Delegation chains</td><td>Signed capability delegation with cascade revocation</td></tr>
+              <tr><td>Capability attestation</td><td>action:resource tokens with deny rules, wildcard patterns</td></tr>
+              <tr><td>Agent reputation</td><td>0–1000 score, 5 tiers, 18 action types, mean-reversion decay</td></tr>
+              <tr><td>Webhooks</td><td>Per-app signed event deliveries for 6 event types</td></tr>
+              <tr><td>x402 payment gating</td><td><a href="https://x402.org/" target="_blank" rel="noopener">x402</a> HTTP 402 + USDC on Base — pay instead of solving</td></tr>
+              <tr><td>ANS integration</td><td><a href="https://www.godaddy.com/engineering/2024/12/16/agent-name-service/" target="_blank" rel="noopener">GoDaddy ANS</a> standard — DNS-based identity + BOTCHA badges</td></tr>
+              <tr><td>DID/VC issuer</td><td><a href="https://www.w3.org/TR/did-core/" target="_blank" rel="noopener">W3C DID</a> / <a href="https://www.w3.org/TR/vc-data-model/" target="_blank" rel="noopener">VC</a> — portable credential JWTs, offline-verifiable</td></tr>
+              <tr><td>A2A attestation</td><td><a href="https://google.github.io/A2A/" target="_blank" rel="noopener">Google A2A</a> Agent Card trust seals, tamper-evident registry</td></tr>
+              <tr><td>OIDC-A</td><td><a href="https://www.rfc-editor.org/rfc/rfc9334" target="_blank" rel="noopener">EAT (RFC 9334)</a>, OIDC-A claims, OAuth2 agent grant flow</td></tr>
+              <tr><td>Dashboard</td><td>Agent-first auth (challenge + device code), per-app analytics</td></tr>
+              <tr><td>SDKs</td><td>TypeScript, Python, CLI, LangChain integration</td></tr>
+              <tr><td>Server verification</td><td>Express, Hono, FastAPI, Django middleware (JWKS + HS256)</td></tr>
+              <tr><td>Discovery</td><td>ai.txt, OpenAPI 3.1, AI Plugin manifest, DID Document, A2A card</td></tr>
             </tbody>
           </table>
 
@@ -1028,10 +1258,9 @@ botcha tap session --action browse --resource products --duration 1h`}</code></p
               </tr>
             </thead>
             <tbody>
-              <tr><td>Delegation chains</td><td>Signed "User X authorized Agent Y to do Z until T"</td></tr>
-              <tr><td>Capability attestation</td><td>Token claims with server-side enforcement</td></tr>
-              <tr><td>Agent reputation</td><td>Trust scores, faster verification for high-rep agents</td></tr>
-              <tr><td>Agent SSO</td><td>Verify once, trusted everywhere (OIDC for agents)</td></tr>
+              <tr><td>Agent SSO</td><td>Verify once, trusted everywhere — federated BOTCHA identity</td></tr>
+              <tr><td>Cross-chain x402</td><td>Support for Ethereum mainnet, Solana, Lightning</td></tr>
+              <tr><td>Reputation marketplace</td><td>Agents earn reputation across partner networks</td></tr>
               <tr><td>RFC contribution</td><td>Internet-Draft for agent identity, target IETF</td></tr>
             </tbody>
           </table>

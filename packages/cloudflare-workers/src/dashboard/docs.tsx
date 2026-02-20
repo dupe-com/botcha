@@ -511,6 +511,12 @@ export const DocsPage: FC<{ version: string }> = ({ version }) => {
               <li><a href="#delegation">Delegation Chains</a></li>
               <li><a href="#attestation">Capability Attestation</a></li>
               <li><a href="#reputation">Agent Reputation</a></li>
+              <li><a href="#webhooks">Webhooks</a></li>
+              <li><a href="#x402">x402 Payment Gating</a></li>
+              <li><a href="#ans">Agent Name Service (ANS)</a></li>
+              <li><a href="#didvc">DID / Verifiable Credentials</a></li>
+              <li><a href="#a2a">A2A Agent Card Attestation</a></li>
+              <li><a href="#oidca">OIDC-A Attestation</a></li>
               <li><a href="#invoices">Invoices (402 Micropayments)</a></li>
               <li><a href="#verification">Verification</a></li>
               <li><a href="#discovery">Discovery &amp; Keys</a></li>
@@ -887,9 +893,10 @@ async with BotchaClient() as client:
           <section id="tap" class="docs-section">
             <h2 class="docs-section-title">TAP (Trusted Agent Protocol)</h2>
             <p class="docs-section-desc">
-              Enterprise-grade cryptographic agent auth using HTTP Message Signatures (RFC 9421).
+              Enterprise-grade cryptographic agent auth using{' '}
+              <a href="https://www.rfc-editor.org/rfc/rfc9421" target="_blank" rel="noopener">HTTP Message Signatures (RFC 9421)</a>.
               Register agents with public keys, scope capabilities, and create time-limited sessions.
-              Based on <a href="https://developer.visa.com/capabilities/trusted-agent-protocol/overview">Visa's TAP</a>.
+              Based on <a href="https://developer.visa.com/capabilities/trusted-agent-protocol/overview" target="_blank" rel="noopener">Visa's TAP</a>.
             </p>
 
             <Endpoint method="POST" path="/v1/agents/register/tap" desc="Register TAP agent with public key">
@@ -1007,6 +1014,397 @@ async with BotchaClient() as client:
 
             <Endpoint method="GET" path="/v1/reputation/:agent_id/events" desc="List events (?category=&limit=)" />
             <Endpoint method="POST" path="/v1/reputation/:agent_id/reset" desc="Reset reputation (admin)" />
+          </section>
+
+          {/* ============ Webhooks ============ */}
+          <section id="webhooks" class="docs-section">
+            <h2 class="docs-section-title">Webhooks</h2>
+            <p class="docs-section-desc">
+              Register per-app webhook endpoints to receive signed event deliveries. Events are
+              delivered as HTTP POST with an <code>X-Botcha-Signature</code> header (HMAC-SHA256).
+              Supported events: <code>agent.tap.registered</code>, <code>token.created</code>,{' '}
+              <code>token.revoked</code>, <code>tap.session.created</code>,{' '}
+              <code>delegation.created</code>, <code>delegation.revoked</code>.
+            </p>
+
+            <Endpoint method="POST" path="/v1/webhooks" desc="Register webhook endpoint">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "url": "https://my-app.example/webhooks/botcha",
+  "events": ["token.created", "delegation.created"],
+  "app_id": "app_..."
+}`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "webhook_id": "wh_...",
+  "url": "https://my-app.example/webhooks/botcha",
+  "signing_secret": "whsec_...",  // shown ONCE — save it!
+  "events": ["token.created", "delegation.created"],
+  "enabled": true
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/webhooks" desc="List webhooks for your app" />
+            <Endpoint method="GET" path="/v1/webhooks/:id" desc="Get webhook details" />
+
+            <Endpoint method="PUT" path="/v1/webhooks/:id" desc="Update webhook (URL, events, enabled)">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "url": "https://my-app.example/webhooks/botcha-v2",
+  "events": ["token.created", "tap.session.created"],
+  "enabled": true
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="DELETE" path="/v1/webhooks/:id" desc="Delete webhook + secret + delivery logs" />
+
+            <Endpoint method="POST" path="/v1/webhooks/:id/test" desc="Send signed test event">
+              <p>Sends a test payload to your endpoint so you can verify signature verification logic.</p>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{ "success": true, "delivery_id": "dlv_..." }`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/webhooks/:id/deliveries" desc="List last 100 delivery attempts" />
+
+            <div class="docs-flow">
+              <div class="docs-flow-title">Signature Verification (Node.js)</div>
+              <pre><code>{`import crypto from 'crypto';
+
+function verifyBotchaWebhook(body: string, signature: string, secret: string): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(body)
+    .digest('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+}`}</code></pre>
+            </div>
+          </section>
+
+          {/* ============ x402 ============ */}
+          <section id="x402" class="docs-section">
+            <h2 class="docs-section-title">x402 Payment Gating</h2>
+            <p class="docs-section-desc">
+              <a href="https://x402.org/" target="_blank" rel="noopener">x402</a> micropayment
+              flow using USDC on Base. Agents pay $0.001 USDC instead of solving a challenge.
+              Full x402 standard compatibility — no puzzle required when payment proof is included.
+            </p>
+
+            <div class="docs-flow">
+              <div class="docs-flow-title">x402 Payment Flow</div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">1.</span>
+                <span><code>GET /v1/x402/challenge</code> — receive 402 with payment terms</span>
+              </div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">2.</span>
+                <span>Agent pays $0.001 USDC on Base to BOTCHA's address</span>
+              </div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">3.</span>
+                <span>Retry with <code>X-Payment: &lt;proof&gt;</code> header</span>
+              </div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">4.</span>
+                <span>Receive <code>access_token</code> — no puzzle solved</span>
+              </div>
+            </div>
+
+            <Endpoint method="GET" path="/v1/x402/info" desc="Payment config discovery">
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "amount": "0.001",
+  "currency": "USDC",
+  "chain": "base",
+  "recipient": "0xBOTCHA..."
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/x402/challenge" desc="Initiate x402 payment flow">
+              <p>Returns a <code>402 Payment Required</code> with payment terms on first call.
+              Re-request with <code>X-Payment</code> header to receive a BOTCHA token.</p>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/x402/verify-payment" desc="Verify raw x402 payment proof">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{ "payment_proof": "0x...", "chain": "base" }`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/x402/webhook" desc="Settlement notifications from x402 facilitators" />
+
+            <Endpoint method="GET" path="/agent-only/x402" desc="Demo: requires BOTCHA token AND x402 payment" />
+          </section>
+
+          {/* ============ ANS ============ */}
+          <section id="ans" class="docs-section">
+            <h2 class="docs-section-title">Agent Name Service (ANS)</h2>
+            <p class="docs-section-desc">
+              BOTCHA as a verification layer for the{' '}
+              <a href="https://www.godaddy.com/engineering/2024/12/16/agent-name-service/" target="_blank" rel="noopener">GoDaddy-led ANS standard</a>.
+              DNS-based agent identity lookup with BOTCHA-issued ownership badges.
+            </p>
+
+            <Endpoint method="GET" path="/v1/ans/botcha" desc="BOTCHA's own ANS identity record" />
+
+            <Endpoint method="GET" path="/v1/ans/resolve/:name" desc="DNS-based ANS lookup by name">
+              <p>Resolves an agent name to its ANS record via DNS TXT lookup.</p>
+              <div class="docs-label">Response Example</div>
+              <pre><code>{`{
+  "name": "my-agent.agents",
+  "agent_url": "https://myagent.example",
+  "botcha_verified": true,
+  "badge": "eyJ..."
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/ans/resolve/lookup" desc="Alternate DNS lookup via ?name= query param" />
+            <Endpoint method="GET" path="/v1/ans/discover" desc="List BOTCHA-verified ANS agents" />
+
+            <Endpoint method="GET" path="/v1/ans/nonce/:name" desc="Get nonce for ownership proof (auth required)">
+              <p>Requires <code>Authorization: Bearer</code> token. Returns a one-time nonce for ownership verification.</p>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/ans/verify" desc="Verify ANS ownership → issue BOTCHA badge">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "name": "my-agent.agents",
+  "agent_url": "https://myagent.example",
+  "nonce": "<nonce from GET /v1/ans/nonce/:name>",
+  "proof": "<signed nonce>"
+}`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "success": true,
+  "badge": "eyJ...",  // BOTCHA-issued ANS badge JWT
+  "name": "my-agent.agents"
+}`}</code></pre>
+            </Endpoint>
+          </section>
+
+          {/* ============ DID / VC ============ */}
+          <section id="didvc" class="docs-section">
+            <h2 class="docs-section-title">DID / Verifiable Credentials</h2>
+            <p class="docs-section-desc">
+              BOTCHA as a{' '}
+              <a href="https://www.w3.org/TR/did-core/" target="_blank" rel="noopener">W3C DID</a>{' '}
+              /{' '}
+              <a href="https://www.w3.org/TR/vc-data-model/" target="_blank" rel="noopener">VC</a>{' '}
+              issuer (<code>did:web:botcha.ai</code>). Issues portable W3C Verifiable Credential
+              JWTs that any party can verify without contacting BOTCHA — just resolve the DID
+              Document and check against the JWKS.
+            </p>
+
+            <div class="docs-flow">
+              <div class="docs-flow-title">VC Issuance Flow</div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">1.</span>
+                <span>Solve a BOTCHA challenge → receive Bearer token</span>
+              </div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">2.</span>
+                <span><code>POST /v1/credentials/issue</code> → receive VC JWT</span>
+              </div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">3.</span>
+                <span>Present VC JWT to any relying party</span>
+              </div>
+              <div class="docs-flow-step">
+                <span class="docs-flow-arrow">4.</span>
+                <span>Relying party verifies via <code>POST /v1/credentials/verify</code> (or local JWK verification)</span>
+              </div>
+            </div>
+
+            <Endpoint method="GET" path="/.well-known/did.json" desc="BOTCHA DID Document (did:web:botcha.ai)">
+              <div class="docs-label">Response Shape</div>
+              <pre><code>{`{
+  "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"],
+  "id": "did:web:botcha.ai",
+  "verificationMethod": [{
+    "id": "did:web:botcha.ai#key-1",
+    "type": "JsonWebKey2020",
+    "controller": "did:web:botcha.ai",
+    "publicKeyJwk": { ... }
+  }],
+  "authentication": ["did:web:botcha.ai#key-1"],
+  "assertionMethod": ["did:web:botcha.ai#key-1"]
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/.well-known/jwks" desc="JWK Set (used for VC verification)" />
+            <Endpoint method="GET" path="/.well-known/jwks.json" desc="JWK Set alias (some resolvers append .json)" />
+
+            <Endpoint method="POST" path="/v1/credentials/issue" desc="Issue a W3C VC JWT">
+              <p>Requires <code>Authorization: Bearer &lt;botcha-token&gt;</code>.</p>
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "subject": {
+    "agentType": "llm",
+    "verifiedAt": "2026-02-20T00:00:00Z"
+  },
+  "type": ["VerifiableCredential", "BotchaVerification"],
+  "ttl_seconds": 3600
+}`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "vc": "eyJ...",  // signed W3C VC JWT
+  "expires_at": 1770940000
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/credentials/verify" desc="Verify any BOTCHA-issued VC JWT">
+              <p>Public endpoint — no auth required. Verifies signature and expiry.</p>
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{ "vc": "eyJ..." }`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "valid": true,
+  "payload": {
+    "iss": "did:web:botcha.ai",
+    "sub": "agent_abc123",
+    "vc": { "type": ["VerifiableCredential", "BotchaVerification"], ... }
+  }
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/dids/:did/resolve" desc="Resolve did:web DIDs">
+              <p>Resolves any <code>did:web</code> DID to its DID Document via HTTP discovery.</p>
+            </Endpoint>
+          </section>
+
+          {/* ============ A2A ============ */}
+          <section id="a2a" class="docs-section">
+            <h2 class="docs-section-title">A2A Agent Card Attestation</h2>
+            <p class="docs-section-desc">
+              BOTCHA as a trust seal issuer for the{' '}
+              <a href="https://google.github.io/A2A/" target="_blank" rel="noopener">Google A2A protocol</a>.
+              Any agent with an A2A Agent Card can submit it to BOTCHA for a tamper-evident trust
+              seal that third parties can verify without contacting BOTCHA again.
+            </p>
+
+            <Endpoint method="GET" path="/.well-known/agent.json" desc="BOTCHA's own A2A Agent Card" />
+            <Endpoint method="GET" path="/v1/a2a/agent-card" desc="BOTCHA's A2A Agent Card (alias)" />
+
+            <Endpoint method="POST" path="/v1/a2a/attest" desc="Attest an agent card → receive trust seal">
+              <p>Requires <code>Authorization: Bearer</code> token.</p>
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "card": {
+    "name": "My Commerce Agent",
+    "url": "https://myagent.example",
+    "version": "1.0.0",
+    "capabilities": { "streaming": false },
+    "skills": [{ "id": "browse", "name": "Browse" }]
+  },
+  "duration_seconds": 86400,
+  "trust_level": "verified"
+}`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "success": true,
+  "attestation": {
+    "attestation_id": "...",
+    "trust_level": "verified",
+    "token": "eyJ..."
+  },
+  "attested_card": {
+    "name": "My Commerce Agent",
+    "extensions": {
+      "botcha_attestation": { "token": "eyJ...", "card_hash": "..." }
+    }
+  }
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/a2a/verify-card" desc="Verify an attested card (tamper-evident check)">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "card": {
+    "...": "...",
+    "extensions": { "botcha_attestation": { "token": "eyJ..." } }
+  }
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/a2a/verify-agent" desc="Verify agent by card or agent_url" />
+            <Endpoint method="GET" path="/v1/a2a/trust-level/:agent_url" desc="Get current trust level for an agent URL" />
+            <Endpoint method="GET" path="/v1/a2a/cards" desc="Registry browse — list all attested cards" />
+            <Endpoint method="GET" path="/v1/a2a/cards/:id" desc="Get specific attested card by ID" />
+          </section>
+
+          {/* ============ OIDC-A ============ */}
+          <section id="oidca" class="docs-section">
+            <h2 class="docs-section-title">OIDC-A Attestation</h2>
+            <p class="docs-section-desc">
+              Enterprise agent authentication chains using{' '}
+              <a href="https://www.rfc-editor.org/rfc/rfc9334" target="_blank" rel="noopener">Entity Attestation Tokens (EAT / RFC 9334)</a>{' '}
+              and{' '}
+              <a href="https://openid.net/specs/openid-connect-core-1_0.html" target="_blank" rel="noopener">OIDC-A</a>{' '}
+              agent claims. Enables the chain: human &rarr; enterprise IdP &rarr; BOTCHA &rarr; agent.
+            </p>
+
+            <Endpoint method="GET" path="/.well-known/oauth-authorization-server" desc="OAuth/OIDC-A discovery document" />
+
+            <Endpoint method="POST" path="/v1/attestation/eat" desc="Issue Entity Attestation Token (EAT)">
+              <p>Requires <code>Authorization: Bearer</code> token. Returns a signed <a href="https://www.rfc-editor.org/rfc/rfc9334" target="_blank" rel="noopener">EAT JWT (RFC 9334)</a> for presentation to relying parties.</p>
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "nonce": "optional-client-nonce",
+  "agent_model": "gpt-5",
+  "ttl_seconds": 900,
+  "verification_method": "speed-challenge"
+}`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "token": "eyJ...",  // EAT JWT (RFC 9334)
+  "expires_at": 1770937000
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/attestation/oidc-agent-claims" desc="Issue OIDC-A agent claims block">
+              <p>Returns an <a href="https://openid.net/specs/openid-connect-core-1_0.html" target="_blank" rel="noopener">OIDC-A</a> claims block JWT suitable for inclusion in OAuth2 token responses.</p>
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "agent_model": "gpt-5",
+  "agent_version": "1.0.0",
+  "agent_capabilities": ["agent:tool-use"],
+  "agent_operator": "Acme Corp",
+  "human_oversight_required": true,
+  "task_id": "task-123",
+  "task_purpose": "invoice reconciliation",
+  "nonce": "optional-client-nonce"
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="POST" path="/v1/auth/agent-grant" desc="Initiate OAuth2-style agent grant flow">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{
+  "scope": "agent:read openid",
+  "human_oversight_required": true,
+  "agent_model": "gpt-5",
+  "agent_operator": "Acme Corp",
+  "task_purpose": "invoice reconciliation"
+}`}</code></pre>
+              <div class="docs-label">Response</div>
+              <pre><code>{`{
+  "grant_id": "grant_...",
+  "token": "eyJ...",       // signed grant token
+  "status": "pending",
+  "oversight_url": "https://botcha.ai/oversight/GRANT-XXXX"
+}`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/auth/agent-grant/:id/status" desc="Poll agent grant status" />
+
+            <Endpoint method="POST" path="/v1/auth/agent-grant/:id/resolve" desc="Approve or reject grant">
+              <div class="docs-label">Request Body</div>
+              <pre><code>{`{ "decision": "approved" }`}</code></pre>
+            </Endpoint>
+
+            <Endpoint method="GET" path="/v1/oidc/userinfo" desc="OIDC-A UserInfo endpoint">
+              <p>Requires <code>Authorization: Bearer</code> token. Returns OIDC-A UserInfo claims for the authenticated agent.</p>
+            </Endpoint>
           </section>
 
           {/* ============ Invoices ============ */}
