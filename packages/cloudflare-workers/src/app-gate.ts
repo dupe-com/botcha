@@ -15,6 +15,11 @@ export const APP_GATE_OPEN_PATHS = [
   '/v1/ans/botcha',
   '/v1/ans/resolve/lookup',
   '/v1/credentials/verify',
+  // Public A2A verification and discovery endpoints
+  '/v1/a2a/agent-card',
+  '/v1/a2a/verify-card',
+  '/v1/a2a/verify-agent',
+  '/v1/a2a/cards',
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
@@ -29,10 +34,13 @@ export function isPublicV1Path(path: string): boolean {
   // Public DID resolution path: /v1/dids/:did/resolve
   if (/^\/v1\/dids\/[^/]+\/resolve$/.test(path)) return true;
 
+  // Public A2A routes with dynamic path params
+  if (path.startsWith('/v1/a2a/cards/')) return true;
+  if (path.startsWith('/v1/a2a/trust-level/')) return true;
+
   return false;
 }
 
 export function shouldBypassAppGate(path: string): boolean {
   return APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path) || isPublicV1Path(path);
 }
-

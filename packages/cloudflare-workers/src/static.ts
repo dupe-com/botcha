@@ -188,6 +188,19 @@ curl https://botcha.ai/agent-only/x402 \
 | \`POST\` | \`/v1/credentials/verify\` | Verify BOTCHA VC JWT — PUBLIC |
 | \`GET\` | \`/v1/dids/:did/resolve\` | Resolve did:web DID documents — PUBLIC |
 
+### A2A Agent Card Attestation
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/.well-known/agent.json\` | BOTCHA A2A Agent Card discovery document — PUBLIC |
+| \`GET\` | \`/v1/a2a/agent-card\` | BOTCHA A2A Agent Card alias — PUBLIC |
+| \`POST\` | \`/v1/a2a/attest\` | Attest an A2A Agent Card (embeds JWT in extensions.botcha_attestation) — AUTH REQUIRED |
+| \`POST\` | \`/v1/a2a/verify-card\` | Verify an attested A2A Agent Card — PUBLIC |
+| \`POST\` | \`/v1/a2a/verify-agent\` | Verify by full card or by \`agent_url\` shorthand — PUBLIC |
+| \`GET\` | \`/v1/a2a/trust-level/:agent_url\` | Get current trust level for URL-encoded agent URL — PUBLIC |
+| \`GET\` | \`/v1/a2a/cards\` | List BOTCHA-attested A2A cards — PUBLIC |
+| \`GET\` | \`/v1/a2a/cards/:id\` | Get specific A2A attestation record — PUBLIC |
+
 ### TAP Full Spec — Verification (v0.16.0)
 
 | Method | Path | Description |
@@ -598,6 +611,17 @@ Endpoint: GET https://botcha.ai/.well-known/jwks.json - JWKS alias for DID/VC re
 Endpoint: POST https://botcha.ai/v1/credentials/issue - Exchange BOTCHA access token for VC JWT — AUTH REQUIRED
 Endpoint: POST https://botcha.ai/v1/credentials/verify - Verify BOTCHA VC JWT — PUBLIC
 Endpoint: GET https://botcha.ai/v1/dids/:did/resolve - Resolve did:web DID documents — PUBLIC
+
+# A2A Agent Card Attestation
+Feature: BOTCHA as trust oracle for Google's A2A protocol
+Endpoint: GET https://botcha.ai/.well-known/agent.json - BOTCHA A2A Agent Card discovery document — PUBLIC
+Endpoint: GET https://botcha.ai/v1/a2a/agent-card - BOTCHA A2A Agent Card alias — PUBLIC
+Endpoint: POST https://botcha.ai/v1/a2a/attest - Attest an A2A Agent Card (embed JWT in extensions.botcha_attestation) — AUTH REQUIRED
+Endpoint: POST https://botcha.ai/v1/a2a/verify-card - Verify an attested A2A Agent Card — PUBLIC
+Endpoint: POST https://botcha.ai/v1/a2a/verify-agent - Verify by full card or by { agent_url } shorthand — PUBLIC
+Endpoint: GET https://botcha.ai/v1/a2a/trust-level/:agent_url - Get trust level by URL-encoded agent URL — PUBLIC
+Endpoint: GET https://botcha.ai/v1/a2a/cards - List BOTCHA-attested A2A cards — PUBLIC
+Endpoint: GET https://botcha.ai/v1/a2a/cards/:id - Get specific A2A attestation record — PUBLIC
 
 # Protected Resources
 Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource (BOTCHA token required)
@@ -1773,6 +1797,143 @@ export function getOpenApiSpec(version: string) {
             "401": { description: "Unauthorized" },
             "403": { description: "Forbidden" },
             "404": { description: "Webhook not found" }
+          }
+        }
+      },
+      "/.well-known/agent.json": {
+        get: {
+          summary: "BOTCHA A2A Agent Card",
+          description: "Public A2A discovery document for BOTCHA.",
+          operationId: "getBotchaA2ACard",
+          responses: {
+            "200": { description: "A2A Agent Card JSON" }
+          }
+        }
+      },
+      "/v1/a2a/agent-card": {
+        get: {
+          summary: "BOTCHA A2A Agent Card alias",
+          description: "Alias for /.well-known/agent.json.",
+          operationId: "getBotchaA2ACardAlias",
+          responses: {
+            "200": { description: "A2A Agent Card JSON" }
+          }
+        }
+      },
+      "/v1/a2a/attest": {
+        post: {
+          summary: "Attest an A2A Agent Card",
+          description: "Issue a BOTCHA attestation and embed it in extensions.botcha_attestation.",
+          operationId: "attestA2ACard",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["card"],
+                  properties: {
+                    "card": { type: "object", description: "A2A Agent Card JSON" },
+                    "duration_seconds": { type: "integer", description: "TTL in seconds (default 86400, max 2592000)" },
+                    "trust_level": { type: "string", enum: ["basic", "verified", "enterprise"], description: "Trust level label" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "Card attested successfully" },
+            "400": { description: "Invalid card payload" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Token missing app_id" }
+          }
+        }
+      },
+      "/v1/a2a/verify-card": {
+        post: {
+          summary: "Verify an attested A2A Agent Card",
+          operationId: "verifyA2ACard",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["card"],
+                  properties: {
+                    "card": { type: "object", description: "A2A Agent Card with extensions.botcha_attestation" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Verification result (valid true/false)" },
+            "400": { description: "Missing card payload" }
+          }
+        }
+      },
+      "/v1/a2a/verify-agent": {
+        post: {
+          summary: "Verify agent by card or URL",
+          description: "Verify by full agent_card payload or by agent_url shorthand lookup.",
+          operationId: "verifyA2AAgent",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "agent_card": { type: "object", description: "A2A Agent Card with embedded attestation" },
+                    "agent_url": { type: "string", description: "Agent URL shorthand for latest active attestation lookup" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Verification result" },
+            "400": { description: "Missing agent_card or agent_url" },
+            "404": { description: "No active attestation found for agent_url" }
+          }
+        }
+      },
+      "/v1/a2a/trust-level/{agent_url}": {
+        get: {
+          summary: "Get trust level for agent URL",
+          operationId: "getA2ATrustLevel",
+          parameters: [
+            { name: "agent_url", in: "path", required: true, schema: { type: "string" }, description: "URL-encoded agent URL" }
+          ],
+          responses: {
+            "200": { description: "Trust level result" },
+            "400": { description: "Missing agent_url" }
+          }
+        }
+      },
+      "/v1/a2a/cards": {
+        get: {
+          summary: "List attested A2A cards",
+          operationId: "listA2ACards",
+          parameters: [
+            { name: "verified", in: "query", schema: { type: "boolean" }, description: "Set false to include revoked records" },
+            { name: "agent_url", in: "query", schema: { type: "string" }, description: "Filter by agent URL" },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 200 }, description: "Max records (default 50)" }
+          ],
+          responses: {
+            "200": { description: "A2A attestation registry list" }
+          }
+        }
+      },
+      "/v1/a2a/cards/{id}": {
+        get: {
+          summary: "Get A2A attestation by ID",
+          operationId: "getA2ACardAttestation",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "A2A attestation record" },
+            "404": { description: "Attestation not found or expired" }
           }
         }
       },
