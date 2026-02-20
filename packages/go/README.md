@@ -57,12 +57,17 @@ answers := botcha.SolveRaw([]int{12345, 67890})
 ```go
 // Validate a token
 result, err := client.ValidateToken(ctx, token)
+if err != nil {
+    log.Fatal(err)
+}
 if result.Valid {
     fmt.Println("Agent:", result.AgentID)
 }
 
 // Revoke a token
-client.RevokeToken(ctx, token)
+if _, err := client.RevokeToken(ctx, token); err != nil {
+    log.Fatal(err)
+}
 
 // Refresh using refresh token
 newTokenResp, err := client.RefreshToken(ctx, refreshToken)
@@ -73,16 +78,24 @@ newTokenResp, err := client.RefreshToken(ctx, refreshToken)
 ```go
 // Create a new BOTCHA app
 app, err := client.CreateApp(ctx, "admin@example.com")
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("App ID:", app.AppID)
 fmt.Println("Secret:", app.AppSecret) // store this securely!
 
 // Verify email
-client.VerifyEmail(ctx, "123456") // code from email
+if _, err := client.VerifyEmail(ctx, "123456"); err != nil { // code from email
+    log.Fatal(err)
+}
 
 // Rotate app secret
 // Requires a dashboard session token:
 client.SetAccessToken(dashboardSessionToken)
 rotated, err := client.RotateSecret(ctx)
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("New secret:", rotated.AppSecret)
 ```
 
@@ -95,6 +108,9 @@ agent, err := client.RegisterAgent(ctx, botcha.RegisterAgentInput{
     Operator: "mycompany",
     Version:  "1.0.0",
 })
+if err != nil {
+    log.Fatal(err)
+}
 
 // Retrieve and list
 agent, err = client.GetAgent(ctx, agent.AgentID)
@@ -115,6 +131,9 @@ tapAgent, err := client.RegisterTAPAgent(ctx, botcha.RegisterTAPAgentInput{
         {Action: "browse", Scope: []string{"products"}},
     },
 })
+if err != nil {
+    log.Fatal(err)
+}
 
 // Create a session
 session, err := client.CreateTAPSession(ctx, botcha.CreateTAPSessionInput{
@@ -143,12 +162,17 @@ delegation, err := client.CreateDelegation(ctx, botcha.CreateDelegationInput{
     },
     DurationSeconds: 3600,
 })
+if err != nil {
+    log.Fatal(err)
+}
 
 // Verify the full chain
 verification, err := client.VerifyDelegationChain(ctx, delegation.DelegationID)
 
 // Revoke
-client.RevokeDelegation(ctx, delegation.DelegationID, "no longer needed")
+if _, err := client.RevokeDelegation(ctx, delegation.DelegationID, "no longer needed"); err != nil {
+    log.Fatal(err)
+}
 ```
 
 ## Capability Attestations
@@ -162,10 +186,16 @@ att, err := client.IssueAttestation(ctx, botcha.IssueAttestationInput{
     Cannot:          []string{"write:transfers"},
     DurationSeconds: 3600,
 })
+if err != nil {
+    log.Fatal(err)
+}
 // Use att.Token in X-Botcha-Attestation header
 
 // Verify a capability
 result, err := client.VerifyAttestation(ctx, att.Token, "read", "invoices")
+if err != nil {
+    log.Fatal(err)
+}
 if result.Allowed {
     fmt.Println("Access granted!")
 }
@@ -178,6 +208,9 @@ Track agent behavior and reputation over time:
 ```go
 // Get score
 rep, err := client.GetReputation(ctx, agentID)
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Printf("Score: %.0f, Tier: %s\n", rep.Score, rep.Tier)
 // Output: Score: 750, Tier: good
 

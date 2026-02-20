@@ -23,9 +23,18 @@ func WithHTTPClient(httpClient *http.Client) Option {
 }
 
 // WithTimeout sets the HTTP client timeout.
+// If WithHTTPClient has already been called, this creates a new http.Client
+// with the given timeout rather than mutating the provided client.
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
-		c.http.Timeout = d
+		if c.http == nil {
+			c.http = &http.Client{Timeout: d}
+			return
+		}
+		// Avoid mutating a user-provided client; create a shallow copy.
+		clone := *c.http
+		clone.Timeout = d
+		c.http = &clone
 	}
 }
 
