@@ -15,6 +15,10 @@ export const APP_GATE_OPEN_PATHS = [
   '/v1/ans/botcha',
   '/v1/ans/resolve/lookup',
   '/v1/credentials/verify',
+  // OIDC-A UserInfo accepts BOTCHA access tokens OR EAT bearer tokens.
+  // EAT tokens are not app-gate tokens, so this route must bypass app-gate
+  // and perform its own auth checks in the route handler.
+  '/v1/oidc/userinfo',
   // Public A2A verification and discovery endpoints
   '/v1/a2a/agent-card',
   '/v1/a2a/verify-card',

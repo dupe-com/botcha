@@ -12,6 +12,7 @@ describe('app-gate path rules', () => {
     expect(APP_GATE_OPEN_PATHS).toContain('/v1/ans/botcha');
     expect(APP_GATE_OPEN_PATHS).toContain('/v1/credentials/verify');
     expect(APP_GATE_OPEN_PATHS).toContain('/v1/x402/challenge');
+    expect(APP_GATE_OPEN_PATHS).toContain('/v1/oidc/userinfo');
   });
 
   test('app management paths are recognized', () => {
@@ -35,6 +36,7 @@ describe('app-gate path rules', () => {
     expect(shouldBypassAppGate('/v1/ans/resolve/myagent.example.com')).toBe(true);
     expect(shouldBypassAppGate('/v1/credentials/verify')).toBe(true);
     expect(shouldBypassAppGate('/v1/dids/did%3Aweb%3Abotcha.ai/resolve')).toBe(true);
+    expect(shouldBypassAppGate('/v1/oidc/userinfo')).toBe(true);
 
     // Protected endpoints should not bypass
     expect(shouldBypassAppGate('/v1/credentials/issue')).toBe(false);
