@@ -21,11 +21,15 @@ func TestValidateToken(t *testing.T) {
 		var req ValidateTokenRequest
 		json.NewDecoder(r.Body).Decode(&req)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ValidateTokenResponse{
-			Success: true,
-			Valid:   true,
-			AgentID: "agent_123",
-			Sub:     "agent_123",
+		json.NewEncoder(w).Encode(map[string]any{
+			"valid": true,
+			"payload": map[string]any{
+				"sub":       "agent_123",
+				"app_id":    "app_123",
+				"iat":       int64(1700000000),
+				"exp":       int64(1700003600),
+				"solveTime": 142,
+			},
 		})
 	}))
 	defer server.Close()
@@ -40,6 +44,12 @@ func TestValidateToken(t *testing.T) {
 	}
 	if resp.AgentID != "agent_123" {
 		t.Errorf("expected agent_id 'agent_123', got %q", resp.AgentID)
+	}
+	if resp.AppID != "app_123" {
+		t.Errorf("expected app_id 'app_123', got %q", resp.AppID)
+	}
+	if resp.Sub != "agent_123" {
+		t.Errorf("expected sub 'agent_123', got %q", resp.Sub)
 	}
 }
 
@@ -100,5 +110,8 @@ func TestRefreshToken(t *testing.T) {
 	}
 	if resp.AccessToken != "new-access-token" {
 		t.Errorf("expected 'new-access-token', got %q", resp.AccessToken)
+	}
+	if client.accessToken != "new-access-token" {
+		t.Errorf("expected client access token 'new-access-token', got %q", client.accessToken)
 	}
 }

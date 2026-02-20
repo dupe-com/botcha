@@ -1,5 +1,12 @@
 package botcha
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+)
+
 // ==================== Challenge Types ====================
 
 // Problem represents a single challenge problem.
@@ -14,6 +21,51 @@ type Challenge struct {
 	Problems     []Problem `json:"problems"`
 	TimeLimit    int       `json:"timeLimit"`
 	Instructions string    `json:"instructions"`
+}
+
+// UnmarshalJSON accepts both legacy numeric `timeLimit` and current string values
+// like "500ms", normalizing to milliseconds in TimeLimit.
+func (c *Challenge) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ID           string          `json:"id"`
+		Problems     []Problem       `json:"problems"`
+		TimeLimitRaw json.RawMessage `json:"timeLimit"`
+		Instructions string          `json:"instructions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	c.ID = raw.ID
+	c.Problems = raw.Problems
+	c.Instructions = raw.Instructions
+
+	if len(raw.TimeLimitRaw) == 0 {
+		return nil
+	}
+
+	var intLimit int
+	if err := json.Unmarshal(raw.TimeLimitRaw, &intLimit); err == nil {
+		c.TimeLimit = intLimit
+		return nil
+	}
+
+	var strLimit string
+	if err := json.Unmarshal(raw.TimeLimitRaw, &strLimit); err != nil {
+		return fmt.Errorf("botcha: invalid challenge timeLimit: %w", err)
+	}
+
+	// Accept full duration strings (e.g. "500ms", "1s"), or numeric strings.
+	if d, err := time.ParseDuration(strLimit); err == nil {
+		c.TimeLimit = int(d / time.Millisecond)
+		return nil
+	}
+	if ms, err := strconv.Atoi(strLimit); err == nil {
+		c.TimeLimit = ms
+		return nil
+	}
+
+	return fmt.Errorf("botcha: unsupported challenge timeLimit format %q", strLimit)
 }
 
 // ChallengeResponse is returned by GET /v1/token.
@@ -49,14 +101,76 @@ type ValidateTokenRequest struct {
 
 // ValidateTokenResponse is returned by POST /v1/token/validate.
 type ValidateTokenResponse struct {
-	Success bool   `json:"success"`
-	Valid   bool   `json:"valid"`
-	AppID   string `json:"app_id"`
-	AgentID string `json:"agent_id"`
-	Sub     string `json:"sub"`
-	Exp     int64  `json:"exp"`
-	Iat     int64  `json:"iat"`
-	Error   string `json:"error,omitempty"`
+	Success bool                  `json:"success,omitempty"`
+	Valid   bool                  `json:"valid"`
+	Payload *ValidateTokenPayload `json:"payload,omitempty"`
+	AppID   string                `json:"app_id,omitempty"`
+	AgentID string                `json:"agent_id,omitempty"`
+	Sub     string                `json:"sub,omitempty"`
+	Exp     int64                 `json:"exp,omitempty"`
+	Iat     int64                 `json:"iat,omitempty"`
+	Error   string                `json:"error,omitempty"`
+}
+
+// ValidateTokenPayload contains decoded token claims from /v1/token/validate.
+type ValidateTokenPayload struct {
+	Sub       string `json:"sub"`
+	Iat       int64  `json:"iat"`
+	Exp       int64  `json:"exp"`
+	JTI       string `json:"jti,omitempty"`
+	Type      string `json:"type,omitempty"`
+	SolveTime int    `json:"solveTime,omitempty"`
+	Aud       string `json:"aud,omitempty"`
+	ClientIP  string `json:"client_ip,omitempty"`
+	AppID     string `json:"app_id,omitempty"`
+}
+
+// UnmarshalJSON maps both nested payload responses and legacy flat responses.
+func (r *ValidateTokenResponse) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Success bool                  `json:"success"`
+		Valid   bool                  `json:"valid"`
+		Payload *ValidateTokenPayload `json:"payload"`
+		AppID   string                `json:"app_id"`
+		AgentID string                `json:"agent_id"`
+		Sub     string                `json:"sub"`
+		Exp     int64                 `json:"exp"`
+		Iat     int64                 `json:"iat"`
+		Error   string                `json:"error"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	r.Success = raw.Success
+	r.Valid = raw.Valid
+	r.Payload = raw.Payload
+	r.AppID = raw.AppID
+	r.AgentID = raw.AgentID
+	r.Sub = raw.Sub
+	r.Exp = raw.Exp
+	r.Iat = raw.Iat
+	r.Error = raw.Error
+
+	if raw.Payload != nil {
+		if r.AppID == "" {
+			r.AppID = raw.Payload.AppID
+		}
+		if r.Sub == "" {
+			r.Sub = raw.Payload.Sub
+		}
+		if r.Exp == 0 {
+			r.Exp = raw.Payload.Exp
+		}
+		if r.Iat == 0 {
+			r.Iat = raw.Payload.Iat
+		}
+	}
+	if r.AgentID == "" {
+		r.AgentID = r.Sub
+	}
+
+	return nil
 }
 
 // RevokeTokenRequest is sent to POST /v1/token/revoke.

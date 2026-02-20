@@ -132,6 +132,35 @@ func TestGetChallenge(t *testing.T) {
 	}
 }
 
+func TestGetChallengeParsesStringTimeLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/token" {
+			_, _ = w.Write([]byte(`{
+				"success": true,
+				"challenge": {
+					"id": "chall-abc",
+					"problems": [{"num": 42}],
+					"timeLimit": "500ms",
+					"instructions": "Solve the SHA256 puzzle"
+				}
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL))
+	resp, err := client.GetChallenge(context.Background())
+	if err != nil {
+		t.Fatalf("GetChallenge error: %v", err)
+	}
+	if resp.Challenge.TimeLimit != 500 {
+		t.Fatalf("expected timeLimit 500ms, got %d", resp.Challenge.TimeLimit)
+	}
+}
+
 func TestSolveChallengeWithFallbackToken(t *testing.T) {
 	// Test that SolveChallenge falls back to the "token" field if "access_token" is empty
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

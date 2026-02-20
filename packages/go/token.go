@@ -49,5 +49,11 @@ func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*TokenR
 	if err := c.post(ctx, "/v1/token/refresh", req, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: refresh token: %w", err)
 	}
+	// Keep client auth state in sync with successful refreshes.
+	if resp.AccessToken != "" {
+		c.accessToken = resp.AccessToken
+	} else if resp.Token != "" {
+		c.accessToken = resp.Token
+	}
 	return &resp, nil
 }

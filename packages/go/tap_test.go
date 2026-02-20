@@ -46,6 +46,10 @@ func TestGetJWKSUsesCurrentEndpoint(t *testing.T) {
 			http.Error(w, "missing auth", 401)
 			return
 		}
+		if got := r.URL.Query().Get("app_id"); got != "app_123" {
+			http.Error(w, "missing app_id", 400)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(JWKSet{
 			Keys: []JWK{{Kid: "k1", Kty: "EC"}},

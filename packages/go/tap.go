@@ -71,8 +71,16 @@ func (c *Client) RotateKey(ctx context.Context, agentID, publicKey, algorithm st
 // GetJWKS retrieves the public JWKS (JSON Web Key Set) for all TAP agents.
 // Use this to verify TAP agent signatures server-side.
 func (c *Client) GetJWKS(ctx context.Context) (*JWKSet, error) {
+	appID, err := c.requireAppID()
+	if err != nil {
+		return nil, fmt.Errorf("botcha: get JWKS: %w", err)
+	}
+
+	params := url.Values{}
+	params.Set("app_id", appID)
+
 	var resp JWKSet
-	if err := c.authGet(ctx, "/v1/keys", &resp); err != nil {
+	if err := c.authGet(ctx, "/v1/keys?"+params.Encode(), &resp); err != nil {
 		return nil, fmt.Errorf("botcha: get JWKS: %w", err)
 	}
 	return &resp, nil
