@@ -277,6 +277,14 @@ export async function verifyVCRoute(c: Context) {
     }
 
     const signingKey = getSigningKey(c.env);
+    if (!signingKey && !c.env.JWT_SECRET) {
+      return c.json({
+        valid: false,
+        error: 'SERVICE_UNAVAILABLE',
+        message: 'VC verification is not configured on this server. Contact support.',
+      }, 503);
+    }
+
     const result = await verifyVC(body.vc_jwt, signingKey, c.env.JWT_SECRET);
 
     if (!result.valid) {

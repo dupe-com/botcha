@@ -2325,6 +2325,7 @@ app.get('/v1/sessions/:id/tap', getTAPSessionRoute);
 
 // TAP Key Discovery (JWKS)
 app.get('/.well-known/jwks', jwksRoute);
+app.get('/.well-known/jwks.json', jwksRoute); // alias — some DID resolvers append .json
 app.get('/v1/keys', listKeysRoute);
 app.get('/v1/keys/:keyId', getKeyRoute);
 
@@ -2779,7 +2780,7 @@ app.post('/api/verify-landing', async (c) => {
 
 // ============ 404 / ERROR HANDLERS ============
 
-// Return JSON 404 for unmatched routes (not plain-text)
+// Return JSON 404 for unmatched routes (not 401 or plain-text)
 app.notFound((c) => {
   return c.json({
     success: false,
