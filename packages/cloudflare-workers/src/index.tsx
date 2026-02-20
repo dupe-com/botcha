@@ -110,6 +110,13 @@ import {
   type KVNamespace as WebhookKVNamespace,
 } from './webhooks.js';
 import {
+  agentCardRoute,
+  attestCardRoute,
+  verifyCardRoute,
+  listCardsRoute,
+  getCardAttestationRoute,
+} from './tap-a2a-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -2453,6 +2460,20 @@ app.post('/v1/credentials/verify', verifyVCRoute);
 
 // DID Resolution — public, resolves did:web DIDs
 app.get('/v1/dids/:did/resolve', resolveDIDRoute);
+
+// ============ A2A AGENT CARD ATTESTATION ============
+// BOTCHA as trust oracle for Google's A2A (Agent-to-Agent) protocol.
+// Agents discover BOTCHA via /.well-known/agent.json, then attest their
+// own cards via POST /v1/a2a/attest. Verifiers call POST /v1/a2a/verify-card.
+
+// BOTCHA's own A2A Agent Card (public discovery)
+app.get('/.well-known/agent.json', agentCardRoute);
+
+// A2A attestation endpoints
+app.post('/v1/a2a/attest', attestCardRoute);
+app.post('/v1/a2a/verify-card', verifyCardRoute);
+app.get('/v1/a2a/cards', listCardsRoute);
+app.get('/v1/a2a/cards/:id', getCardAttestationRoute);
 // ============ AGENT REGISTRY API ============
 
 // Register a new agent
