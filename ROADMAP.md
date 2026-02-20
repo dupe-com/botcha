@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.21.0)
+## Current Status (v0.22.0)
 
 ### Shipped
 
@@ -339,6 +339,89 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - Homepage demo at botcha.ai still works without app_id (uses internal demo app)
 - Discovery docs updated: ai.txt, OpenAPI spec, root JSON response, static.ts markdown
 **Effort:** Medium
+
+### ✅ x402 Payment Gating — SHIPPED (v0.22.0, PR #25)
+**What:** HTTP 402 micropayment flow using USDC on Base. Agents pay $0.001 USDC to receive a BOTCHA token — no challenge required. BOTCHA also acts as a lightweight x402-compatible facilitator.
+**Implementation:**
+- `GET /v1/x402/info` — public, payment config discovery
+- `GET /v1/x402/challenge` — pay $0.001 USDC → get BOTCHA access_token
+- `POST /v1/x402/verify-payment` — verify raw x402 payment proof (requires Bearer auth)
+- `POST /v1/x402/webhook` — settlement notifications from x402 facilitators
+- `GET /agent-only/x402` — demo: requires BOTH BOTCHA token + x402 payment
+**Docs:** [doc/X402.md](./doc/X402.md)
+**Effort:** Large
+
+### ✅ ANS (Agent Name Service) Integration — SHIPPED (v0.22.0, PR #27)
+**What:** BOTCHA as a verification layer for the GoDaddy-led Agent Name Service standard. DNS-based agent identity lookup with BOTCHA-issued ownership badges.
+**Implementation:**
+- `GET /v1/ans/botcha` — public, BOTCHA's own ANS identity
+- `GET /v1/ans/resolve/:name` and `/v1/ans/resolve/lookup?name=` — public DNS-based ANS lookup
+- `GET /v1/ans/discover` — public, list BOTCHA-verified ANS agents
+- `GET /v1/ans/nonce/:name` — auth required, nonce for ownership proof
+- `POST /v1/ans/verify` — auth required, verify ANS ownership + issue BOTCHA badge
+**Docs:** [doc/ANS.md](./doc/ANS.md)
+**Effort:** Large
+
+### ✅ DID/VC Issuer — W3C Verifiable Credentials — SHIPPED (v0.22.0, PR #29)
+**What:** BOTCHA as a W3C DID/VC issuer (`did:web:botcha.ai`). Issues portable W3C Verifiable Credential JWTs that any party can verify offline using BOTCHA's public JWKS.
+**Implementation:**
+- `GET /.well-known/did.json` — public, BOTCHA DID Document
+- `GET /.well-known/jwks` and `/.well-known/jwks.json` — public, JWK Set
+- `POST /v1/credentials/issue` — auth required (BOTCHA token), issues W3C VC JWT
+- `POST /v1/credentials/verify` — public, verify any BOTCHA-issued VC JWT
+- `GET /v1/dids/:did/resolve` — public, resolve `did:web` DIDs
+**Docs:** [doc/DID-VC.md](./doc/DID-VC.md)
+**Effort:** Large
+
+---
+
+## In Progress
+
+### 🔄 A2A Agent Card Attestation — IN PROGRESS (PR #26)
+**What:** BOTCHA as a trust seal issuer for Google A2A protocol Agent Cards. Fixes pushed; preview redeploying. Not yet merged.
+**Implementation (planned):**
+- `GET /.well-known/agent.json` and `GET /v1/a2a/agent-card` — BOTCHA's A2A Agent Card
+- `POST /v1/a2a/attest` — attest an agent's A2A card → get BOTCHA trust seal
+- `POST /v1/a2a/verify-card` — verify an attested card (tamper-evident hash check)
+- `POST /v1/a2a/verify-agent` — verify agent by card or `agent_url`
+- `GET /v1/a2a/trust-level/:agent_url` — get current trust level
+- `GET /v1/a2a/cards` and `GET /v1/a2a/cards/:id` — registry browsing
+**Known issues (pre-merge):**
+- 🟡 Re-attesting same `agent_url` creates duplicate attestations (no deduplication)
+- 🟡 `ATTESTATION_FAILED` error code used for validation errors (should be `INVALID_CARD`)
+**Docs (draft):** [doc/A2A.md](./doc/A2A.md)
+
+### 🔄 OIDC-A Attestation — IN PROGRESS (PR #28)
+**What:** Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims. Test agent running; results pending.
+**Implementation (planned):**
+- `GET /.well-known/oauth-authorization-server` — OAuth/OIDC-A discovery
+- `POST /v1/attestation/eat` — issue Entity Attestation Token (EAT/RFC 9711)
+- `POST /v1/attestation/oidc-agent-claims` — issue OIDC-A agent claims block
+- `POST /v1/auth/agent-grant` — agent grant flow (OAuth2-style)
+- `GET /v1/auth/agent-grant/:id/status` — grant status
+- `POST /v1/auth/agent-grant/:id/resolve` — approve/resolve grant
+- `GET /v1/oidc/userinfo` — OIDC-A UserInfo endpoint
+**Known issues (pre-merge):**
+- 🟡 OIDCA routes not yet documented in OpenAPI spec (`static.ts`)
+**Docs (draft):** [doc/OIDCA.md](./doc/OIDCA.md)
+
+---
+
+## Technical Debt
+
+> Issues identified during the 5-epic sprint; tracked in [BUGS.md](./BUGS.md).
+
+| Issue | Priority | Location |
+|-------|----------|----------|
+| KV read-modify-write race on `last_verified_at` — can silently lose updates under load | 🟠 MAJOR | TAP session creation |
+| RFC 9421 HTTP Message Signatures implemented but not enforced on any route (dead code) | 🟡 MINOR | `tap-routes.ts` |
+| Payment/invoice flow untested — requires `card_acceptor_id` not available in test env | 🟡 MINOR | `/v1/invoices/*` |
+| x402 `X-Payment` header path can hang if KV is slow/unavailable | 🟡 MINOR | `GET /v1/x402/challenge` |
+| PR #26: re-attesting same `agent_url` creates duplicate attestations | 🟡 MINOR | A2A attest route |
+| PR #26: `ATTESTATION_FAILED` used for validation errors (should be `INVALID_CARD`) | 🟡 MINOR | A2A attest route |
+| PR #28: OIDCA routes missing from OpenAPI spec | 🟡 MINOR | `static.ts` |
+
+---
 
 ### RFC / Standards contribution
 **What:** Publish an Internet-Draft for agent identity. Get Anthropic, OpenAI, Google to adopt. Own the standard.

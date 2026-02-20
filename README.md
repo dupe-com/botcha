@@ -41,6 +41,9 @@ Use cases:
 - 🔏 Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures (SDK: `registerTAPAgent`, `createTAPSession`)
 - 🌐 TAP showcase homepage at [botcha.ai](https://botcha.ai) — one of the first services to implement [Visa's Trusted Agent Protocol](https://github.com/visa/trusted-agent-protocol)
 - 📈 Agent reputation scoring — trust scores that unlock higher rate limits and access (SDK: `getReputation`, `recordReputationEvent`)
+- 💸 **x402 Payment Gating** — agents pay $0.001 USDC on Base for a BOTCHA token; no puzzle required (see [doc/X402.md](./doc/X402.md))
+- 🌍 **Agent Name Service (ANS)** — BOTCHA as a verification layer for the GoDaddy-led ANS standard; DNS-based identity lookup and ownership proof (see [doc/ANS.md](./doc/ANS.md))
+- 🪪 **W3C DID/VC Issuer** — BOTCHA issues portable W3C Verifiable Credential JWTs; any party can verify without contacting BOTCHA (see [doc/DID-VC.md](./doc/DID-VC.md))
 
 ## Install
 
@@ -662,6 +665,116 @@ await client.resetReputation('agent_abc123');
 | `POST /v1/reputation/events` | Record a reputation event |
 | `GET /v1/reputation/:agent_id/events` | List reputation events |
 | `POST /v1/reputation/:agent_id/reset` | Reset reputation (admin) |
+
+---
+
+## 🔗 Protocol Integrations
+
+BOTCHA integrates with emerging agentic standards — acting as the identity/verification layer for each.
+
+---
+
+### 💸 x402 Payment Gating (PR #25 — merged)
+
+HTTP 402 micropayment flow using USDC on Base. Agents pay instead of solving challenges.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /v1/x402/info` | public | Payment config discovery |
+| `GET /v1/x402/challenge` | public | Pay $0.001 USDC → get BOTCHA token (no puzzle) |
+| `POST /v1/x402/verify-payment` | Bearer | Verify a raw x402 payment proof |
+| `POST /v1/x402/webhook` | — | Settlement notifications from x402 facilitators |
+| `GET /agent-only/x402` | BOTCHA token + x402 | Demo: requires both BOTCHA verification AND x402 payment |
+
+**Quick flow:**
+```
+GET /v1/x402/challenge
+→ 402 { amount: "0.001", currency: "USDC", chain: "base", recipient: "0xBOTCHA..." }
+→ Agent pays, retries with X-Payment header
+→ 200 { access_token: "eyJ..." }
+```
+
+> **Full guide:** [doc/X402.md](./doc/X402.md)
+
+---
+
+### 🌍 Agent Name Service (ANS) Integration (PR #27 — merged)
+
+BOTCHA as a verification layer for the [GoDaddy-led ANS standard](https://www.godaddy.com/engineering/2024/12/16/agent-name-service/). DNS-based agent identity lookup with BOTCHA-issued ownership badges.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /v1/ans/botcha` | public | BOTCHA's own ANS identity |
+| `GET /v1/ans/resolve/:name` | public | DNS-based ANS lookup by name |
+| `GET /v1/ans/resolve/lookup?name=` | public | Alternate DNS lookup via query param |
+| `GET /v1/ans/discover` | public | List BOTCHA-verified ANS agents |
+| `GET /v1/ans/nonce/:name` | Bearer | Get nonce for ownership proof |
+| `POST /v1/ans/verify` | Bearer | Verify ANS ownership → issue BOTCHA badge |
+
+> **Full guide:** [doc/ANS.md](./doc/ANS.md)
+
+---
+
+### 🪪 DID/VC Issuer — W3C Verifiable Credentials (PR #29 — merged)
+
+BOTCHA as a W3C DID/VC issuer (`did:web:botcha.ai`). Issues portable agent credentials that any party can verify without contacting BOTCHA.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /.well-known/did.json` | public | BOTCHA DID Document (`did:web:botcha.ai`) |
+| `GET /.well-known/jwks` | public | JWK Set |
+| `GET /.well-known/jwks.json` | public | JWK Set (alias — some resolvers append `.json`) |
+| `POST /v1/credentials/issue` | Bearer (BOTCHA token) | Issue a W3C VC JWT |
+| `POST /v1/credentials/verify` | public | Verify any BOTCHA-issued VC JWT |
+| `GET /v1/dids/:did/resolve` | public | Resolve `did:web` DIDs |
+
+**Quick flow:**
+```
+POST /v1/credentials/issue  (Authorization: Bearer <botcha-token>)
+Body: { "subject": { ... }, "type": ["VerifiableCredential", "BotchaVerification"] }
+→ { "vc": "eyJ..." }   ← portable JWT, verifiable anywhere via BOTCHA JWKs
+```
+
+> **Full guide:** [doc/DID-VC.md](./doc/DID-VC.md)
+
+---
+
+### 🃏 A2A Agent Card Attestation — *Coming Soon* (PR #26 — pending merge)
+
+BOTCHA as a trust seal issuer for the [Google A2A protocol](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/) Agent Cards.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /.well-known/agent.json` | public | BOTCHA's A2A Agent Card |
+| `GET /v1/a2a/agent-card` | public | BOTCHA's A2A Agent Card (alias) |
+| `POST /v1/a2a/attest` | Bearer | Attest an agent's A2A card → get BOTCHA trust seal |
+| `POST /v1/a2a/verify-card` | public | Verify an attested card (tamper-evident hash check) |
+| `POST /v1/a2a/verify-agent` | public | Verify agent by card or `agent_url` |
+| `GET /v1/a2a/trust-level/:agent_url` | public | Get current trust level for an agent URL |
+| `GET /v1/a2a/cards` | public | Registry browse |
+| `GET /v1/a2a/cards/:id` | public | Get specific attested card |
+
+> **Full guide (draft):** [doc/A2A.md](./doc/A2A.md)
+
+---
+
+### 🏢 OIDC-A Attestation — *Coming Soon* (PR #28 — pending merge)
+
+Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /.well-known/oauth-authorization-server` | public | OAuth/OIDC-A discovery |
+| `POST /v1/attestation/eat` | Bearer | Issue Entity Attestation Token (EAT/RFC 9711) |
+| `POST /v1/attestation/oidc-agent-claims` | Bearer | Issue OIDC-A agent claims block |
+| `POST /v1/auth/agent-grant` | Bearer | Agent grant flow (OAuth2-style) |
+| `GET /v1/auth/agent-grant/:id/status` | Bearer | Grant status |
+| `POST /v1/auth/agent-grant/:id/resolve` | Bearer | Approve/resolve grant |
+| `GET /v1/oidc/userinfo` | Bearer | OIDC-A UserInfo endpoint |
+
+> **Full guide (draft):** [doc/OIDCA.md](./doc/OIDCA.md)
+
+---
 
 ## SSE Streaming Flow (AI-Native)
 

@@ -1,5 +1,9 @@
 # Epic: x402 Payment Gating — Verified Agents Unlock Payment Rails
 
+> **Status: ✅ MERGED to main (PR #25, v0.22.0)**
+> This epic is complete. See [CHANGELOG.md](./CHANGELOG.md) and [doc/X402.md](./doc/X402.md).
+> Remaining technical debt: x402 `X-Payment` header path can hang if KV is slow — tracked in [BUGS.md](./BUGS.md).
+
 ## Vision
 Integrate x402 (HTTP 402 Payment Required protocol) so that BOTCHA-verified agents can natively access paid APIs and resources. BOTCHA becomes the trust gatekeeper for x402 commerce rails — unverified bots get blocked, verified agents transact. BOTCHA itself charges for verification *via x402*, creating a fully agent-native revenue stream.
 
@@ -43,17 +47,17 @@ x402 is the emerging standard for agent micropayments (75M+ txns, $24M volume, b
 - Track payment history per agent_id
 
 ## Task List
-- [ ] Research x402 JS/TS SDK (coinbase/x402) — understand facilitator interface
-- [ ] Write `tap-x402.ts` — x402 payment verification logic
-- [ ] Add `POST /v1/x402/verify-payment` route
-- [ ] Add `GET /v1/x402/challenge` route (pay-for-verification)
-- [ ] Add `GET /agent-only/x402` demo route
+- [x] Research x402 JS/TS SDK (coinbase/x402) — understand facilitator interface
+- [x] Write `tap-x402.ts` — x402 payment verification logic
+- [x] Add `POST /v1/x402/verify-payment` route
+- [x] Add `GET /v1/x402/challenge` route (pay-for-verification)
+- [x] Add `GET /agent-only/x402` demo route
 - [ ] Update `createTAPSessionRoute` to optionally accept x402 payment as auth alternative
 - [ ] Add x402 metadata to BOTCHA access_tokens (payment proof embedding)
-- [ ] Add `POST /v1/x402/webhook` route
-- [ ] Unit tests: payment verification, pay-for-token flow, webhook handling
-- [ ] Update ai.txt / openapi.json
-- [ ] README section on x402 integration
+- [x] Add `POST /v1/x402/webhook` route
+- [x] Unit tests: payment verification, pay-for-token flow, webhook handling
+- [x] Update ai.txt / openapi.json
+- [x] README section on x402 integration
 
 ## x402 Flow
 ```

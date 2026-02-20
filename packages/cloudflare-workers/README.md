@@ -1,19 +1,18 @@
 # @dupecom/botcha-cloudflare
 
 > **BOTCHA** - Prove you're a bot. Humans need not apply.
-> 
-> **Cloudflare Workers Edition v0.11.0** - Identity layer for AI agents
+>
+> **Cloudflare Workers Edition v0.22.0** - Identity layer for AI agents
 
 Reverse CAPTCHA that verifies AI agents and blocks humans. Running at the edge.
 
-## What's New in v0.11.0
+## What's New in v0.22.0
 
-- **Agent Registry** - Persistent agent identities (POST /v1/agents/register)
-- **Email-tied apps** - Email verification, account recovery, secret rotation
-- **Dashboard** - Per-app metrics with agent-first auth (device code flow)
-- **JWT security** - 1-hr access tokens, refresh tokens, audience claims, IP binding, revocation
-- **Multi-tenant** - Per-app isolation, scoped tokens, rate limiting
-- **Server-side SDKs** - @dupecom/botcha-verify (TS) + botcha-verify (Python)
+- **x402 Payment Gating** — Agents pay $0.001 USDC on Base for a BOTCHA token. No puzzle. (`GET /v1/x402/challenge`)
+- **ANS Integration** — DNS-based agent identity lookup and BOTCHA-issued ownership badges. (`GET /v1/ans/resolve/:name`)
+- **DID/VC Issuer** — BOTCHA issues portable W3C Verifiable Credential JWTs. (`POST /v1/credentials/issue`)
+- **A2A Agent Card Attestation** *(coming soon, PR #26)*
+- **OIDC-A Attestation** *(coming soon, PR #28)*
 
 ## Features
 
@@ -97,9 +96,75 @@ Rate limit headers:
 | `/v1/challenges/:id/verify` | POST | Verify challenge (no JWT) |
 | `/v1/token` | GET | Get challenge for JWT flow |
 | `/v1/token/verify` | POST | Verify challenge → get JWT token |
+| `/v1/token/refresh` | POST | Refresh access token |
+| `/v1/token/revoke` | POST | Revoke token immediately |
+| `/v1/token/validate` | POST | Remote token validation (no shared secret) |
 | `/v1/challenge/stream` | GET | SSE streaming challenge (AI-native) |
 | `/v1/challenge/stream/:session` | POST | SSE action handler (go, solve) |
 | `/agent-only` | GET | Protected endpoint (requires JWT) |
+
+### Well-Known Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/.well-known/did.json` | GET | BOTCHA DID Document (`did:web:botcha.ai`) |
+| `/.well-known/jwks` | GET | JWK Set (TAP agent keys + DID signing keys) |
+| `/.well-known/jwks.json` | GET | JWK Set alias |
+| `/.well-known/ai-plugin.json` | GET | ChatGPT plugin manifest |
+
+### x402 Payment Gating
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/v1/x402/info` | GET | public | Payment config discovery |
+| `/v1/x402/challenge` | GET | public / X-Payment | Pay $0.001 USDC → BOTCHA token |
+| `/v1/x402/verify-payment` | POST | Bearer | Verify x402 payment proof |
+| `/v1/x402/webhook` | POST | — | Settlement notifications |
+| `/agent-only/x402` | GET | Bearer + x402 | Demo: requires both BOTCHA token + payment |
+
+### ANS (Agent Name Service)
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/v1/ans/botcha` | GET | public | BOTCHA's ANS identity |
+| `/v1/ans/resolve/:name` | GET | public | DNS-based ANS lookup |
+| `/v1/ans/resolve/lookup` | GET | public | ANS lookup via `?name=` query param |
+| `/v1/ans/discover` | GET | public | List BOTCHA-verified ANS agents |
+| `/v1/ans/nonce/:name` | GET | Bearer | Nonce for ownership proof |
+| `/v1/ans/verify` | POST | Bearer | Verify ANS ownership → BOTCHA badge |
+
+### DID/VC Issuer
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/v1/credentials/issue` | POST | Bearer | Issue W3C VC JWT |
+| `/v1/credentials/verify` | POST | public | Verify any BOTCHA-issued VC JWT |
+| `/v1/dids/:did/resolve` | GET | public | Resolve `did:web` DIDs |
+
+### A2A Agent Card Attestation *(coming soon — PR #26)*
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/.well-known/agent.json` | GET | public | BOTCHA's A2A Agent Card |
+| `/v1/a2a/agent-card` | GET | public | BOTCHA's A2A Agent Card (alias) |
+| `/v1/a2a/attest` | POST | Bearer | Attest an agent's A2A card |
+| `/v1/a2a/verify-card` | POST | public | Verify an attested card |
+| `/v1/a2a/verify-agent` | POST | public | Verify agent by card or `agent_url` |
+| `/v1/a2a/trust-level/:agent_url` | GET | public | Get trust level for agent URL |
+| `/v1/a2a/cards` | GET | public | Registry browse |
+| `/v1/a2a/cards/:id` | GET | public | Get specific card by ID |
+
+### OIDC-A Attestation *(coming soon — PR #28)*
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/.well-known/oauth-authorization-server` | GET | public | OAuth/OIDC-A discovery |
+| `/v1/attestation/eat` | POST | Bearer | Issue Entity Attestation Token (EAT/RFC 9711) |
+| `/v1/attestation/oidc-agent-claims` | POST | Bearer | Issue OIDC-A agent claims block |
+| `/v1/auth/agent-grant` | POST | Bearer | Agent grant flow (OAuth2-style) |
+| `/v1/auth/agent-grant/:id/status` | GET | Bearer | Grant status |
+| `/v1/auth/agent-grant/:id/resolve` | POST | Bearer | Approve/resolve grant |
+| `/v1/oidc/userinfo` | GET | Bearer | OIDC-A UserInfo |
 
 ### SSE Streaming (AI-Native)
 
