@@ -340,6 +340,7 @@ export async function buildOIDCAgentClaims(
     taskPurpose?: string
     scope?: string
     ttlSeconds?: number
+    verificationMethod?: 'speed-challenge' | 'hybrid-challenge' | 'reasoning-challenge'
   }
 ): Promise<{ claims: OIDCAgentClaims; claimsJwt: string }> {
   const now = Math.floor(Date.now() / 1000)
@@ -349,11 +350,15 @@ export async function buildOIDCAgentClaims(
     ? `${botchaPayload.app_id}:${botchaPayload.sub}`
     : botchaPayload.sub
 
-  // Build the capability set: always include BOTCHA core, add custom ones
+  // Derive the BOTCHA verification method capability from the actual method used
+  const verificationMethod = options?.verificationMethod ?? 'speed-challenge'
+  const methodCapability = `botcha:${verificationMethod}`
+
+  // Build the capability set: always include BOTCHA core + the actual method used
   const capabilities = [
     'botcha:verified',
-    'botcha:speed-challenge',
-    ...(options?.agentCapabilities ?? []),
+    methodCapability,
+    ...(options?.agentCapabilities ?? []).filter(c => c !== methodCapability),
   ]
 
   const claims: OIDCAgentClaims = {
@@ -368,9 +373,9 @@ export async function buildOIDCAgentClaims(
     agent_id: agentId,
     agent_operator: options?.agentOperator,
 
-    // Verification metadata
+    // Verification metadata — reflect the actual challenge type used
     agent_verification: {
-      method: 'botcha-speed-challenge',
+      method: `botcha-${verificationMethod}`,
       solve_time_ms: botchaPayload.solveTime,
       verified_at: new Date(botchaPayload.iat * 1000).toISOString(),
       issuer: BOTCHA_ISSUER,
@@ -569,7 +574,7 @@ export async function issueAgentGrant(
  *
  * Extended with OIDC-A specific metadata for agent auth servers.
  */
-export function buildOAuthASMetadata(baseUrl: string, publicKeyJwk?: object): object {
+export function buildOAuthASMetadata(baseUrl: string): object {
   return {
     // RFC 8414 §2 — Required
     issuer: baseUrl,
@@ -744,8 +749,13 @@ export async function resolveGrant(
     denial_reason: decision === 'denied' ? reason : undefined,
   }
 
+  // Preserve the original grant expiry rather than resetting to the full TTL.
+  // requested_at is stored in ms; KV expirationTtl is in seconds.
+  const elapsedSeconds = Math.floor((Date.now() - grant.requested_at) / 1000)
+  const remainingTtl = Math.max(1, AGENT_GRANT_TTL_SECONDS - elapsedSeconds)
+
   await kv.put(`agent_grant:${grantId}`, JSON.stringify(updated), {
-    expirationTtl: AGENT_GRANT_TTL_SECONDS,
+    expirationTtl: remainingTtl,
   })
 
   return { success: true, grant: updated }

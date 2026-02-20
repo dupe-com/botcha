@@ -337,9 +337,8 @@ export async function issueOIDCAgentClaimsRoute(c: Context) {
  */
 export async function oauthASMetadataRoute(c: Context) {
   const baseUrl = new URL(c.req.url).origin
-  const publicKey = getPublicKeyFromEnv(c.env)
 
-  const metadata = buildOAuthASMetadata(baseUrl, publicKey)
+  const metadata = buildOAuthASMetadata(baseUrl)
 
   return c.json(metadata, 200, {
     'Cache-Control': 'public, max-age=3600',
@@ -400,6 +399,21 @@ export async function agentGrantRoute(c: Context) {
     }
 
     const body = await c.req.json().catch(() => ({}))
+
+    // HITL grants require an app_id so that status/resolve routes can enforce
+    // same-app ownership. Without it the grant would be created but never resolvable.
+    if (body.human_oversight_required && !auth.payload.app_id) {
+      return c.json(
+        {
+          success: false,
+          error: 'APP_ID_REQUIRED',
+          message:
+            'human_oversight_required grants require a token issued with an app_id. ' +
+            'Obtain your token via the challenge flow with an app_id.',
+        },
+        400
+      )
+    }
     const baseUrl = new URL(c.req.url).origin
 
     // Issue EAT
@@ -424,6 +438,7 @@ export async function agentGrantRoute(c: Context) {
         taskId: body.task_id,
         taskPurpose: body.task_purpose,
         scope: body.scope,
+        verificationMethod: body.verification_method,
       }
     )
 
@@ -660,7 +675,6 @@ export async function oidcUserInfoRoute(c: Context) {
         ? `${payload.app_id}:${payload.sub}`
         : payload.sub
 
-      const signingKey = getSigningKeyFromEnv(c.env)
       const baseUrl = new URL(c.req.url).origin
 
       return c.json({

@@ -206,7 +206,7 @@ curl https://botcha.ai/agent-only/x402 \
 | Method | Path | Description |
 |--------|------|-------------|
 | \`GET\` | \`/.well-known/oauth-authorization-server\` | OAuth/OIDC-A authorization server metadata — PUBLIC |
-| \`POST\` | \`/v1/attestation/eat\` | Issue Entity Attestation Token (EAT, RFC 9711 profile) — AUTH REQUIRED |
+| \`POST\` | \`/v1/attestation/eat\` | Issue Entity Attestation Token (EAT, RFC 9334 profile) — AUTH REQUIRED |
 | \`POST\` | \`/v1/attestation/oidc-agent-claims\` | Issue OIDC-A claims block (JWT + decoded claims) — AUTH REQUIRED |
 | \`POST\` | \`/v1/auth/agent-grant\` | Create OAuth-style agent grant — AUTH REQUIRED |
 | \`GET\` | \`/v1/auth/agent-grant/:id/status\` | Poll pending grant status — AUTH REQUIRED |

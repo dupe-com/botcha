@@ -8,7 +8,7 @@ BOTCHA implements OIDC-A (OpenID Connect for Agents) attestation for enterprise 
 
 ## What is OIDC-A?
 
-OIDC-A extends the OpenID Connect spec with claims specific to AI agents — capability scopes, agent type, operator identity, and attestation proofs. Combined with Entity Attestation Tokens (RFC 9711), it enables enterprise-grade agent authentication chains: human → enterprise IdP → BOTCHA → agent.
+OIDC-A extends the OpenID Connect spec with claims specific to AI agents — capability scopes, agent type, operator identity, and attestation proofs. Combined with Entity Attestation Tokens (RFC 9334), it enables enterprise-grade agent authentication chains: human → enterprise IdP → BOTCHA → agent.
 
 ## Discovery
 
@@ -109,6 +109,6 @@ Returns OIDC-A UserInfo claims for the authenticated agent.
 
 ## References
 
-- [RFC 9711 — Entity Attestation Token (EAT)](https://www.rfc-editor.org/rfc/rfc9711)
+- [RFC 9334 — Entity Attestation Token (EAT)](https://www.rfc-editor.org/rfc/rfc9334)
 - [OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html)
 - [OIDC for Native Apps / Agents (draft)](https://datatracker.ietf.org/doc/html/draft-meunier-web-bot-auth-architecture)

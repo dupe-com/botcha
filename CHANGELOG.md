@@ -6,11 +6,20 @@ Format: [Semantic Versioning](https://semver.org/). Newest entries first.
 
 ---
 
+## [Unreleased]
+
+### 🔄 OIDC-A Attestation (PR #28)
+
+In active review on `epic/oidc-a-attestation`. Current open issues are tracked in [BUGS.md](./BUGS.md).
+Roadmap status and scope are tracked in [ROADMAP.md](./ROADMAP.md).
+
+---
+
 ## [0.22.0] — 2026-02-20
 
-### Protocol Integrations (5 epics)
+### Protocol Integrations (4 epics)
 
-Four epics merged to main (PRs #25, #26, #27, #29). OIDC-A (PR #28) remains in progress.
+Four epics merged to main (PRs #25, #26, #27, #29).
 
 #### ✅ x402 Payment Gating (PR #25 — merged)
 
@@ -82,8 +91,7 @@ BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards.
 - `GET /v1/a2a/cards` and `GET /v1/a2a/cards/:id` — registry browsing
 
 **Known follow-ups:**
-- Re-attesting same `agent_url` creates duplicate attestations
-- `ATTESTATION_FAILED` error code used for field validation errors (should be `INVALID_CARD`)
+- Tracked in [BUGS.md](./BUGS.md)
 
 **Included fixes:**
 - Added `/v1/a2a/agent-card` alias route
@@ -91,33 +99,6 @@ BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards.
 - Fixed `verify-agent` route typing/call-order bugs and compile breakage
 
 See [doc/A2A.md](./doc/A2A.md) for the guide.
-
-#### 🔄 OIDC-A Attestation (PR #28 — in progress, pending merge)
-
-Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims.
-
-**Planned endpoints (not yet in main):**
-- `GET /.well-known/oauth-authorization-server` — OAuth/OIDC-A discovery
-- `POST /v1/attestation/eat` — issue Entity Attestation Token (EAT/RFC 9711)
-- `POST /v1/attestation/oidc-agent-claims` — issue OIDC-A agent claims block
-- `POST /v1/auth/agent-grant` — agent grant flow (OAuth2-style)
-- `GET /v1/auth/agent-grant/:id/status` — grant status
-- `POST /v1/auth/agent-grant/:id/resolve` — approve/resolve grant
-- `GET /v1/oidc/userinfo` — OIDC-A UserInfo endpoint
-
-**Known issues (current):**
-- Grant resolve policy is app-owner scoped; stricter enterprise admin model may still be needed.
-
-**Recent pre-merge fixes pushed:**
-- Secured grant status polling (`GET /v1/auth/agent-grant/:id/status`) with bearer auth + app ownership checks
-- Secured grant resolution (`POST /v1/auth/agent-grant/:id/resolve`) with bearer auth + app ownership checks
-- Added strict positive `ttl_seconds` validation on EAT issuance
-- Corrected JWKS discovery references to `/.well-known/jwks`
-- Added focused OIDC-A tests in `tests/unit/agents/tap-oidca.test.ts`
-
-See [doc/OIDCA.md](./doc/OIDCA.md) for the current guide.
-
----
 
 ## [0.21.0]
 
