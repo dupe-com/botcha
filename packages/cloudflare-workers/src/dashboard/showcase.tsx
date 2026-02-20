@@ -487,7 +487,7 @@ export const SHOWCASE_CSS = `
     font-size: 0.8125rem;
     line-height: 1.6;
     color: #f0f0f0;
-    height: 620px;
+    height: 650px;
     overflow-y: hidden;
     font-family: var(--font);
   }
@@ -663,7 +663,7 @@ export const SHOWCASE_CSS = `
     .showcase-stack-section { padding: 0 1rem 3rem; }
     .showcase-stack-layer-title { flex-direction: column; align-items: flex-start; gap: 0.375rem; font-size: 1rem; }
     .showcase-terminal-section { padding: 3rem 1rem; }
-    .showcase-terminal-content { padding: 1rem; font-size: 0.75rem; height: 560px; }
+    .showcase-terminal-content { padding: 1rem; font-size: 0.75rem; height: 590px; }
     .showcase-footer { padding: 2rem 1rem 3rem; }
   }
 
