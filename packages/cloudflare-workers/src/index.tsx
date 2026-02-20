@@ -79,6 +79,13 @@ import {
   resetReputationRoute,
 } from './tap-reputation-routes.js';
 import {
+  verifyPaymentRoute as x402VerifyPaymentRoute,
+  x402ChallengeRoute,
+  agentOnlyX402Route,
+  x402WebhookRoute,
+  x402InfoRoute,
+} from './tap-x402-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -102,6 +109,8 @@ type Bindings = {
   RESEND_API_KEY?: string;
   BOTCHA_VERSION: string;
   BOTCHA_INTERNAL_APP_ID: string; // Internal demo app for homepage challenges
+  BOTCHA_PAYMENT_WALLET?: string; // BOTCHA receiving wallet (overrides default)
+  BOTCHA_WEBHOOK_SECRET?: string; // HMAC secret for x402 webhook verification
 };
 
 type Variables = {
@@ -139,6 +148,11 @@ const APP_GATE_OPEN_PATHS = [
   '/v1/apps',                       // POST: create app (registration)
   '/v1/auth/recover',               // POST: account recovery
   '/v1/token/validate',             // POST: public token validation — the token IS the credential
+  // x402 endpoints: payment IS the credential, no app_id gate
+  '/v1/x402/challenge',             // GET: pay-for-verification (x402 payment)
+  '/v1/x402/verify-payment',        // POST: facilitator payment verification
+  '/v1/x402/webhook',               // POST: settlement notifications
+  '/v1/x402/info',                  // GET: public payment configuration
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
@@ -2334,6 +2348,27 @@ app.post('/v1/verify/consumer', verifyConsumerRoute);
 app.post('/v1/verify/payment', verifyPaymentRoute);
 app.post('/v1/verify/delegation', verifyDelegationRoute);
 app.post('/v1/verify/attestation', verifyAttestationRoute);
+
+// ============ x402 PAYMENT GATING ENDPOINTS ============
+// HTTP 402 Payment Required protocol for agent micropayments.
+// Agents pay USDC on Base to receive BOTCHA tokens or access gated resources.
+
+// Info: x402 configuration discovery (public)
+app.get('/v1/x402/info', x402InfoRoute);
+
+// Challenge: pay $0.001 USDC → receive BOTCHA access_token (no puzzle required)
+// Without X-Payment header → 402 + payment requirements
+// With valid X-Payment header → 200 + { access_token, ... }
+app.get('/v1/x402/challenge', x402ChallengeRoute);
+
+// Facilitator: verify a raw x402 payment proof (utility endpoint)
+app.post('/v1/x402/verify-payment', x402VerifyPaymentRoute);
+
+// Webhook: receive payment settlement notifications from x402 facilitators
+app.post('/v1/x402/webhook', x402WebhookRoute);
+
+// Demo: BOTCHA token + x402 payment required (double-gated resource)
+app.get('/agent-only/x402', agentOnlyX402Route);
 
 // ============ AGENT REGISTRY API ============
 
