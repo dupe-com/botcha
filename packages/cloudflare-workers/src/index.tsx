@@ -99,6 +99,17 @@ import {
   resolveDIDRoute,
 } from './tap-vc-routes.js';
 import {
+  triggerWebhook,
+  createWebhookRoute,
+  listWebhooksRoute,
+  getWebhookRoute,
+  updateWebhookRoute,
+  deleteWebhookRoute,
+  testWebhookRoute,
+  listDeliveriesRoute,
+  type KVNamespace as WebhookKVNamespace,
+} from './webhooks.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -1285,6 +1296,19 @@ app.post('/v1/token/verify', async (c) => {
     // Fail-open: if KV fails, agent can still use the JWT directly
   }
 
+  // Webhook: token.created
+  if (challengeAppId) {
+    const webhookCtx = c.executionCtx;
+    if (webhookCtx?.waitUntil) {
+      webhookCtx.waitUntil(triggerWebhook(
+        c.env.AGENTS as unknown as WebhookKVNamespace,
+        challengeAppId,
+        'token.created',
+        { solve_time_ms: result.solveTimeMs, audience }
+      ));
+    }
+  }
+
   return c.json({
     // === Essential fields (what you need) ===
     success: true,
@@ -1403,6 +1427,20 @@ app.post('/v1/token/revoke', async (c) => {
 
     // Revoke the token by JTI
     await revokeToken(payload.jti, c.env);
+
+    // Webhook: token.revoked
+    const revokedAppId = payload.app_id as string | undefined;
+    if (revokedAppId) {
+      const revokeCtx = c.executionCtx;
+      if (revokeCtx?.waitUntil) {
+        revokeCtx.waitUntil(triggerWebhook(
+          c.env.AGENTS as unknown as WebhookKVNamespace,
+          revokedAppId,
+          'token.revoked',
+          { jti: payload.jti }
+        ));
+      }
+    }
 
     return c.json({
       success: true,
@@ -2327,6 +2365,15 @@ app.post('/v1/delegations', createDelegationRoute);
 app.get('/v1/delegations/:id', getDelegationRoute);
 app.get('/v1/delegations', listDelegationsRoute);
 app.post('/v1/delegations/:id/revoke', revokeDelegationRoute);
+
+// ============ WEBHOOK ENDPOINTS ============
+app.post('/v1/webhooks', createWebhookRoute);
+app.get('/v1/webhooks', listWebhooksRoute);
+app.get('/v1/webhooks/:id/deliveries', listDeliveriesRoute);
+app.post('/v1/webhooks/:id/test', testWebhookRoute);
+app.get('/v1/webhooks/:id', getWebhookRoute);
+app.put('/v1/webhooks/:id', updateWebhookRoute);
+app.delete('/v1/webhooks/:id', deleteWebhookRoute);
 
 // TAP Capability Attestation
 app.post('/v1/attestations', issueAttestationRoute);

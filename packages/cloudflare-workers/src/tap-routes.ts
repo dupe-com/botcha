@@ -7,6 +7,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { triggerWebhook, type KVNamespace as WebhookKVNamespace } from './webhooks.js';
 import { 
   registerTAPAgent, 
   getTAPAgent, 
@@ -244,6 +245,17 @@ export async function registerTAPAgentRoute(c: Context) {
     
     const agent = result.agent!;
     
+    // Webhook: agent.tap.registered
+    const tapRegCtx = c.executionCtx;
+    if (tapRegCtx?.waitUntil) {
+      tapRegCtx.waitUntil(triggerWebhook(
+        c.env.AGENTS as unknown as WebhookKVNamespace,
+        appAccess.appId!,
+        'agent.tap.registered',
+        { agent_id: agent.agent_id, name: agent.name, trust_level: agent.trust_level }
+      ));
+    }
+
     // Return enhanced agent info
     return c.json({
       success: true,
@@ -504,6 +516,17 @@ export async function createTAPSessionRoute(c: Context) {
     // Note: this does a read-modify-write on the full agent KV record. A concurrent key rotation
     // could clobber that write. Future work: store last_verified_at in a separate KV key.
     void updateAgentVerification(c.env.AGENTS, agent.agent_id, true);
+
+    // Webhook: tap.session.created
+    const tapSessCtx = c.executionCtx;
+    if (tapSessCtx?.waitUntil) {
+      tapSessCtx.waitUntil(triggerWebhook(
+        c.env.AGENTS as unknown as WebhookKVNamespace,
+        agent.app_id,
+        'tap.session.created',
+        { session_id: session.session_id, agent_id: agent.agent_id, intent: session.intent }
+      ));
+    }
     
     return c.json({
       success: true,
