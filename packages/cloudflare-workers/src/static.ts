@@ -87,6 +87,26 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | \`GET\` | \`/v1/agents/:id\` | Get agent by ID (public, no auth) |
 | \`GET\` | \`/v1/agents\` | List all agents for your app (auth required) |
 
+### Webhooks (v0.22.0)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`POST\` | \`/v1/webhooks\` | Register a webhook endpoint (returns secret once) |
+| \`GET\` | \`/v1/webhooks\` | List webhooks for your app |
+| \`GET\` | \`/v1/webhooks/:id\` | Get webhook details |
+| \`PUT\` | \`/v1/webhooks/:id\` | Update URL, event subscriptions, enabled state |
+| \`DELETE\` | \`/v1/webhooks/:id\` | Delete webhook + secret + delivery logs |
+| \`POST\` | \`/v1/webhooks/:id/test\` | Send a signed test event to endpoint |
+| \`GET\` | \`/v1/webhooks/:id/deliveries\` | List last 100 delivery attempts |
+
+Supported emitted events:
+- \`agent.tap.registered\`
+- \`token.created\`
+- \`token.revoked\`
+- \`tap.session.created\`
+- \`delegation.created\`
+- \`delegation.revoked\`
+
 ### TAP (Trusted Agent Protocol)
 
 | Method | Path | Description |
@@ -500,6 +520,16 @@ Endpoint: POST https://botcha.ai/v1/invoices/:id/verify-iou - Verify Browsing IO
 # TAP Full Spec — Consumer & Payment Verification (v0.16.0) (app_id required)
 Endpoint: POST https://botcha.ai/v1/verify/consumer - Verify Agentic Consumer object (Layer 2) — requires app_id
 Endpoint: POST https://botcha.ai/v1/verify/payment - Verify Agentic Payment Container (Layer 3) — requires app_id
+
+# Webhooks (v0.22.0) (Bearer token with app_id claim required)
+Endpoint: POST https://botcha.ai/v1/webhooks - Register webhook endpoint (returns signing secret once)
+Endpoint: GET https://botcha.ai/v1/webhooks - List webhooks for authenticated app
+Endpoint: GET https://botcha.ai/v1/webhooks/:id - Get webhook details
+Endpoint: PUT https://botcha.ai/v1/webhooks/:id - Update url/events/enabled state
+Endpoint: DELETE https://botcha.ai/v1/webhooks/:id - Delete webhook config + secret + delivery logs
+Endpoint: POST https://botcha.ai/v1/webhooks/:id/test - Send signed test event
+Endpoint: GET https://botcha.ai/v1/webhooks/:id/deliveries - List last 100 delivery attempts
+Events: agent.tap.registered, token.created, token.revoked, tap.session.created, delegation.created, delegation.revoked
 
 # TAP Delegation Chains (v0.17.0) (app_id required)
 Endpoint: POST https://botcha.ai/v1/delegations - Create delegation (grantor→grantee with capability subset) — requires app_id
@@ -1601,6 +1631,148 @@ export function getOpenApiSpec(version: string) {
               }
             },
             "401": { description: "Unauthorized - app_id required" }
+          }
+        }
+      },
+      "/v1/webhooks": {
+        post: {
+          summary: "Register webhook endpoint",
+          description: "Create a webhook for the authenticated app. Returns signing secret once at creation.",
+          operationId: "createWebhook",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url"],
+                  properties: {
+                    "url": { type: "string", description: "HTTPS destination URL" },
+                    "events": {
+                      type: "array",
+                      description: "Optional event filter. Defaults to all supported events.",
+                      items: {
+                        type: "string",
+                        enum: [
+                          "agent.tap.registered",
+                          "token.created",
+                          "token.revoked",
+                          "tap.session.created",
+                          "delegation.created",
+                          "delegation.revoked"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": { description: "Webhook created (includes one-time secret)" },
+            "400": { description: "Invalid url/events or webhook limit reached" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Token missing app_id" }
+          }
+        },
+        get: {
+          summary: "List webhooks",
+          description: "List all webhook configurations for the authenticated app.",
+          operationId: "listWebhooks",
+          responses: {
+            "200": { description: "Webhook list" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Token missing app_id" }
+          }
+        }
+      },
+      "/v1/webhooks/{id}": {
+        get: {
+          summary: "Get webhook",
+          operationId: "getWebhook",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Webhook details" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden" },
+            "404": { description: "Webhook not found" }
+          }
+        },
+        put: {
+          summary: "Update webhook",
+          operationId: "updateWebhook",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "url": { type: "string", description: "Updated HTTPS destination URL" },
+                    "enabled": { type: "boolean", description: "Enable/disable webhook delivery" },
+                    "events": {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: [
+                          "agent.tap.registered",
+                          "token.created",
+                          "token.revoked",
+                          "tap.session.created",
+                          "delegation.created",
+                          "delegation.revoked"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Webhook updated" },
+            "400": { description: "Invalid request body" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden" },
+            "404": { description: "Webhook not found" }
+          }
+        },
+        delete: {
+          summary: "Delete webhook",
+          operationId: "deleteWebhook",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Webhook deleted" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden" },
+            "404": { description: "Webhook not found" }
+          }
+        }
+      },
+      "/v1/webhooks/{id}/test": {
+        post: {
+          summary: "Send test webhook event",
+          operationId: "testWebhook",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Test delivery attempt response" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden" },
+            "404": { description: "Webhook not found" }
+          }
+        }
+      },
+      "/v1/webhooks/{id}/deliveries": {
+        get: {
+          summary: "List webhook delivery attempts",
+          operationId: "listWebhookDeliveries",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Recent delivery attempts" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden" },
+            "404": { description: "Webhook not found" }
           }
         }
       },

@@ -666,6 +666,28 @@ await client.resetReputation('agent_abc123');
 | `GET /v1/reputation/:agent_id/events` | List reputation events |
 | `POST /v1/reputation/:agent_id/reset` | Reset reputation (admin) |
 
+## Webhook Events (v0.22.0)
+
+Register per-app webhook endpoints to receive signed event deliveries from BOTCHA.
+
+Supported emitted events:
+- `agent.tap.registered`
+- `token.created`
+- `token.revoked`
+- `tap.session.created`
+- `delegation.created`
+- `delegation.revoked`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST /v1/webhooks` | Register webhook endpoint (returns signing secret once) |
+| `GET /v1/webhooks` | List webhooks for your app |
+| `GET /v1/webhooks/:id` | Get webhook details |
+| `PUT /v1/webhooks/:id` | Update URL, event subscriptions, enabled state |
+| `DELETE /v1/webhooks/:id` | Delete webhook + secret + delivery logs |
+| `POST /v1/webhooks/:id/test` | Send signed test event |
+| `GET /v1/webhooks/:id/deliveries` | List last 100 delivery attempts |
+
 ---
 
 ## 🔗 Protocol Integrations

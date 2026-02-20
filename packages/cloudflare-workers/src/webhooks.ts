@@ -2,12 +2,9 @@
  * BOTCHA Webhook Event System
  *
  * Delivers real-time events to API owners when things happen:
- *   challenge.solved / challenge.failed / challenge.timeout
- *   agent.registered / agent.tap.registered
  *   token.created / token.revoked
- *   tap.session.created / tap.session.expired
+ *   agent.tap.registered / tap.session.created
  *   delegation.created / delegation.revoked
- *   reputation.changed
  *
  * KV keys (all stored in AGENTS namespace):
  *   webhook:{id}               — WebhookConfig (without secret)
@@ -29,32 +26,20 @@ export interface KVNamespace {
 }
 
 export type WebhookEventType =
-  | 'challenge.solved'
-  | 'challenge.failed'
-  | 'challenge.timeout'
-  | 'agent.registered'
   | 'agent.tap.registered'
   | 'token.created'
   | 'token.revoked'
   | 'tap.session.created'
-  | 'tap.session.expired'
   | 'delegation.created'
-  | 'delegation.revoked'
-  | 'reputation.changed';
+  | 'delegation.revoked';
 
 export const ALL_EVENT_TYPES: WebhookEventType[] = [
-  'challenge.solved',
-  'challenge.failed',
-  'challenge.timeout',
-  'agent.registered',
   'agent.tap.registered',
   'token.created',
   'token.revoked',
   'tap.session.created',
-  'tap.session.expired',
   'delegation.created',
   'delegation.revoked',
-  'reputation.changed',
 ];
 
 export interface WebhookConfig {
@@ -170,7 +155,10 @@ async function appendDelivery(kv: KVNamespace, webhookId: string, log: DeliveryL
 // ============ RETRY DELAYS ============
 
 // Keep retries short for Worker waitUntil execution windows.
-const RETRY_DELAYS_MS = [250, 1000, 2500, 5000]; // 4 attempts total, ~8.75s max backoff wait
+const DELIVERY_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [150, 600];
+const DELIVERY_TIMEOUT_MS = 2500;
+const WAIT_UNTIL_BUDGET_MS = 12000;
 const MAX_WEBHOOKS_PER_APP = 25;
 
 function isPrivateIPv4(hostname: string): boolean {
@@ -219,13 +207,33 @@ function validateWebhookUrl(urlValue: string): { valid: true; normalizedUrl: str
   return { valid: true, normalizedUrl: parsed.toString() };
 }
 
+function normalizeWebhookEvents(events: unknown): { valid: true; events: WebhookEventType[] } | { valid: false; message: string } {
+  if (!Array.isArray(events) || events.length === 0) {
+    return { valid: false, message: 'events must be a non-empty array of supported event types' };
+  }
+
+  const unsupported = events.filter((event): event is unknown =>
+    typeof event !== 'string' || !ALL_EVENT_TYPES.includes(event as WebhookEventType)
+  );
+  if (unsupported.length > 0) {
+    return {
+      valid: false,
+      message: `Unsupported event type(s): ${unsupported.map(String).join(', ')}`,
+    };
+  }
+
+  const deduped = Array.from(new Set(events)) as WebhookEventType[];
+  return { valid: true, events: deduped };
+}
+
 // ============ SINGLE DELIVERY ATTEMPT ============
 
 async function attemptDelivery(
   url: string,
   body: string,
   signature: string,
-  eventType: string
+  eventType: string,
+  timeoutMs: number = DELIVERY_TIMEOUT_MS
 ): Promise<{ statusCode: number | null; success: boolean; error?: string; durationMs: number }> {
   const start = Date.now();
   try {
@@ -238,8 +246,7 @@ async function attemptDelivery(
         'User-Agent': 'Botcha-Webhook/1.0',
       },
       body,
-      // 10s timeout via AbortController
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const durationMs = Date.now() - start;
     const success = response.status >= 200 && response.status < 300;
@@ -277,63 +284,88 @@ export async function triggerWebhook(
   // Load all webhooks for this app
   const ids = await getAppWebhookIds(kv, appId);
   if (ids.length === 0) return;
+  const deadlineMs = Date.now() + WAIT_UNTIL_BUDGET_MS;
 
-  for (const webhookId of ids) {
-    const webhook = await getWebhook(kv, webhookId);
-    if (!webhook) continue;
-    if (!webhook.enabled || webhook.suspended) continue;
-    if (!webhook.events.includes(eventType)) continue;
+  await Promise.allSettled(ids.map(async (webhookId) => {
+    try {
+      const webhook = await getWebhook(kv, webhookId);
+      if (!webhook) return;
+      if (!webhook.enabled || webhook.suspended) return;
+      if (!webhook.events.includes(eventType)) return;
 
-    const secret = await kv.get(`webhook_secret:${webhookId}`);
-    if (!secret) continue;
+      const secret = await kv.get(`webhook_secret:${webhookId}`);
+      if (!secret) return;
 
-    const signature = await computeHmacSignature(secret, body);
+      const signature = await computeHmacSignature(secret, body);
 
-    let success = false;
-    let lastResult: { statusCode: number | null; success: boolean; error?: string; durationMs: number } = {
-      statusCode: null, success: false, durationMs: 0,
-    };
+      let success = false;
+      let attemptsMade = 0;
 
-    for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
-      if (attempt > 0) {
-        await sleep(RETRY_DELAYS_MS[attempt - 1]);
+      for (let attempt = 0; attempt < DELIVERY_ATTEMPTS; attempt++) {
+        if (attempt > 0) {
+          const delayMs = RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)] || 0;
+          if (Date.now() + delayMs >= deadlineMs) break;
+          await sleep(delayMs);
+        }
+
+        const remainingMs = deadlineMs - Date.now();
+        if (remainingMs <= 0) break;
+
+        const timeoutMs = Math.max(300, Math.min(DELIVERY_TIMEOUT_MS, remainingMs));
+        const result = await attemptDelivery(webhook.url, body, signature, eventType, timeoutMs);
+        attemptsMade += 1;
+
+        const log: DeliveryLog = {
+          delivery_id: generateId('dlv'),
+          webhook_id: webhookId,
+          event_type: eventType,
+          event_id: event.id,
+          attempted_at: Date.now(),
+          attempt_number: attempt + 1,
+          status_code: result.statusCode,
+          success: result.success,
+          error: result.error,
+          duration_ms: result.durationMs,
+        };
+
+        await appendDelivery(kv, webhookId, log);
+
+        if (result.success) {
+          success = true;
+          webhook.consecutive_failures = 0;
+          webhook.suspended = false;
+          await saveWebhook(kv, webhook);
+          break;
+        }
       }
 
-      lastResult = await attemptDelivery(webhook.url, body, signature, eventType);
+      if (!success) {
+        if (attemptsMade === 0) {
+          await appendDelivery(kv, webhookId, {
+            delivery_id: generateId('dlv'),
+            webhook_id: webhookId,
+            event_type: eventType,
+            event_id: event.id,
+            attempted_at: Date.now(),
+            attempt_number: 1,
+            status_code: null,
+            success: false,
+            error: 'Delivery skipped: waitUntil execution budget exceeded',
+            duration_ms: 0,
+          });
+        }
 
-      const log: DeliveryLog = {
-        delivery_id: generateId('dlv'),
-        webhook_id: webhookId,
-        event_type: eventType,
-        event_id: event.id,
-        attempted_at: Date.now(),
-        attempt_number: attempt + 1,
-        status_code: lastResult.statusCode,
-        success: lastResult.success,
-        error: lastResult.error,
-        duration_ms: lastResult.durationMs,
-      };
-
-      await appendDelivery(kv, webhookId, log);
-
-      if (lastResult.success) {
-        success = true;
-        // Reset failure counter
-        webhook.consecutive_failures = 0;
+        webhook.consecutive_failures = (webhook.consecutive_failures || 0) + 1;
+        // Suspend after 3 consecutive failures
+        if (webhook.consecutive_failures >= 3) {
+          webhook.suspended = true;
+        }
         await saveWebhook(kv, webhook);
-        break;
       }
+    } catch (error) {
+      console.error(`Webhook delivery failed for ${webhookId}:`, error);
     }
-
-    if (!success) {
-      webhook.consecutive_failures = (webhook.consecutive_failures || 0) + 1;
-      // Suspend after 3 consecutive failures
-      if (webhook.consecutive_failures >= 3) {
-        webhook.suspended = true;
-      }
-      await saveWebhook(kv, webhook);
-    }
-  }
+  }));
 }
 
 function sleep(ms: number): Promise<void> {
@@ -414,13 +446,11 @@ export async function createWebhookRoute(c: Context): Promise<Response> {
   // Validate events
   let eventList: WebhookEventType[] = [...ALL_EVENT_TYPES];
   if (events !== undefined) {
-    if (!Array.isArray(events) || events.length === 0) {
-      return c.json({ success: false, error: 'INVALID_EVENTS', message: 'events must be a non-empty array of supported event types' }, 400);
+    const normalized = normalizeWebhookEvents(events);
+    if (!normalized.valid) {
+      return c.json({ success: false, error: 'INVALID_EVENTS', message: normalized.message }, 400);
     }
-    eventList = events.filter((e): e is WebhookEventType => ALL_EVENT_TYPES.includes(e as WebhookEventType));
-    if (eventList.length === 0) {
-      return c.json({ success: false, error: 'INVALID_EVENTS', message: 'No supported event types provided' }, 400);
-    }
+    eventList = normalized.events;
   }
 
   const webhookId = generateId('wh');
@@ -583,14 +613,12 @@ export async function updateWebhookRoute(c: Context): Promise<Response> {
     webhook.url = urlValidation.normalizedUrl;
   }
 
-  if (body.events !== undefined && Array.isArray(body.events)) {
-    const filtered = body.events.filter((e): e is WebhookEventType => ALL_EVENT_TYPES.includes(e as WebhookEventType));
-    if (filtered.length === 0) {
-      return c.json({ success: false, error: 'INVALID_EVENTS', message: 'No supported event types provided' }, 400);
+  if (body.events !== undefined) {
+    const normalized = normalizeWebhookEvents(body.events);
+    if (!normalized.valid) {
+      return c.json({ success: false, error: 'INVALID_EVENTS', message: normalized.message }, 400);
     }
-    webhook.events = filtered;
-  } else if (body.events !== undefined) {
-    return c.json({ success: false, error: 'INVALID_EVENTS', message: 'events must be an array of supported event types' }, 400);
+    webhook.events = normalized.events;
   }
 
   if (typeof body.enabled === 'boolean') {
@@ -681,7 +709,7 @@ export async function testWebhookRoute(c: Context): Promise<Response> {
 
   const testEvent: BotchaEvent = {
     id: generateId('evt'),
-    type: 'challenge.solved',
+    type: 'token.created',
     created_at: new Date().toISOString(),
     app_id: auth.appId,
     data: {
@@ -693,12 +721,12 @@ export async function testWebhookRoute(c: Context): Promise<Response> {
 
   const body = JSON.stringify(testEvent);
   const signature = await computeHmacSignature(secret, body);
-  const result = await attemptDelivery(webhook.url, body, signature, 'challenge.solved');
+  const result = await attemptDelivery(webhook.url, body, signature, 'token.created');
 
   const log: DeliveryLog = {
     delivery_id: generateId('dlv'),
     webhook_id: webhookId,
-    event_type: 'challenge.solved',
+    event_type: 'token.created',
     event_id: testEvent.id,
     attempted_at: Date.now(),
     attempt_number: 1,

@@ -214,7 +214,7 @@ describe('Webhook Core Logic', () => {
   // 7. Test delivery endpoint: attempt recorded in delivery log
   // -------------------------------------------------------------------
   test('delivery log is stored in KV after triggerWebhook', async () => {
-    const wh = makeWebhook({ events: ['challenge.solved'] });
+    const wh = makeWebhook({ events: ['token.created'] });
     const secret = await seedWebhook(kv, wh);
 
     // Mock fetch to return 200
@@ -222,7 +222,7 @@ describe('Webhook Core Logic', () => {
     const originalFetch = globalThis.fetch;
     (globalThis as any).fetch = fetchSpy;
 
-    await triggerWebhook(kv, wh.app_id, 'challenge.solved', { agent_id: 'agent_test' });
+    await triggerWebhook(kv, wh.app_id, 'token.created', { agent_id: 'agent_test' });
 
     // Delivery log should now exist
     const rawLog = await kv.get(`webhook_deliveries:${wh.id}`);
@@ -230,7 +230,7 @@ describe('Webhook Core Logic', () => {
     const logs = JSON.parse(rawLog!) as DeliveryLog[];
     expect(logs.length).toBeGreaterThanOrEqual(1);
     expect(logs[0].success).toBe(true);
-    expect(logs[0].event_type).toBe('challenge.solved');
+    expect(logs[0].event_type).toBe('token.created');
     expect(logs[0].webhook_id).toBe(wh.id);
     expect(logs[0].status_code).toBe(200);
     expect(fetchSpy).toHaveBeenCalledOnce();
@@ -278,14 +278,14 @@ describe('Webhook Core Logic', () => {
   // 9. Suspended webhook is skipped (no fetch call)
   // -------------------------------------------------------------------
   test('suspended webhook is skipped during delivery', async () => {
-    const wh = makeWebhook({ suspended: true, events: ['agent.registered'] });
+    const wh = makeWebhook({ suspended: true, events: ['agent.tap.registered'] });
     await seedWebhook(kv, wh);
 
     const fetchSpy = vi.fn();
     const originalFetch = globalThis.fetch;
     (globalThis as any).fetch = fetchSpy;
 
-    await triggerWebhook(kv, wh.app_id, 'agent.registered', {});
+    await triggerWebhook(kv, wh.app_id, 'agent.tap.registered', {});
 
     expect(fetchSpy).not.toHaveBeenCalled();
     (globalThis as any).fetch = originalFetch;
@@ -295,15 +295,15 @@ describe('Webhook Core Logic', () => {
   // 10. Webhook with non-matching events is skipped
   // -------------------------------------------------------------------
   test('webhook subscribed to different event type is skipped', async () => {
-    // Only subscribed to 'challenge.solved', not 'token.created'
-    const wh = makeWebhook({ events: ['challenge.solved'] });
+    // Only subscribed to 'token.created', not 'token.revoked'
+    const wh = makeWebhook({ events: ['token.created'] });
     await seedWebhook(kv, wh);
 
     const fetchSpy = vi.fn();
     const originalFetch = globalThis.fetch;
     (globalThis as any).fetch = fetchSpy;
 
-    await triggerWebhook(kv, wh.app_id, 'token.created', { jti: 'abc' });
+    await triggerWebhook(kv, wh.app_id, 'token.revoked', { jti: 'abc' });
 
     expect(fetchSpy).not.toHaveBeenCalled();
     (globalThis as any).fetch = originalFetch;
