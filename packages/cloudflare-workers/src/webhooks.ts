@@ -122,7 +122,11 @@ export async function computeHmacSignature(secret: string, body: string): Promis
 async function getWebhook(kv: KVNamespace, id: string): Promise<WebhookConfig | null> {
   const raw = await kv.get(`webhook:${id}`);
   if (!raw) return null;
-  return JSON.parse(raw) as WebhookConfig;
+  try {
+    return JSON.parse(raw) as WebhookConfig;
+  } catch {
+    return null;
+  }
 }
 
 async function saveWebhook(kv: KVNamespace, webhook: WebhookConfig): Promise<void> {
@@ -132,7 +136,12 @@ async function saveWebhook(kv: KVNamespace, webhook: WebhookConfig): Promise<voi
 async function getAppWebhookIds(kv: KVNamespace, appId: string): Promise<string[]> {
   const raw = await kv.get(`app_webhooks:${appId}`);
   if (!raw) return [];
-  return JSON.parse(raw) as string[];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 async function setAppWebhookIds(kv: KVNamespace, appId: string, ids: string[]): Promise<void> {
@@ -142,7 +151,12 @@ async function setAppWebhookIds(kv: KVNamespace, appId: string, ids: string[]): 
 async function getDeliveries(kv: KVNamespace, webhookId: string): Promise<DeliveryLog[]> {
   const raw = await kv.get(`webhook_deliveries:${webhookId}`);
   if (!raw) return [];
-  return JSON.parse(raw) as DeliveryLog[];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 async function appendDelivery(kv: KVNamespace, webhookId: string, log: DeliveryLog): Promise<void> {
@@ -155,7 +169,55 @@ async function appendDelivery(kv: KVNamespace, webhookId: string, log: DeliveryL
 
 // ============ RETRY DELAYS ============
 
-const RETRY_DELAYS_MS = [1000, 5000, 30000, 300000, 1800000]; // 1s, 5s, 30s, 5m, 30m
+// Keep retries short for Worker waitUntil execution windows.
+const RETRY_DELAYS_MS = [250, 1000, 2500, 5000]; // 4 attempts total, ~8.75s max backoff wait
+const MAX_WEBHOOKS_PER_APP = 25;
+
+function isPrivateIPv4(hostname: string): boolean {
+  const parts = hostname.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  return false;
+}
+
+function isPrivateIPv6(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === '::1') return true;
+  if (h.startsWith('fe80:')) return true; // link-local
+  if (h.startsWith('fc') || h.startsWith('fd')) return true; // unique local
+  return false;
+}
+
+function validateWebhookUrl(urlValue: string): { valid: true; normalizedUrl: string } | { valid: false; error: string; message: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlValue);
+  } catch {
+    return { valid: false, error: 'INVALID_URL', message: 'url must be a valid HTTPS URL' };
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return { valid: false, error: 'INVALID_URL', message: 'url must use https:// scheme' };
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0') {
+    return { valid: false, error: 'UNSAFE_URL', message: 'localhost and loopback webhook URLs are not allowed' };
+  }
+
+  if (isPrivateIPv4(host) || isPrivateIPv6(host)) {
+    return { valid: false, error: 'UNSAFE_URL', message: 'private-network webhook URLs are not allowed' };
+  }
+
+  return { valid: true, normalizedUrl: parsed.toString() };
+}
 
 // ============ SINGLE DELIVERY ATTEMPT ============
 
@@ -344,24 +406,40 @@ export async function createWebhookRoute(c: Context): Promise<Response> {
     return c.json({ success: false, error: 'MISSING_URL', message: 'url is required' }, 400);
   }
 
-  try {
-    new URL(url);
-  } catch {
-    return c.json({ success: false, error: 'INVALID_URL', message: 'url must be a valid HTTPS URL' }, 400);
+  const urlValidation = validateWebhookUrl(url);
+  if (!urlValidation.valid) {
+    return c.json({ success: false, error: urlValidation.error, message: urlValidation.message }, 400);
   }
 
   // Validate events
-  const eventList: WebhookEventType[] = (events && Array.isArray(events) && events.length > 0)
-    ? events.filter((e): e is WebhookEventType => ALL_EVENT_TYPES.includes(e as WebhookEventType))
-    : [...ALL_EVENT_TYPES];
+  let eventList: WebhookEventType[] = [...ALL_EVENT_TYPES];
+  if (events !== undefined) {
+    if (!Array.isArray(events) || events.length === 0) {
+      return c.json({ success: false, error: 'INVALID_EVENTS', message: 'events must be a non-empty array of supported event types' }, 400);
+    }
+    eventList = events.filter((e): e is WebhookEventType => ALL_EVENT_TYPES.includes(e as WebhookEventType));
+    if (eventList.length === 0) {
+      return c.json({ success: false, error: 'INVALID_EVENTS', message: 'No supported event types provided' }, 400);
+    }
+  }
 
   const webhookId = generateId('wh');
   const now = Date.now();
 
+  const kv = (c.env as any).AGENTS as KVNamespace;
+  const existingIds = await getAppWebhookIds(kv, appId);
+  if (existingIds.length >= MAX_WEBHOOKS_PER_APP) {
+    return c.json({
+      success: false,
+      error: 'WEBHOOK_LIMIT_REACHED',
+      message: `Maximum of ${MAX_WEBHOOKS_PER_APP} webhooks per app`,
+    }, 400);
+  }
+
   const webhook: WebhookConfig = {
     id: webhookId,
     app_id: appId,
-    url,
+    url: urlValidation.normalizedUrl,
     events: eventList,
     enabled: true,
     created_at: now,
@@ -376,12 +454,10 @@ export async function createWebhookRoute(c: Context): Promise<Response> {
   const secret = Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
 
   // Save webhook config and secret
-  const kv = (c.env as any).AGENTS as KVNamespace;
   await saveWebhook(kv, webhook);
   await kv.put(`webhook_secret:${webhookId}`, secret);
 
   // Add to app index
-  const existingIds = await getAppWebhookIds(kv, appId);
   await setAppWebhookIds(kv, appId, [...existingIds, webhookId]);
 
   return c.json({
@@ -389,7 +465,7 @@ export async function createWebhookRoute(c: Context): Promise<Response> {
     webhook: {
       id: webhookId,
       app_id: appId,
-      url,
+      url: webhook.url,
       events: eventList,
       enabled: true,
       created_at: new Date(now).toISOString(),
@@ -500,17 +576,21 @@ export async function updateWebhookRoute(c: Context): Promise<Response> {
   }
 
   if (body.url !== undefined) {
-    try {
-      new URL(body.url);
-      webhook.url = body.url;
-    } catch {
-      return c.json({ success: false, error: 'INVALID_URL', message: 'url must be a valid URL' }, 400);
+    const urlValidation = validateWebhookUrl(body.url);
+    if (!urlValidation.valid) {
+      return c.json({ success: false, error: urlValidation.error, message: urlValidation.message }, 400);
     }
+    webhook.url = urlValidation.normalizedUrl;
   }
 
   if (body.events !== undefined && Array.isArray(body.events)) {
     const filtered = body.events.filter((e): e is WebhookEventType => ALL_EVENT_TYPES.includes(e as WebhookEventType));
-    if (filtered.length > 0) webhook.events = filtered;
+    if (filtered.length === 0) {
+      return c.json({ success: false, error: 'INVALID_EVENTS', message: 'No supported event types provided' }, 400);
+    }
+    webhook.events = filtered;
+  } else if (body.events !== undefined) {
+    return c.json({ success: false, error: 'INVALID_EVENTS', message: 'events must be an array of supported event types' }, 400);
   }
 
   if (typeof body.enabled === 'boolean') {

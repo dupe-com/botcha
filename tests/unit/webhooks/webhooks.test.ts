@@ -219,7 +219,8 @@ describe('Webhook Core Logic', () => {
 
     // Mock fetch to return 200
     const fetchSpy = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
-    vi.stubGlobal('fetch', fetchSpy);
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = fetchSpy;
 
     await triggerWebhook(kv, wh.app_id, 'challenge.solved', { agent_id: 'agent_test' });
 
@@ -234,7 +235,7 @@ describe('Webhook Core Logic', () => {
     expect(logs[0].status_code).toBe(200);
     expect(fetchSpy).toHaveBeenCalledOnce();
 
-    vi.unstubAllGlobals();
+    (globalThis as any).fetch = originalFetch;
   });
 
   // -------------------------------------------------------------------
@@ -252,7 +253,8 @@ describe('Webhook Core Logic', () => {
       capturedInit = init;
       return new Response('', { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchSpy);
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = fetchSpy;
 
     await triggerWebhook(kv, wh.app_id, 'token.revoked', { jti: 'some-jti' });
 
@@ -269,7 +271,7 @@ describe('Webhook Core Logic', () => {
     const expectedSig = await computeHmacSignature('fixed-test-secret-abc123', sentBody);
     expect(sentSig).toBe(expectedSig);
 
-    vi.unstubAllGlobals();
+    (globalThis as any).fetch = originalFetch;
   });
 
   // -------------------------------------------------------------------
@@ -280,12 +282,13 @@ describe('Webhook Core Logic', () => {
     await seedWebhook(kv, wh);
 
     const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = fetchSpy;
 
     await triggerWebhook(kv, wh.app_id, 'agent.registered', {});
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    (globalThis as any).fetch = originalFetch;
   });
 
   // -------------------------------------------------------------------
@@ -297,12 +300,13 @@ describe('Webhook Core Logic', () => {
     await seedWebhook(kv, wh);
 
     const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = fetchSpy;
 
     await triggerWebhook(kv, wh.app_id, 'token.created', { jti: 'abc' });
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    (globalThis as any).fetch = originalFetch;
   });
 
   // -------------------------------------------------------------------
