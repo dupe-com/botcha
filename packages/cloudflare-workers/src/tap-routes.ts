@@ -115,7 +115,7 @@ function validateTAPRegistration(body: any): {
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
     ans_name?: string;
-  };
+    did?: string;  };
   error?: string;
 } {
   if (!body.name || typeof body.name !== 'string') {
@@ -170,7 +170,10 @@ function validateTAPRegistration(body: any): {
     const clean = body.ans_name.trim().replace(/^ans:\/\//, '');
     if (clean.split('.').length < 2) {
       return { valid: false, error: 'ans_name must include at least a label and domain (e.g. "myagent.example.com")' };
-    }
+  // Validate optional DID field
+  if (body.did !== undefined) {
+    if (typeof body.did !== 'string' || !body.did.startsWith('did:')) {
+      return { valid: false, error: 'Invalid did field: must be a valid DID string (e.g. did:web:example.com)' };    }
   }
 
   return {
@@ -185,7 +188,7 @@ function validateTAPRegistration(body: any): {
       trust_level: body.trust_level || 'basic',
       issuer: body.issuer,
       ans_name: body.ans_name,
-    }
+      did: body.did,    }
   };
 }
 
@@ -252,6 +255,9 @@ export async function registerTAPAgentRoute(c: Context) {
       capabilities: agent.capabilities,
       signature_algorithm: agent.signature_algorithm,
       issuer: agent.issuer,
+
+      // W3C DID (optional)
+      did: agent.did || null,
       
       // ANS fields
       ans_name: agent.ans_name || null,
