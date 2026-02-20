@@ -1,0 +1,129 @@
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'packages/cloudflare-workers/**'
+      - '.github/workflows/preview.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    name: Deploy Preview (PR #${{ github.event.pull_request.number }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: |
+          cd packages/cloudflare-workers
+          bun install
+
+      - name: Build TypeScript
+        run: |
+          cd packages/cloudflare-workers
+          bun run build
+
+      - name: Deploy preview worker
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          workingDirectory: packages/cloudflare-workers
+          command: deploy --env preview --name botcha-pr-${{ github.event.pull_request.number }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+
+      - name: Extract preview URL
+        id: url
+        run: |
+          # wrangler prints the workers.dev URL in deploy output; capture it
+          OUTPUT="${{ steps.deploy.outputs.command-output }}"
+          URL=$(echo "$OUTPUT" | grep -oE 'https://botcha-pr-[0-9]+\.[a-z0-9-]+\.workers\.dev' | head -1)
+          if [ -z "$URL" ]; then
+            # Fallback: construct from known account subdomain if wrangler output not captured
+            URL="https://botcha-pr-${{ github.event.pull_request.number }}.botchaai.workers.dev"
+          fi
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Post preview comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNum = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha.substring(0, 7);
+            const url = '${{ steps.url.outputs.url }}';
+            const branch = context.payload.pull_request.head.ref;
+
+            const body = [
+              `## 🚀 Preview Deployed — PR #${prNum}`,
+              ``,
+              `**Branch:** \`${branch}\`  `,
+              `**Commit:** \`${sha}\`  `,
+              `**URL:** ${url}`,
+              ``,
+              `### Quick smoke tests`,
+              `\`\`\`bash`,
+              `BASE="${url}"`,
+              ``,
+              `# Health check`,
+              `curl "$BASE/health"`,
+              ``,
+              `# Challenge flow`,
+              `APP_ID=app_c4e8aade83ce32f0`,
+              `APP_SECRET=sk_9d70ac2f1f28b224e8a49e3e1af62afb`,
+              `curl "$BASE/v1/challenge?app_id=$APP_ID"`,
+              ``,
+              `# New endpoints on this PR (check EPIC.md for specifics)`,
+              `curl "$BASE/v1/" | jq .`,
+              `\`\`\``,
+              ``,
+              `> ⚠️ Preview uses production KV — test data is real. Clean up test agents/apps when done.`,
+              ``,
+              `---`,
+              `*Auto-deployed by [preview.yml](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/.github/workflows/preview.yml) · [View logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*`
+            ].join('\n');
+
+            // Find existing preview comment to update rather than spam new ones
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNum
+            });
+
+            const existing = comments.data.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes('🚀 Preview Deployed')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNum,
+                body
+              });
+            }

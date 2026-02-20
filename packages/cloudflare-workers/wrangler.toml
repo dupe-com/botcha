@@ -76,3 +76,47 @@ head_sampling_rate = 1
 [dev]
 port = 8787
 local_protocol = "http"
+
+# ─── Preview environments (one worker per PR) ────────────────────────────────
+# Deployed as botcha-pr-{number}.{account}.workers.dev
+# Uses production KV namespaces (isolated by agent/app keys, not buckets)
+# No route bindings — workers.dev only
+[env.preview]
+workers_dev = true
+
+[env.preview.vars]
+BOTCHA_VERSION = "preview"
+BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
+BOTCHA_ENV = "preview"
+
+[[env.preview.kv_namespaces]]
+binding = "CHALLENGES"
+id = "1bbfbe23060a450f996a587a36501a65"
+
+[[env.preview.kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "c45e9f02ad104ad98d00699db3ad258c"
+
+[[env.preview.kv_namespaces]]
+binding = "APPS"
+id = "18d9da1e11364a7b981061c6b01f4855"
+
+[[env.preview.kv_namespaces]]
+binding = "AGENTS"
+id = "8107336e9e8c418b895c4134a53037fd"
+
+[[env.preview.kv_namespaces]]
+binding = "SESSIONS"
+id = "268aa950ddec41e78d88e78526eaaa44"
+
+[[env.preview.kv_namespaces]]
+binding = "NONCES"
+id = "b449ba37133b4e59b3e29b72872f7289"
+
+[[env.preview.kv_namespaces]]
+binding = "INVOICES"
+id = "043e1f7ab0454962b1bcf2bda9280833"
+
+[[env.preview.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "botcha-preview"
