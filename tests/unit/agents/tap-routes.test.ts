@@ -16,8 +16,21 @@ vi.mock('../../../packages/cloudflare-workers/src/auth.js', () => ({
   verifyToken: vi.fn(),
 }));
 
+// Mock tap-verify to keep parseTAPIntent real but allow controlling verifyHTTPMessageSignature.
+// The "real" crypto verification is tested in tap-verify.test.ts; here we test route logic.
+vi.mock('../../../packages/cloudflare-workers/src/tap-verify.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../packages/cloudflare-workers/src/tap-verify.js')>();
+  return {
+    ...original,
+    // Default: return valid so existing session-logic tests keep passing.
+    // Override per-test in the RFC 9421 enforcement describe block.
+    verifyHTTPMessageSignature: vi.fn().mockResolvedValue({ valid: true }),
+  };
+});
+
 // Import mocked functions
 import { extractBearerToken, verifyToken } from '../../../packages/cloudflare-workers/src/auth.js';
+import { verifyHTTPMessageSignature } from '../../../packages/cloudflare-workers/src/tap-verify.js';
 
 // Mock KV namespace using a simple Map
 class MockKV implements KVNamespace {
@@ -58,16 +71,34 @@ class MockKV implements KVNamespace {
 }
 
 // Helper to create a mock Hono Context
+// rawHeaders: optional key-value pairs that populate req.raw.headers for RFC 9421 tests
 function createMockContext(overrides: any = {}) {
   const agentsKV = overrides.agentsKV || new MockKV();
   const sessionsKV = overrides.sessionsKV || new MockKV();
-  
+  const noncesKV = overrides.noncesKV || new MockKV();
+
+  // Build a minimal Headers-like object from the rawHeaders map (or empty)
+  const rawHeadersMap: Record<string, string> = overrides.rawHeaders || {};
+  const mockHeaders = {
+    forEach: (cb: (value: string, key: string) => void) => {
+      for (const [k, v] of Object.entries(rawHeadersMap)) {
+        cb(v, k);
+      }
+    },
+    get: (key: string) => rawHeadersMap[key.toLowerCase()] ?? null,
+  };
+
   return {
     req: {
       json: overrides.json || vi.fn().mockResolvedValue({}),
       query: overrides.query || vi.fn().mockReturnValue(undefined),
       param: overrides.param || vi.fn().mockReturnValue(undefined),
       header: overrides.header || vi.fn().mockReturnValue(undefined),
+      method: overrides.method || 'POST',
+      url: overrides.url || 'https://botcha.ai/v1/sessions/tap',
+      raw: {
+        headers: mockHeaders,
+      },
     },
     json: vi.fn().mockImplementation((body, status) => {
       return new Response(JSON.stringify(body), { 
@@ -78,6 +109,7 @@ function createMockContext(overrides: any = {}) {
     env: { 
       AGENTS: agentsKV, 
       SESSIONS: sessionsKV, 
+      NONCES: noncesKV,
       JWT_SECRET: 'test-secret' 
     }
   } as any;
@@ -614,8 +646,18 @@ describe('TAP Routes - listTAPAgentsRoute', () => {
 });
 
 describe('TAP Routes - createTAPSessionRoute', () => {
+  // Fake-but-present sig headers so existing tests pass the header gate.
+  // The crypto check is mocked to return valid (module-level vi.mock above).
+  const FAKE_SIG_HEADERS = {
+    'signature': 'sig1=:ZmFrZXNpZ25hdHVyZQ==:',
+    'signature-input': `sig1=("@method" "@path");created=${Math.floor(Date.now() / 1000)};keyid="k1";alg="ecdsa-p256-sha256"`,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply default after clearAllMocks (clearAllMocks only clears call history,
+    // NOT the implementation — but be explicit for safety)
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({ valid: true });
   });
 
   test('should create TAP session successfully', async () => {
@@ -637,6 +679,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
     const mockContext = createMockContext({
       agentsKV,
       sessionsKV,
+      rawHeaders: FAKE_SIG_HEADERS,
       json: vi.fn().mockResolvedValue({
         agent_id: TEST_AGENT_ID,
         user_context: 'user_hash_123',
@@ -704,6 +747,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
 
     const mockContext = createMockContext({
       agentsKV,
+      rawHeaders: FAKE_SIG_HEADERS,
       json: vi.fn().mockResolvedValue({
         agent_id: TEST_AGENT_ID,
         user_context: 'user_hash_123',
@@ -733,6 +777,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
 
     const mockContext = createMockContext({
       agentsKV,
+      rawHeaders: FAKE_SIG_HEADERS,
       json: vi.fn().mockResolvedValue({
         agent_id: TEST_AGENT_ID,
         user_context: 'user_hash_123',
@@ -764,6 +809,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
 
     const mockContext = createMockContext({
       agentsKV,
+      rawHeaders: FAKE_SIG_HEADERS,
       json: vi.fn().mockResolvedValue({
         agent_id: TEST_AGENT_ID,
         user_context: 'user_hash_123',
@@ -795,6 +841,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
 
     const mockContext = createMockContext({
       agentsKV,
+      rawHeaders: FAKE_SIG_HEADERS,
       json: vi.fn().mockResolvedValue({
         agent_id: TEST_AGENT_ID,
         user_context: 'user_hash_123',
@@ -910,6 +957,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
     const mockContext = createMockContext({
       agentsKV,
       sessionsKV,
+      rawHeaders: FAKE_SIG_HEADERS,
       json: vi.fn().mockResolvedValue({
         agent_id: TEST_AGENT_ID,
         user_context: 'user_hash_123',
@@ -1151,5 +1199,262 @@ describe('TAP Routes - rotateKeyRoute (JWK support)', () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe('INVALID_KEY_FORMAT');
+  });
+});
+
+// ============================================================================
+// RFC 9421 HTTP Message Signature Enforcement on createTAPSessionRoute
+// These tests verify that the signature gate in createTAPSessionRoute works
+// correctly.  Crypto correctness is covered in tap-verify.test.ts; here we
+// test the route's response to various signature states.
+// ============================================================================
+
+describe('TAP Routes - createTAPSessionRoute RFC 9421 enforcement', () => {
+  const MOCK_PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEtestkeytestkeytestkeytestkeytestkeytestkeytestkey==\n-----END PUBLIC KEY-----';
+  const MOCK_ALGORITHM = 'ecdsa-p256-sha256';
+  const MOCK_SIG = 'sig1=:YWJjZGVm:'; // fake base64 payload — crypto checked in tap-verify.test.ts
+  const MOCK_SIG_INPUT = `sig1=("@method" "@path");created=${Math.floor(Date.now() / 1000)};keyid="k1";alg="${MOCK_ALGORITHM}"`;
+
+  // Helper: agent with tap_enabled + public key (requires signature verification)
+  function buildTAPAgent(extra: Partial<TAPAgent> = {}): TAPAgent {
+    return {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID,
+      name: 'SignedAgent',
+      created_at: Date.now(),
+      tap_enabled: true,
+      public_key: MOCK_PUBLIC_KEY,
+      signature_algorithm: MOCK_ALGORITHM,
+      capabilities: [{ action: 'browse', scope: ['*'] }],
+      ...extra,
+    };
+  }
+
+  // Helper: base mock context for session requests
+  function buildSessionContext(agentsKV: MockKV, rawHeaders: Record<string, string> = {}) {
+    const sessionsKV = new MockKV();
+    const noncesKV = new MockKV();
+    return createMockContext({
+      agentsKV,
+      sessionsKV,
+      noncesKV,
+      rawHeaders,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_ctx_test',
+        intent: { action: 'browse', resource: 'products' },
+      }),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: signature verification passes — specific tests override this
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({ valid: true });
+  });
+
+  // ── Test 1: both sig headers missing → SIGNATURE_REQUIRED ─────────────────
+  test('returns 401 SIGNATURE_REQUIRED when both Signature and Signature-Input headers are absent', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    // No rawHeaders provided — no signature headers
+    const ctx = buildSessionContext(agentsKV, {});
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('SIGNATURE_REQUIRED');
+    // verifyHTTPMessageSignature should NOT be called (we reject before reaching it)
+    expect(verifyHTTPMessageSignature).not.toHaveBeenCalled();
+  });
+
+  // ── Test 2: Signature-Input present but Signature missing ─────────────────
+  test('returns 401 SIGNATURE_REQUIRED when Signature-Input present but Signature header missing', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    const ctx = buildSessionContext(agentsKV, {
+      'signature-input': MOCK_SIG_INPUT,
+      // 'signature' intentionally omitted
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('SIGNATURE_REQUIRED');
+  });
+
+  // ── Test 3: Signature present but Signature-Input missing ─────────────────
+  test('returns 401 SIGNATURE_REQUIRED when Signature present but Signature-Input header missing', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    const ctx = buildSessionContext(agentsKV, {
+      'signature': MOCK_SIG,
+      // 'signature-input' intentionally omitted
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('SIGNATURE_REQUIRED');
+  });
+
+  // ── Test 4: Valid signature → session created successfully ────────────────
+  test('creates session (201) when valid RFC 9421 signature is provided', async () => {
+    const agentsKV = new MockKV();
+    const sessionsKV = new MockKV();
+    const noncesKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({ valid: true });
+
+    const ctx = createMockContext({
+      agentsKV,
+      sessionsKV,
+      noncesKV,
+      rawHeaders: { 'signature': MOCK_SIG, 'signature-input': MOCK_SIG_INPUT },
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_ctx_test',
+        intent: { action: 'browse', resource: 'products' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    expect(data.session_id).toBeDefined();
+    // Verify that verifyHTTPMessageSignature was called with agent's key + algorithm
+    expect(verifyHTTPMessageSignature).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'POST', path: '/v1/sessions/tap' }),
+      MOCK_PUBLIC_KEY,
+      MOCK_ALGORITHM,
+      expect.anything() // NONCES KV
+    );
+  });
+
+  // ── Test 5: Signature crypto invalid → SIGNATURE_INVALID ─────────────────
+  test('returns 401 SIGNATURE_INVALID when signature fails cryptographic verification', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({
+      valid: false,
+      error: 'Signature verification failed',
+    });
+
+    const ctx = buildSessionContext(agentsKV, {
+      'signature': MOCK_SIG,
+      'signature-input': MOCK_SIG_INPUT,
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('SIGNATURE_INVALID');
+    expect(data.message).toContain('RFC 9421 signature verification failed');
+  });
+
+  // ── Test 6: Signature expired → SIGNATURE_EXPIRED ────────────────────────
+  test('returns 401 SIGNATURE_EXPIRED when expires param is in the past', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({
+      valid: false,
+      error: 'Signature has expired',
+    });
+
+    const ctx = buildSessionContext(agentsKV, {
+      'signature': MOCK_SIG,
+      'signature-input': MOCK_SIG_INPUT,
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('SIGNATURE_EXPIRED');
+    expect(data.message).toContain('expired');
+  });
+
+  // ── Test 7: Nonce replayed → NONCE_REPLAYED ───────────────────────────────
+  test('returns 401 NONCE_REPLAYED when nonce was already consumed', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({
+      valid: false,
+      error: 'Nonce replay detected',
+    });
+
+    const ctx = buildSessionContext(agentsKV, {
+      'signature': MOCK_SIG,
+      'signature-input': MOCK_SIG_INPUT,
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe('NONCE_REPLAYED');
+    expect(data.message).toContain('nonce');
+  });
+
+  // ── Test 8: Non-TAP agent short-circuits before sig check ────────────────
+  test('returns 403 TAP_NOT_ENABLED (no sig check) for agent without a public key', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent({ tap_enabled: false, public_key: undefined }));
+
+    // Provide sig headers — they should NOT be consulted for non-TAP agents
+    const ctx = buildSessionContext(agentsKV, {
+      'signature': MOCK_SIG,
+      'signature-input': MOCK_SIG_INPUT,
+    });
+
+    const response = await createTAPSessionRoute(ctx);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toBe('TAP_NOT_ENABLED');
+    // Crypto check should never be reached for non-TAP agents
+    expect(verifyHTTPMessageSignature).not.toHaveBeenCalled();
+  });
+
+  // ── Test 9: NONCES KV passed for replay protection ────────────────────────
+  test('passes NONCES KV namespace into verifyHTTPMessageSignature for replay protection', async () => {
+    const agentsKV = new MockKV();
+    const sessionsKV = new MockKV();
+    const noncesKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, buildTAPAgent());
+
+    vi.mocked(verifyHTTPMessageSignature).mockResolvedValue({ valid: true });
+
+    const ctx = createMockContext({
+      agentsKV,
+      sessionsKV,
+      noncesKV,
+      rawHeaders: { 'signature': MOCK_SIG, 'signature-input': MOCK_SIG_INPUT },
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_ctx_nonces',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    await createTAPSessionRoute(ctx);
+
+    // The 4th argument to verifyHTTPMessageSignature must be the NONCES KV
+    const callArgs = vi.mocked(verifyHTTPMessageSignature).mock.calls[0];
+    expect(callArgs[3]).toBe(noncesKV); // nonces KV namespace
   });
 });
