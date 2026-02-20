@@ -91,6 +91,11 @@ async function verifyBotchaToken(
   return { ok: true, payload: result.payload }
 }
 
+function grantOwnedByApp(grantAppId: string | undefined, tokenAppId: string | undefined): boolean {
+  if (!grantAppId || !tokenAppId) return false
+  return grantAppId === tokenAppId
+}
+
 // ============ ROUTE HANDLERS ============
 
 /**
@@ -137,7 +142,24 @@ export async function issueEATRoute(c: Context) {
     }
 
     const body = await c.req.json().catch(() => ({}))
-    const ttlSeconds = Math.min(body.ttl_seconds ?? 3600, 3600)
+    let ttlSeconds = 3600
+    if (body.ttl_seconds !== undefined) {
+      if (
+        typeof body.ttl_seconds !== 'number'
+        || !Number.isFinite(body.ttl_seconds)
+        || body.ttl_seconds <= 0
+      ) {
+        return c.json(
+          {
+            success: false,
+            error: 'INVALID_TTL',
+            message: 'ttl_seconds must be a positive number',
+          },
+          400
+        )
+      }
+      ttlSeconds = Math.min(Math.floor(body.ttl_seconds), 3600)
+    }
 
     const eatToken = await issueEAT(auth.payload, signingKey, {
       nonce: body.nonce,
@@ -176,7 +198,7 @@ export async function issueEATRoute(c: Context) {
       usage: {
         description: 'Embed this token as agent_attestation in OIDC-A ID tokens',
         embed_as: 'agent_attestation',
-        verify_with: 'GET /v1/jwks (ES256 public key)',
+        verify_with: 'GET /.well-known/jwks (ES256 public key)',
         oidca_claims: 'POST /v1/attestation/oidc-agent-claims',
       },
     })
@@ -289,7 +311,7 @@ export async function issueOIDCAgentClaimsRoute(c: Context) {
         embed_method_1: 'Copy `claims` object fields directly into your ID token payload',
         embed_method_2: 'Set `agent_attestation: claims_jwt` in your ID token',
         embed_method_3: 'Set `agent_attestation: eat_token` for EAT-only embedding',
-        verify_with: 'GET /v1/jwks (ES256 public key)',
+        verify_with: 'GET /.well-known/jwks (ES256 public key)',
         standard: 'draft-aap-oauth-profile §5, OIDC-A 1.0',
       },
 
@@ -447,6 +469,18 @@ export async function agentGrantRoute(c: Context) {
  */
 export async function agentGrantStatusRoute(c: Context) {
   try {
+    const auth = await verifyBotchaToken(c, true)
+    if (!auth.ok || !auth.payload) {
+      return c.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Valid BOTCHA Bearer token required to read grant status',
+        },
+        (auth.status || 401) as 401 | 403
+      )
+    }
+
     const grantId = c.req.param('id')
     if (!grantId) {
       return c.json({ success: false, error: 'MISSING_GRANT_ID' }, 400)
@@ -459,6 +493,17 @@ export async function agentGrantStatusRoute(c: Context) {
       return c.json(
         { success: false, error: 'GRANT_NOT_FOUND', message: 'Grant not found or expired' },
         404
+      )
+    }
+
+    if (!grantOwnedByApp(grant.app_id, auth.payload.app_id)) {
+      return c.json(
+        {
+          success: false,
+          error: 'FORBIDDEN',
+          message: 'Grant does not belong to your app',
+        },
+        403
       )
     }
 
@@ -492,6 +537,18 @@ export async function agentGrantStatusRoute(c: Context) {
  */
 export async function agentGrantResolveRoute(c: Context) {
   try {
+    const auth = await verifyBotchaToken(c, true)
+    if (!auth.ok || !auth.payload) {
+      return c.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Valid BOTCHA Bearer token required to resolve grants',
+        },
+        (auth.status || 401) as 401 | 403
+      )
+    }
+
     const grantId = c.req.param('id')
     if (!grantId) {
       return c.json({ success: false, error: 'MISSING_GRANT_ID' }, 400)
@@ -519,6 +576,24 @@ export async function agentGrantResolveRoute(c: Context) {
     }
 
     const kv = c.env.SESSIONS ?? c.env.CHALLENGES
+    const grant = await getGrantStatus(grantId, kv)
+    if (!grant) {
+      return c.json(
+        { success: false, error: 'GRANT_NOT_FOUND', message: 'Grant not found or expired' },
+        404
+      )
+    }
+    if (!grantOwnedByApp(grant.app_id, auth.payload.app_id)) {
+      return c.json(
+        {
+          success: false,
+          error: 'FORBIDDEN',
+          message: 'Grant does not belong to your app',
+        },
+        403
+      )
+    }
+
     const result = await resolveGrant(grantId, decision, body.reason, kv)
 
     if (!result.success) {

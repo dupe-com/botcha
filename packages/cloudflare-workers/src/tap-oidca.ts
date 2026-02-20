@@ -578,7 +578,7 @@ export function buildOAuthASMetadata(baseUrl: string, publicKeyJwk?: object): ob
     token_endpoint: `${baseUrl}/v1/auth/agent-grant`,
 
     // JWKS for signature verification
-    jwks_uri: `${baseUrl}/v1/jwks`,
+    jwks_uri: `${baseUrl}/.well-known/jwks`,
 
     // RFC 8414 §2 — Optional but widely expected
     scopes_supported: [
