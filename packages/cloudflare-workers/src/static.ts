@@ -1607,7 +1607,7 @@ export function getOpenApiSpec(version: string) {
       "/v1/sessions/tap": {
         post: {
           summary: "Create a TAP session",
-          description: "Create a capability-scoped session after validating the agent's intent against its registered capabilities.",
+          description: "Create a capability-scoped session after validating the agent's RFC 9421 HTTP Message Signature and declared intent. **Requires valid RFC 9421 signature** (`Signature` + `Signature-Input` headers) for all TAP-enabled agents (those registered with a public key). The server verifies the signature against the agent's registered public key, checks timestamp/expiry, and enforces nonce replay protection (8-minute KV-backed TTL).",
           operationId: "createTAPSession",
           requestBody: {
             required: true,
@@ -1622,7 +1622,7 @@ export function getOpenApiSpec(version: string) {
                     "intent": {
                       type: "object",
                       properties: {
-                        "action": { type: "string", description: "Intended action (e.g., read, write)" },
+                        "action": { type: "string", description: "Intended action (e.g., browse, purchase, compare)" },
                         "resource": { type: "string", description: "Target resource path" },
                         "purpose": { type: "string", description: "Human-readable purpose" }
                       },
@@ -1633,10 +1633,29 @@ export function getOpenApiSpec(version: string) {
               }
             }
           },
+          parameters: [
+            {
+              name: "Signature",
+              in: "header",
+              required: true,
+              schema: { type: "string" },
+              description: "RFC 9421 HTTP Message Signature. Format: `sig1=:base64sig:` or `sig2=:base64sig:`. Required for TAP-enabled agents."
+            },
+            {
+              name: "Signature-Input",
+              in: "header",
+              required: true,
+              schema: { type: "string" },
+              description: "RFC 9421 Signature-Input header. Example: `sig1=(\"@method\" \"@path\");created=1735689600;keyid=\"mykey\";alg=\"ecdsa-p256-sha256\";expires=1735693200;nonce=\"abc123\"`. Required for TAP-enabled agents."
+            }
+          ],
           responses: {
             "201": { description: "TAP session created with capabilities and expiry" },
             "400": { description: "Missing required fields or invalid intent" },
-            "403": { description: "Agent lacks required capability for declared intent" },
+            "401": {
+              description: "Signature enforcement failed. Possible error codes:\n- `SIGNATURE_REQUIRED` — TAP-enabled agent sent no Signature/Signature-Input headers\n- `SIGNATURE_INVALID` — Signature present but cryptographic verification failed\n- `SIGNATURE_EXPIRED` — Signature `expires` parameter is in the past\n- `NONCE_REPLAYED` — Nonce was already consumed (replay attack detected)"
+            },
+            "403": { description: "Agent lacks required capability for declared intent, or TAP not enabled (no public key registered)" },
             "404": { description: "Agent not found" }
           }
         }

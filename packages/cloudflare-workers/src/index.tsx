@@ -2295,6 +2295,8 @@ app.get('/v1/agents/tap', listTAPAgentsRoute);
 app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 
 // TAP session management
+// POST /v1/sessions/tap — enforces RFC 9421 HTTP Message Signature for tap_enabled agents
+// (401 SIGNATURE_REQUIRED | SIGNATURE_INVALID | SIGNATURE_EXPIRED | NONCE_REPLAYED)
 app.post('/v1/sessions/tap', createTAPSessionRoute);
 app.get('/v1/sessions/:id/tap', getTAPSessionRoute);
 
