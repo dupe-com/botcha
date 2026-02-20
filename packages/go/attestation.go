@@ -20,7 +20,7 @@ import (
 //	// Use att.Token in X-Botcha-Attestation header
 func (c *Client) IssueAttestation(ctx context.Context, input IssueAttestationInput) (*AttestationResponse, error) {
 	var resp AttestationResponse
-	if err := c.post(ctx, "/v1/attestations", input, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/attestations", input, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: issue attestation: %w", err)
 	}
 	return &resp, nil
@@ -29,7 +29,7 @@ func (c *Client) IssueAttestation(ctx context.Context, input IssueAttestationInp
 // GetAttestation retrieves an attestation by its ID.
 func (c *Client) GetAttestation(ctx context.Context, attestationID string) (*AttestationResponse, error) {
 	var resp AttestationResponse
-	if err := c.get(ctx, "/v1/attestations/"+url.PathEscape(attestationID), &resp); err != nil {
+	if err := c.authGet(ctx, "/v1/attestations/"+url.PathEscape(attestationID), &resp); err != nil {
 		return nil, fmt.Errorf("botcha: get attestation: %w", err)
 	}
 	return &resp, nil
@@ -41,7 +41,7 @@ func (c *Client) ListAttestations(ctx context.Context, agentID string) (*Attesta
 	params.Set("agent_id", agentID)
 
 	var resp AttestationListResponse
-	if err := c.get(ctx, "/v1/attestations?"+params.Encode(), &resp); err != nil {
+	if err := c.authGet(ctx, "/v1/attestations?"+params.Encode(), &resp); err != nil {
 		return nil, fmt.Errorf("botcha: list attestations: %w", err)
 	}
 	return &resp, nil
@@ -57,7 +57,7 @@ func (c *Client) RevokeAttestation(ctx context.Context, attestationID, reason st
 	}
 
 	var resp RevokeAttestationResponse
-	if err := c.post(ctx, "/v1/attestations/"+url.PathEscape(attestationID)+"/revoke", body, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/attestations/"+url.PathEscape(attestationID)+"/revoke", body, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: revoke attestation: %w", err)
 	}
 	return &resp, nil
@@ -75,7 +75,7 @@ func (c *Client) VerifyAttestation(ctx context.Context, token, action, resource 
 	}
 
 	var resp AttestationVerifyResponse
-	if err := c.post(ctx, "/v1/verify/attestation", body, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/verify/attestation", body, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: verify attestation: %w", err)
 	}
 	return &resp, nil

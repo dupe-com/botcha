@@ -32,12 +32,14 @@ func SolveRaw(numbers []int) []string {
 // GetChallenge fetches a BOTCHA challenge from GET /v1/token.
 // The returned Challenge must be solved and submitted via SolveChallenge or manually.
 func (c *Client) GetChallenge(ctx context.Context) (*ChallengeResponse, error) {
-	path := "/v1/token"
-	if c.appID != "" {
-		params := url.Values{}
-		params.Set("app_id", c.appID)
-		path = "/v1/token?" + params.Encode()
+	appID, err := c.requireAppID()
+	if err != nil {
+		return nil, fmt.Errorf("botcha: get challenge: %w", err)
 	}
+
+	params := url.Values{}
+	params.Set("app_id", appID)
+	path := "/v1/token?" + params.Encode()
 
 	// GetChallenge does NOT send the Authorization header (it's a public endpoint).
 	// We use a temporary client without the app secret for this request.
@@ -82,9 +84,7 @@ func (c *Client) SolveChallenge(ctx context.Context) (string, error) {
 	verifyReq := VerifyRequest{
 		ID:      challengeResp.Challenge.ID,
 		Answers: answers,
-	}
-	if c.appID != "" {
-		verifyReq.AppID = c.appID
+		AppID:   c.appID,
 	}
 
 	// Verify also goes without Authorization
@@ -108,5 +108,6 @@ func (c *Client) SolveChallenge(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("botcha: no access token in verify response")
 	}
 
+	c.accessToken = token
 	return token, nil
 }

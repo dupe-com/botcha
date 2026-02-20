@@ -34,6 +34,7 @@ const (
 type Client struct {
 	appID         string
 	appSecret     string
+	accessToken   string
 	baseURL       string
 	agentIdentity string
 	http          *http.Client
@@ -64,6 +65,17 @@ func NewClient(appID, appSecret string, opts ...Option) *Client {
 // body (if non-nil) is JSON-encoded and sent as the request body.
 // result (if non-nil) receives the JSON-decoded response body.
 func (c *Client) do(ctx context.Context, method, path string, body, result any) error {
+	return c.doWithHeaders(ctx, method, path, body, result, nil)
+}
+
+func (c *Client) doWithHeaders(
+	ctx context.Context,
+	method,
+	path string,
+	body,
+	result any,
+	headers map[string]string,
+) error {
 	var reqBody io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -82,8 +94,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, result any) 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.appSecret != "" {
-		req.Header.Set("Authorization", "Bearer "+c.appSecret)
+	for k, v := range headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
 	}
 
 	resp, err := c.http.Do(req)
@@ -115,6 +129,20 @@ func (c *Client) do(ctx context.Context, method, path string, body, result any) 
 	return nil
 }
 
+func (c *Client) requireAccessToken() (string, error) {
+	if c.accessToken == "" {
+		return "", fmt.Errorf("botcha: access token required; call SolveChallenge first or set WithAccessToken/SetAccessToken")
+	}
+	return c.accessToken, nil
+}
+
+func (c *Client) requireAppID() (string, error) {
+	if c.appID == "" {
+		return "", fmt.Errorf("botcha: app_id is required for this endpoint")
+	}
+	return c.appID, nil
+}
+
 // get is a helper for GET requests without a body.
 func (c *Client) get(ctx context.Context, path string, result any) error {
 	return c.do(ctx, http.MethodGet, path, nil, result)
@@ -123,4 +151,29 @@ func (c *Client) get(ctx context.Context, path string, result any) error {
 // post is a helper for POST requests.
 func (c *Client) post(ctx context.Context, path string, body, result any) error {
 	return c.do(ctx, http.MethodPost, path, body, result)
+}
+
+func (c *Client) authGet(ctx context.Context, path string, result any) error {
+	token, err := c.requireAccessToken()
+	if err != nil {
+		return err
+	}
+	return c.doWithHeaders(ctx, http.MethodGet, path, nil, result, map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+}
+
+func (c *Client) authPost(ctx context.Context, path string, body, result any) error {
+	token, err := c.requireAccessToken()
+	if err != nil {
+		return err
+	}
+	return c.doWithHeaders(ctx, http.MethodPost, path, body, result, map[string]string{
+		"Authorization": "Bearer " + token,
+	})
+}
+
+// SetAccessToken configures the bearer token used by authenticated endpoints.
+func (c *Client) SetAccessToken(token string) {
+	c.accessToken = token
 }

@@ -35,3 +35,10 @@ func WithAgentIdentity(identity string) Option {
 		c.agentIdentity = identity
 	}
 }
+
+// WithAccessToken sets the bearer token used by authenticated endpoints.
+func WithAccessToken(token string) Option {
+	return func(c *Client) {
+		c.accessToken = token
+	}
+}

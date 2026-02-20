@@ -95,6 +95,9 @@ func TestSolveChallenge(t *testing.T) {
 	if token != "access-token-abc123" {
 		t.Errorf("expected token 'access-token-abc123', got %q", token)
 	}
+	if client.accessToken != "access-token-abc123" {
+		t.Errorf("expected client access token to be set, got %q", client.accessToken)
+	}
 }
 
 func TestGetChallenge(t *testing.T) {
@@ -149,7 +152,7 @@ func TestSolveChallengeWithFallbackToken(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", "", WithBaseURL(server.URL))
+	client := NewClient("app_test", "", WithBaseURL(server.URL))
 	token, err := client.SolveChallenge(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -10,8 +10,12 @@ import (
 
 func TestValidateToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/verify" || r.Method != http.MethodPost {
+		if r.URL.Path != "/v1/token/validate" || r.Method != http.MethodPost {
 			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "" {
+			http.Error(w, "unexpected auth header", 400)
 			return
 		}
 		var req ValidateTokenRequest
@@ -43,6 +47,12 @@ func TestRevokeToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/token/revoke" {
 			http.NotFound(w, r)
+			return
+		}
+		var req RevokeTokenRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.AppID != "app_test" {
+			http.Error(w, "missing app_id", 400)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

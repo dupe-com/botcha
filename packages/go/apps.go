@@ -3,6 +3,7 @@ package botcha
 import (
 	"context"
 	"fmt"
+	"net/url"
 )
 
 // CreateApp creates a new multi-tenant BOTCHA application.
@@ -18,12 +19,17 @@ func (c *Client) CreateApp(ctx context.Context, email string) (*CreateAppRespons
 
 // VerifyEmail verifies the email for an app using the code sent to the email address.
 func (c *Client) VerifyEmail(ctx context.Context, code string) (*VerifyEmailResponse, error) {
-	req := map[string]string{
-		"code":   code,
-		"app_id": c.appID,
+	appID, err := c.requireAppID()
+	if err != nil {
+		return nil, fmt.Errorf("botcha: verify email: %w", err)
+	}
+
+	req := map[string]string{"code": code}
+	if c.appSecret != "" {
+		req["app_secret"] = c.appSecret
 	}
 	var resp VerifyEmailResponse
-	if err := c.post(ctx, "/v1/apps/verify-email", req, &resp); err != nil {
+	if err := c.post(ctx, "/v1/apps/"+url.PathEscape(appID)+"/verify-email", req, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: verify email: %w", err)
 	}
 	return &resp, nil
@@ -31,20 +37,33 @@ func (c *Client) VerifyEmail(ctx context.Context, code string) (*VerifyEmailResp
 
 // ResendVerification resends the email verification code.
 func (c *Client) ResendVerification(ctx context.Context) (*ResendVerificationResponse, error) {
-	req := map[string]string{"app_id": c.appID}
+	appID, err := c.requireAppID()
+	if err != nil {
+		return nil, fmt.Errorf("botcha: resend verification: %w", err)
+	}
+
+	req := map[string]string{}
+	if c.appSecret != "" {
+		req["app_secret"] = c.appSecret
+	}
 	var resp ResendVerificationResponse
-	if err := c.post(ctx, "/v1/apps/resend-verification", req, &resp); err != nil {
+	if err := c.post(ctx, "/v1/apps/"+url.PathEscape(appID)+"/resend-verification", req, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: resend verification: %w", err)
 	}
 	return &resp, nil
 }
 
 // RotateSecret rotates the app secret. The old secret is immediately invalidated.
+// This endpoint requires a dashboard session token in accessToken.
 // Store the new secret securely!
 func (c *Client) RotateSecret(ctx context.Context) (*RotateSecretResponse, error) {
-	req := map[string]string{"app_id": c.appID}
+	appID, err := c.requireAppID()
+	if err != nil {
+		return nil, fmt.Errorf("botcha: rotate secret: %w", err)
+	}
+
 	var resp RotateSecretResponse
-	if err := c.post(ctx, "/v1/apps/rotate-secret", req, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/apps/"+url.PathEscape(appID)+"/rotate-secret", map[string]string{}, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: rotate secret: %w", err)
 	}
 	return &resp, nil

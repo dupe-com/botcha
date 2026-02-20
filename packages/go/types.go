@@ -32,36 +32,37 @@ type VerifyRequest struct {
 
 // TokenResponse is returned by POST /v1/token/verify.
 type TokenResponse struct {
-	Success         bool   `json:"success"`
-	Verified        bool   `json:"verified"`
-	Token           string `json:"token"`
-	AccessToken     string `json:"access_token"`
-	RefreshToken    string `json:"refresh_token"`
-	ExpiresIn       int    `json:"expires_in"`
+	Success      bool   `json:"success"`
+	Verified     bool   `json:"verified"`
+	Token        string `json:"token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 // ==================== Token Management Types ====================
 
-// ValidateTokenRequest is sent to POST /v1/verify.
+// ValidateTokenRequest is sent to POST /v1/token/validate.
 type ValidateTokenRequest struct {
 	Token string `json:"token"`
 }
 
-// ValidateTokenResponse is returned by POST /v1/verify.
+// ValidateTokenResponse is returned by POST /v1/token/validate.
 type ValidateTokenResponse struct {
-	Success  bool   `json:"success"`
-	Valid    bool   `json:"valid"`
-	AppID    string `json:"app_id"`
-	AgentID  string `json:"agent_id"`
-	Sub      string `json:"sub"`
-	Exp      int64  `json:"exp"`
-	Iat      int64  `json:"iat"`
-	Error    string `json:"error,omitempty"`
+	Success bool   `json:"success"`
+	Valid   bool   `json:"valid"`
+	AppID   string `json:"app_id"`
+	AgentID string `json:"agent_id"`
+	Sub     string `json:"sub"`
+	Exp     int64  `json:"exp"`
+	Iat     int64  `json:"iat"`
+	Error   string `json:"error,omitempty"`
 }
 
 // RevokeTokenRequest is sent to POST /v1/token/revoke.
 type RevokeTokenRequest struct {
 	Token string `json:"token"`
+	AppID string `json:"app_id,omitempty"`
 }
 
 // RevokeTokenResponse is returned by POST /v1/token/revoke.
@@ -94,7 +95,7 @@ type CreateAppResponse struct {
 	NextStep             string `json:"next_step"`
 }
 
-// VerifyEmailResponse is returned by POST /v1/apps/verify-email.
+// VerifyEmailResponse is returned by POST /v1/apps/:id/verify-email.
 type VerifyEmailResponse struct {
 	Success       bool   `json:"success"`
 	EmailVerified bool   `json:"email_verified"`
@@ -102,14 +103,14 @@ type VerifyEmailResponse struct {
 	Message       string `json:"message,omitempty"`
 }
 
-// ResendVerificationResponse is returned by POST /v1/apps/resend-verification.
+// ResendVerificationResponse is returned by POST /v1/apps/:id/resend-verification.
 type ResendVerificationResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
-// RotateSecretResponse is returned by POST /v1/apps/rotate-secret.
+// RotateSecretResponse is returned by POST /v1/apps/:id/rotate-secret.
 type RotateSecretResponse struct {
 	Success   bool   `json:"success"`
 	AppID     string `json:"app_id,omitempty"`
@@ -161,9 +162,9 @@ type TAPSignatureAlgorithm = string
 
 // TAPCapability represents a TAP capability with scope and restrictions.
 type TAPCapability struct {
-	Action       TAPAction         `json:"action"`
-	Scope        []string          `json:"scope,omitempty"`
-	Restrictions map[string]any    `json:"restrictions,omitempty"`
+	Action       TAPAction      `json:"action"`
+	Scope        []string       `json:"scope,omitempty"`
+	Restrictions map[string]any `json:"restrictions,omitempty"`
 }
 
 // TAPIntent represents the intent of a TAP session.
@@ -208,15 +209,15 @@ type TAPAgentResponse struct {
 	PublicKey          string          `json:"public_key,omitempty"`
 }
 
-// TAPAgentListResponse is returned by GET /v1/tap/agents.
+// TAPAgentListResponse is returned by GET /v1/agents/tap.
 type TAPAgentListResponse struct {
-	Success          bool               `json:"success"`
-	Agents           []TAPAgentResponse `json:"agents"`
-	Count            int                `json:"count"`
-	TapEnabledCount  int                `json:"tap_enabled_count"`
+	Success         bool               `json:"success"`
+	Agents          []TAPAgentResponse `json:"agents"`
+	Count           int                `json:"count"`
+	TapEnabledCount int                `json:"tap_enabled_count"`
 }
 
-// CreateTAPSessionInput is the request body for POST /v1/tap/sessions.
+// CreateTAPSessionInput is the request body for POST /v1/sessions/tap.
 type CreateTAPSessionInput struct {
 	AgentID     string    `json:"agent_id"`
 	UserContext string    `json:"user_context"`
@@ -225,15 +226,15 @@ type CreateTAPSessionInput struct {
 
 // TAPSessionResponse is returned by TAP session endpoints.
 type TAPSessionResponse struct {
-	Success      bool            `json:"success"`
-	SessionID    string          `json:"session_id"`
-	AgentID      string          `json:"agent_id"`
-	AppID        string          `json:"app_id,omitempty"`
-	Capabilities []TAPCapability `json:"capabilities,omitempty"`
-	Intent       TAPIntent       `json:"intent"`
-	CreatedAt    string          `json:"created_at,omitempty"`
-	ExpiresAt    string          `json:"expires_at"`
-	TimeRemaining int            `json:"time_remaining,omitempty"`
+	Success       bool            `json:"success"`
+	SessionID     string          `json:"session_id"`
+	AgentID       string          `json:"agent_id"`
+	AppID         string          `json:"app_id,omitempty"`
+	Capabilities  []TAPCapability `json:"capabilities,omitempty"`
+	Intent        TAPIntent       `json:"intent"`
+	CreatedAt     string          `json:"created_at,omitempty"`
+	ExpiresAt     string          `json:"expires_at"`
+	TimeRemaining int             `json:"time_remaining,omitempty"`
 }
 
 // ==================== JWK Types ====================
@@ -328,12 +329,12 @@ type RevokeDelegationResponse struct {
 
 // DelegationVerifyResponse is returned by POST /v1/verify/delegation.
 type DelegationVerifyResponse struct {
-	Success              bool                  `json:"success"`
-	Valid                bool                  `json:"valid"`
-	ChainLength          int                   `json:"chain_length,omitempty"`
-	Chain                []DelegationChainItem `json:"chain,omitempty"`
-	EffectiveCapabilities []TAPCapability      `json:"effective_capabilities,omitempty"`
-	Error                string                `json:"error,omitempty"`
+	Success               bool                  `json:"success"`
+	Valid                 bool                  `json:"valid"`
+	ChainLength           int                   `json:"chain_length,omitempty"`
+	Chain                 []DelegationChainItem `json:"chain,omitempty"`
+	EffectiveCapabilities []TAPCapability       `json:"effective_capabilities,omitempty"`
+	Error                 string                `json:"error,omitempty"`
 }
 
 // DelegationChainItem is a single item in a delegation chain.
@@ -382,14 +383,14 @@ type AttestationResponse struct {
 
 // AttestationListEntry is a single entry in an attestation list.
 type AttestationListEntry struct {
-	AttestationID string  `json:"attestation_id"`
-	AgentID       string  `json:"agent_id"`
+	AttestationID string   `json:"attestation_id"`
+	AgentID       string   `json:"agent_id"`
 	Can           []string `json:"can"`
 	Cannot        []string `json:"cannot"`
-	CreatedAt     string  `json:"created_at"`
-	ExpiresAt     string  `json:"expires_at"`
-	Revoked       bool    `json:"revoked"`
-	DelegationID  *string `json:"delegation_id"`
+	CreatedAt     string   `json:"created_at"`
+	ExpiresAt     string   `json:"expires_at"`
+	Revoked       bool     `json:"revoked"`
+	DelegationID  *string  `json:"delegation_id"`
 }
 
 // AttestationListResponse is returned by GET /v1/attestations.
@@ -412,21 +413,21 @@ type RevokeAttestationResponse struct {
 
 // AttestationVerifyResponse is returned by POST /v1/verify/attestation.
 type AttestationVerifyResponse struct {
-	Success             bool           `json:"success"`
-	Valid               bool           `json:"valid"`
-	Allowed             bool           `json:"allowed,omitempty"`
-	AgentID             *string        `json:"agent_id"`
-	Issuer              string         `json:"issuer,omitempty"`
-	Can                 []string       `json:"can,omitempty"`
-	Cannot              []string       `json:"cannot,omitempty"`
-	Restrictions        map[string]any `json:"restrictions,omitempty"`
-	DelegationID        *string        `json:"delegation_id"`
-	IssuedAt            string         `json:"issued_at,omitempty"`
-	ExpiresAt           string         `json:"expires_at,omitempty"`
-	Reason              string         `json:"reason,omitempty"`
-	MatchedRule         *string        `json:"matched_rule"`
-	CheckedCapability   string         `json:"checked_capability,omitempty"`
-	Error               string         `json:"error,omitempty"`
+	Success           bool           `json:"success"`
+	Valid             bool           `json:"valid"`
+	Allowed           bool           `json:"allowed,omitempty"`
+	AgentID           *string        `json:"agent_id"`
+	Issuer            string         `json:"issuer,omitempty"`
+	Can               []string       `json:"can,omitempty"`
+	Cannot            []string       `json:"cannot,omitempty"`
+	Restrictions      map[string]any `json:"restrictions,omitempty"`
+	DelegationID      *string        `json:"delegation_id"`
+	IssuedAt          string         `json:"issued_at,omitempty"`
+	ExpiresAt         string         `json:"expires_at,omitempty"`
+	Reason            string         `json:"reason,omitempty"`
+	MatchedRule       *string        `json:"matched_rule"`
+	CheckedCapability string         `json:"checked_capability,omitempty"`
+	Error             string         `json:"error,omitempty"`
 }
 
 // ==================== Reputation Types ====================
@@ -442,17 +443,17 @@ type ReputationEventAction = string
 
 // ReputationScoreResponse is returned by GET /v1/reputation/:agentId.
 type ReputationScoreResponse struct {
-	Success        bool              `json:"success"`
-	AgentID        string            `json:"agent_id"`
-	AppID          string            `json:"app_id"`
-	Score          float64           `json:"score"`
-	Tier           ReputationTier    `json:"tier"`
-	EventCount     int               `json:"event_count"`
-	PositiveEvents int               `json:"positive_events"`
-	NegativeEvents int               `json:"negative_events"`
-	LastEventAt    *string           `json:"last_event_at"`
-	CreatedAt      string            `json:"created_at"`
-	UpdatedAt      string            `json:"updated_at"`
+	Success        bool               `json:"success"`
+	AgentID        string             `json:"agent_id"`
+	AppID          string             `json:"app_id"`
+	Score          float64            `json:"score"`
+	Tier           ReputationTier     `json:"tier"`
+	EventCount     int                `json:"event_count"`
+	PositiveEvents int                `json:"positive_events"`
+	NegativeEvents int                `json:"negative_events"`
+	LastEventAt    *string            `json:"last_event_at"`
+	CreatedAt      string             `json:"created_at"`
+	UpdatedAt      string             `json:"updated_at"`
 	CategoryScores map[string]float64 `json:"category_scores"`
 }
 
@@ -481,7 +482,7 @@ type ReputationEvent struct {
 
 // ReputationEventResponse is returned by POST /v1/reputation/events.
 type ReputationEventResponse struct {
-	Success bool `json:"success"`
+	Success bool            `json:"success"`
 	Event   ReputationEvent `json:"event"`
 	Score   struct {
 		Score      float64        `json:"score"`

@@ -15,7 +15,7 @@ import (
 //	fmt.Printf("Score: %.0f, Tier: %s\n", rep.Score, rep.Tier)
 func (c *Client) GetReputation(ctx context.Context, agentID string) (*ReputationScoreResponse, error) {
 	var resp ReputationScoreResponse
-	if err := c.get(ctx, "/v1/reputation/"+url.PathEscape(agentID), &resp); err != nil {
+	if err := c.authGet(ctx, "/v1/reputation/"+url.PathEscape(agentID), &resp); err != nil {
 		return nil, fmt.Errorf("botcha: get reputation: %w", err)
 	}
 	return &resp, nil
@@ -33,7 +33,7 @@ func (c *Client) GetReputation(ctx context.Context, agentID string) (*Reputation
 //	})
 func (c *Client) RecordReputationEvent(ctx context.Context, input RecordReputationEventInput) (*ReputationEventResponse, error) {
 	var resp ReputationEventResponse
-	if err := c.post(ctx, "/v1/reputation/events", input, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/reputation/events", input, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: record reputation event: %w", err)
 	}
 	return &resp, nil
@@ -63,7 +63,7 @@ func (c *Client) ListReputationEvents(ctx context.Context, agentID string, opts 
 	}
 
 	var resp ReputationEventListResponse
-	if err := c.get(ctx, path, &resp); err != nil {
+	if err := c.authGet(ctx, path, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: list reputation events: %w", err)
 	}
 	return &resp, nil
@@ -73,7 +73,7 @@ func (c *Client) ListReputationEvents(ctx context.Context, agentID string, opts 
 // This is an admin action that clears all event history.
 func (c *Client) ResetReputation(ctx context.Context, agentID string) (*ReputationResetResponse, error) {
 	var resp ReputationResetResponse
-	if err := c.post(ctx, "/v1/reputation/"+url.PathEscape(agentID)+"/reset", map[string]string{}, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/reputation/"+url.PathEscape(agentID)+"/reset", map[string]string{}, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: reset reputation: %w", err)
 	}
 	return &resp, nil

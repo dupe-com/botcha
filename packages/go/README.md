@@ -1,6 +1,6 @@
 # BOTCHA Go SDK
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/dupe-com/botcha-go.svg)](https://pkg.go.dev/github.com/dupe-com/botcha-go)
+[![Go Reference](https://pkg.go.dev/badge/github.com/dupe-com/botcha/packages/go.svg)](https://pkg.go.dev/github.com/dupe-com/botcha/packages/go)
 [![Go Version](https://img.shields.io/badge/go-1.21+-blue.svg)](https://go.dev)
 
 Official Go SDK for [BOTCHA](https://botcha.ai) — the reverse CAPTCHA that verifies AI agents.
@@ -10,7 +10,7 @@ BOTCHA protects your APIs from non-AI traffic by issuing speed challenges (SHA25
 ## Installation
 
 ```bash
-go get github.com/dupe-com/botcha-go
+go get github.com/dupe-com/botcha/packages/go
 ```
 
 **Requires Go 1.21+. Zero external dependencies — stdlib only.**
@@ -18,7 +18,7 @@ go get github.com/dupe-com/botcha-go
 ## Quick Start
 
 ```go
-import botcha "github.com/dupe-com/botcha-go"
+import botcha "github.com/dupe-com/botcha/packages/go"
 
 ctx := context.Background()
 
@@ -31,6 +31,7 @@ if err != nil {
     log.Fatal(err)
 }
 fmt.Println("Access token:", token)
+// SolveChallenge also stores the token on the client for authenticated API calls.
 ```
 
 ## Challenge Flow
@@ -79,6 +80,8 @@ fmt.Println("Secret:", app.AppSecret) // store this securely!
 client.VerifyEmail(ctx, "123456") // code from email
 
 // Rotate app secret
+// Requires a dashboard session token:
+client.SetAccessToken(dashboardSessionToken)
 rotated, err := client.RotateSecret(ctx)
 fmt.Println("New secret:", rotated.AppSecret)
 ```
@@ -202,6 +205,10 @@ client := botcha.NewClient("app_xxx", "sk_xxx",
     botcha.WithHTTPClient(customHTTPClient),        // bring your own
 )
 ```
+
+For authenticated endpoints (`/v1/agents/*`, TAP, delegation, attestation, reputation), set an access token by:
+- calling `SolveChallenge(ctx)` first (token auto-stored), or
+- passing `WithAccessToken(token)` / `SetAccessToken(token)`.
 
 ## Error Handling
 

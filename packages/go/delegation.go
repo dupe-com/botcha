@@ -10,7 +10,7 @@ import (
 // Delegations can be chained up to max_depth levels deep.
 func (c *Client) CreateDelegation(ctx context.Context, input CreateDelegationInput) (*DelegationResponse, error) {
 	var resp DelegationResponse
-	if err := c.post(ctx, "/v1/delegations", input, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/delegations", input, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: create delegation: %w", err)
 	}
 	return &resp, nil
@@ -19,7 +19,7 @@ func (c *Client) CreateDelegation(ctx context.Context, input CreateDelegationInp
 // GetDelegation retrieves a delegation by its ID.
 func (c *Client) GetDelegation(ctx context.Context, delegationID string) (*DelegationResponse, error) {
 	var resp DelegationResponse
-	if err := c.get(ctx, "/v1/delegations/"+url.PathEscape(delegationID), &resp); err != nil {
+	if err := c.authGet(ctx, "/v1/delegations/"+url.PathEscape(delegationID), &resp); err != nil {
 		return nil, fmt.Errorf("botcha: get delegation: %w", err)
 	}
 	return &resp, nil
@@ -28,12 +28,12 @@ func (c *Client) GetDelegation(ctx context.Context, delegationID string) (*Deleg
 // ListDelegationOptions controls filtering for ListDelegations.
 type ListDelegationOptions struct {
 	AgentID        string
-	Direction      string // "grantor" or "grantee"
+	Direction      string // "in", "out", or "both"
 	IncludeRevoked bool
 	IncludeExpired bool
 }
 
-// ListDelegations lists delegations for an agent (as grantor or grantee).
+// ListDelegations lists delegations for an agent.
 func (c *Client) ListDelegations(ctx context.Context, opts ListDelegationOptions) (*DelegationListResponse, error) {
 	params := url.Values{}
 	if opts.AgentID != "" {
@@ -55,7 +55,7 @@ func (c *Client) ListDelegations(ctx context.Context, opts ListDelegationOptions
 	}
 
 	var resp DelegationListResponse
-	if err := c.get(ctx, path, &resp); err != nil {
+	if err := c.authGet(ctx, path, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: list delegations: %w", err)
 	}
 	return &resp, nil
@@ -71,7 +71,7 @@ func (c *Client) RevokeDelegation(ctx context.Context, delegationID, reason stri
 	}
 
 	var resp RevokeDelegationResponse
-	if err := c.post(ctx, "/v1/delegations/"+url.PathEscape(delegationID)+"/revoke", body, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/delegations/"+url.PathEscape(delegationID)+"/revoke", body, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: revoke delegation: %w", err)
 	}
 	return &resp, nil
@@ -82,7 +82,7 @@ func (c *Client) RevokeDelegation(ctx context.Context, delegationID, reason stri
 func (c *Client) VerifyDelegationChain(ctx context.Context, delegationID string) (*DelegationVerifyResponse, error) {
 	req := map[string]string{"delegation_id": delegationID}
 	var resp DelegationVerifyResponse
-	if err := c.post(ctx, "/v1/verify/delegation", req, &resp); err != nil {
+	if err := c.authPost(ctx, "/v1/verify/delegation", req, &resp); err != nil {
 		return nil, fmt.Errorf("botcha: verify delegation chain: %w", err)
 	}
 	return &resp, nil

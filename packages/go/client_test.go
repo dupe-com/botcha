@@ -28,6 +28,7 @@ func TestNewClient_withOptions(t *testing.T) {
 		WithBaseURL("https://custom.botcha.ai"),
 		WithHTTPClient(custom),
 		WithAgentIdentity("myagent/2.0"),
+		WithAccessToken("token-123"),
 	)
 	if c.baseURL != "https://custom.botcha.ai" {
 		t.Errorf("expected custom baseURL, got %q", c.baseURL)
@@ -37,6 +38,26 @@ func TestNewClient_withOptions(t *testing.T) {
 	}
 	if c.http != custom {
 		t.Error("expected custom http client")
+	}
+	if c.accessToken != "token-123" {
+		t.Errorf("expected access token to be configured, got %q", c.accessToken)
+	}
+}
+
+func TestDo_doesNotSendAppSecretAsBearerByDefault(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("expected no Authorization header, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	c := NewClient("app_test", "sk_test", WithBaseURL(server.URL))
+	var out map[string]any
+	if err := c.get(context.Background(), "/v1/test", &out); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -5,13 +5,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestRegisterAgent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/agents" || r.Method != http.MethodPost {
+		if r.URL.Path != "/v1/agents/register" || r.Method != http.MethodPost {
 			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			http.Error(w, "missing auth", 401)
 			return
 		}
 		var req RegisterAgentInput
@@ -27,7 +32,7 @@ func TestRegisterAgent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL))
+	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL), WithAccessToken("access-token"))
 	resp, err := client.RegisterAgent(context.Background(), RegisterAgentInput{
 		Name:     "MyGoAgent",
 		Operator: "acme",
@@ -50,6 +55,10 @@ func TestListAgents(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			http.Error(w, "missing auth", 401)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(AgentListResponse{
 			Success: true,
@@ -62,7 +71,7 @@ func TestListAgents(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL))
+	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL), WithAccessToken("access-token"))
 	resp, err := client.ListAgents(context.Background())
 	if err != nil {
 		t.Fatalf("ListAgents error: %v", err)
@@ -78,6 +87,10 @@ func TestGetAgent(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			http.Error(w, "missing auth", 401)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(AgentResponse{
 			Success: true,
@@ -87,12 +100,23 @@ func TestGetAgent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL))
+	client := NewClient("app_test", "sk_test", WithBaseURL(server.URL), WithAccessToken("access-token"))
 	resp, err := client.GetAgent(context.Background(), "agent_xyz")
 	if err != nil {
 		t.Fatalf("GetAgent error: %v", err)
 	}
 	if resp.AgentID != "agent_xyz" {
 		t.Errorf("expected 'agent_xyz', got %q", resp.AgentID)
+	}
+}
+
+func TestRegisterAgentRequiresAccessToken(t *testing.T) {
+	client := NewClient("app_test", "sk_test", WithBaseURL("https://example.com"))
+	_, err := client.RegisterAgent(context.Background(), RegisterAgentInput{Name: "NoToken"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "access token required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
