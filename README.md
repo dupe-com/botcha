@@ -761,7 +761,7 @@ Body: { "subject": { ... }, "type": ["VerifiableCredential", "BotchaVerification
 
 ---
 
-### 🃏 A2A Agent Card Attestation — *Coming Soon* (PR #26 — pending merge)
+### 🃏 A2A Agent Card Attestation (PR #26)
 
 BOTCHA as a trust seal issuer for the [Google A2A protocol](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/) Agent Cards.
 
@@ -776,7 +776,7 @@ BOTCHA as a trust seal issuer for the [Google A2A protocol](https://developers.g
 | `GET /v1/a2a/cards` | public | Registry browse |
 | `GET /v1/a2a/cards/:id` | public | Get specific attested card |
 
-> **Full guide (draft):** [doc/A2A.md](./doc/A2A.md)
+> **Full guide:** [doc/A2A.md](./doc/A2A.md)
 
 ---
 

@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { createApp, verifyEmailCode, regenerateVerificationCode, type KVNamespace } from '../../../packages/cloudflare-workers/src/apps.js';
+import { APP_GATE_OPEN_PATHS, shouldBypassAppGate } from '../../../packages/cloudflare-workers/src/app-gate.js';
 
 // Mock KV namespace
 class MockKV implements KVNamespace {
@@ -90,6 +91,18 @@ describe('App Gate — requireAppId middleware logic', () => {
 
     test('recovery path /v1/auth/recover is in the open list', () => {
       expect(openPaths).toContain('/v1/auth/recover');
+    });
+
+    test('A2A public endpoints are in app-gate bypass list', () => {
+      expect(APP_GATE_OPEN_PATHS).toContain('/v1/a2a/agent-card');
+      expect(APP_GATE_OPEN_PATHS).toContain('/v1/a2a/verify-card');
+      expect(APP_GATE_OPEN_PATHS).toContain('/v1/a2a/verify-agent');
+      expect(APP_GATE_OPEN_PATHS).toContain('/v1/a2a/cards');
+    });
+
+    test('A2A dynamic public routes bypass app-gate', () => {
+      expect(shouldBypassAppGate('/v1/a2a/cards/att_123')).toBe(true);
+      expect(shouldBypassAppGate('/v1/a2a/trust-level/https%3A%2F%2Fagent.example.com')).toBe(true);
     });
 
     test('verify-email matches the open pattern', () => {
