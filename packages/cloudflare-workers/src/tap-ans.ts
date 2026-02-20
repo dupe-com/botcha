@@ -145,23 +145,33 @@ export function parseANSName(input: string): { success: boolean; components?: AN
   let domainParts: string[];
 
   // Detect version prefix: v1.0, v1, v2.0, etc.
-  if (/^v\d+(\.\d+)?$/.test(parts[0])) {
-    version = parts[0];
-    // After version: next part is label, rest is domain
-    if (parts.length < 3) {
+  // Match at the string level (before dot-splitting) to correctly capture "v1.0" as a unit.
+  const versionMatch = withoutScheme.match(/^(v\d+(?:\.\d+)?)\./);
+  if (versionMatch) {
+    version = versionMatch[1]; // "v1.0" or "v1"
+    const rest = withoutScheme.slice(version.length + 1); // "myagent.example.com"
+    const restParts = rest.split('.');
+    if (restParts.length < 2) {
       return { success: false, error: `ANS name with version requires: v<ver>.<label>.<domain>` };
     }
-    label = parts[1];
-    domainParts = parts.slice(2);
+    label = restParts[0];
+    domainParts = restParts.slice(1);
+  } else if (parts.length === 2) {
+    // Root domain (e.g. "botcha.ai"): the entire name is the domain identity.
+    // label = apex label ("botcha"), domain = full name ("botcha.ai")
+    // dnsLookupName = "_ans.botcha.ai" (not "_ans.ai" which is uncontrollable)
+    label = parts[0];
+    domainParts = parts; // domain = full 2-part name
   } else {
-    // No version: first part is label, rest is domain
-    // But if only 2 parts (e.g. "example.com"), treat as root domain, label = first part
+    // 3+ parts without version: label is first part, domain is the rest
+    // e.g. "myagent.example.com" → label="myagent", domain="example.com"
     label = parts[0];
     domainParts = parts.slice(1);
   }
 
   const domain = domainParts.join('.');
-  const fqdn = `${label}.${domain}`;
+  // For 2-part root domains, fqdn == domain (no separate subdomain label)
+  const fqdn = parts.length === 2 ? domain : `${label}.${domain}`;
 
   // DNS TXT lookup lives at _ans.<domain>
   const dnsLookupName = `_ans.${domain}`;

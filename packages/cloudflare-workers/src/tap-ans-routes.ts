@@ -270,6 +270,27 @@ export async function getANSNonceRoute(c: Context) {
  */
 export async function verifyANSNameRoute(c: Context) {
   try {
+    // Auth check FIRST — before any DNS work or body parsing
+    const authHeader = c.req.header('authorization');
+    const token = extractBearerToken(authHeader);
+    if (!token) {
+      return c.json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Bearer token required. Get a token via POST /v1/challenges/{id}/verify',
+      }, 401);
+    }
+
+    const publicKey = getVerificationPublicKey(c.env);
+    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    if (!tokenResult.valid) {
+      return c.json({
+        success: false,
+        error: 'INVALID_TOKEN',
+        message: 'Token is invalid or expired',
+      }, 401);
+    }
+
     const body = await c.req.json().catch(() => ({}));
 
     const { ans_name, nonce, signature, algorithm, agent_id } = body as {

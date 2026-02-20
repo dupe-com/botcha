@@ -131,6 +131,39 @@ describe('parseANSName', () => {
     const result = parseANSName('ans://v1.0.myagent.example.com');
     expect(result.success).toBe(true);
   });
+
+  // Bug B2 regression tests: 2-part domain names must resolve to _ans.<full-domain>
+  // not _ans.<tld> (which is uncontrollable by users)
+  test('2-part name: botcha.ai resolves dnsLookupName to _ans.botcha.ai (not _ans.ai)', () => {
+    const result = parseANSName('botcha.ai');
+    expect(result.success).toBe(true);
+    expect(result.components!.label).toBe('botcha');
+    expect(result.components!.domain).toBe('botcha.ai');
+    expect(result.components!.dnsLookupName).toBe('_ans.botcha.ai');
+  });
+
+  test('2-part name: example.com resolves dnsLookupName to _ans.example.com (not _ans.com)', () => {
+    const result = parseANSName('example.com');
+    expect(result.success).toBe(true);
+    expect(result.components!.dnsLookupName).toBe('_ans.example.com');
+  });
+
+  test('2-part name: fqdn equals domain (no double-stacking)', () => {
+    const result = parseANSName('botcha.ai');
+    expect(result.success).toBe(true);
+    // fqdn should NOT be "botcha.botcha.ai" — it should equal the domain
+    expect(result.components!.fqdn).toBe('botcha.ai');
+    expect(result.components!.fqdn).not.toBe('botcha.botcha.ai');
+  });
+
+  test('3-part name still resolves correctly after 2-part fix', () => {
+    const result = parseANSName('myagent.example.com');
+    expect(result.success).toBe(true);
+    expect(result.components!.label).toBe('myagent');
+    expect(result.components!.domain).toBe('example.com');
+    expect(result.components!.fqdn).toBe('myagent.example.com');
+    expect(result.components!.dnsLookupName).toBe('_ans.example.com');
+  });
 });
 
 // ============ Badge Issuance Tests ============
