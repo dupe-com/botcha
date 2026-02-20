@@ -520,6 +520,7 @@ export const DocsPage: FC<{ version: string }> = ({ version }) => {
               <li><a href="#invoices">Invoices (402 Micropayments)</a></li>
               <li><a href="#verification">Verification</a></li>
               <li><a href="#discovery">Discovery &amp; Keys</a></li>
+              <li><a href="#mcp">MCP Server</a></li>
               <li><a href="#ratelimits">Rate Limits</a></li>
             </ul>
           </nav>
@@ -1448,6 +1449,61 @@ function verifyBotchaWebhook(body: string, signature: string, secret: string): b
             <Endpoint method="GET" path="/ai.txt" desc="AI agent discovery file" />
             <Endpoint method="GET" path="/.well-known/ai-plugin.json" desc="AI plugin manifest" />
             <Endpoint method="GET" path="/health" desc="Health check" />
+          </section>
+
+          {/* ============ MCP Server ============ */}
+          <section id="mcp" class="docs-section">
+            <h2 class="docs-section-title">MCP Server</h2>
+            <p class="docs-section-desc">
+              BOTCHA exposes its full API reference as a{' '}
+              <a href="https://modelcontextprotocol.io/specification/2025-03-26" target="_blank" rel="noopener">Model Context Protocol (MCP 2025-03-26)</a>{' '}
+              server. Point any MCP-compatible client at{' '}
+              <code>https://botcha.ai/mcp</code> to ask questions about features, endpoints, and get code examples.
+              No authentication required — it's a read-only documentation server.
+            </p>
+
+            <Endpoint method="GET" path="/.well-known/mcp.json" desc="MCP discovery document — lists server name, version, transport, and available tools" />
+            <Endpoint method="GET" path="/mcp" desc="MCP server info (server name, version, tool list) — useful for debugging" />
+            <Endpoint method="POST" path="/mcp" desc="MCP JSON-RPC 2.0 endpoint — all tool calls go here" />
+
+            <h3 class="docs-subsection-title" style="margin-top: 1.5rem;">Available Tools</h3>
+            <div class="docs-table-wrap">
+              <table class="docs-table">
+                <thead>
+                  <tr><th>Tool</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>list_features</code></td><td>List all 17 BOTCHA features with category and summary</td></tr>
+                  <tr><td><code>get_feature</code></td><td>Full detail on a feature — endpoints, spec links, usage notes</td></tr>
+                  <tr><td><code>search_docs</code></td><td>Keyword search across all features and endpoint descriptions</td></tr>
+                  <tr><td><code>list_endpoints</code></td><td>All 25+ API endpoints grouped by category</td></tr>
+                  <tr><td><code>get_endpoint</code></td><td>Auth requirements, parameters, request/response shape for one endpoint</td></tr>
+                  <tr><td><code>get_example</code></td><td>Code example for a feature in TypeScript, Python, or curl</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 class="docs-subsection-title" style="margin-top: 1.5rem;">Quick Start</h3>
+            <p class="docs-section-desc">Add to your Claude Desktop or Claude Code config:</p>
+            <pre><code>{`{
+  "mcpServers": {
+    "botcha": {
+      "type": "http",
+      "url": "https://botcha.ai/mcp"
+    }
+  }
+}`}</code></pre>
+
+            <p class="docs-section-desc" style="margin-top: 1rem;">Or call it directly with curl:</p>
+            <pre><code>{`# List all features
+curl -X POST https://botcha.ai/mcp \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_features","arguments":{}}}'
+
+# Get code example in Python
+curl -X POST https://botcha.ai/mcp \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_example","arguments":{"feature":"tap","language":"python"}}}'`}</code></pre>
           </section>
 
           {/* ============ Dashboard Auth ============ */}

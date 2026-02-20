@@ -931,10 +931,12 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               <span class="showcase-pill">Reputation Scoring</span>
               <span class="showcase-pill">Delegation Chains</span>
               <span class="showcase-pill">Webhooks</span>
+              <a class="showcase-pill active" href="/mcp" target="_blank" rel="noopener">MCP Server</a>
             </div>
             <div class="showcase-hero-links">
               <a href="/openapi.json" class="showcase-hero-link">OpenAPI</a>
               <a href="/ai.txt" class="showcase-hero-link">ai.txt</a>
+              <a href="/mcp" class="showcase-hero-link">MCP</a>
               <a href="/whitepaper" class="showcase-hero-link">Whitepaper</a>
               <a href="/docs" class="showcase-hero-link">Docs</a>
               <a href="https://github.com/dupe-com/botcha" class="showcase-hero-link" target="_blank" rel="noopener">GitHub</a>
@@ -1108,6 +1110,21 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
                 </ul>
               </div>
 
+              <div class="showcase-protocol-card">
+                <a class="showcase-protocol-badge" href="https://modelcontextprotocol.io/specification/2025-03-26" target="_blank" rel="noopener">MCP 2025-03-26</a>
+                <div class="showcase-protocol-title">MCP Documentation Server</div>
+                <div class="showcase-protocol-desc">
+                  BOTCHA exposes its full API reference as an MCP server — 6 tools covering all 17 features,
+                  25+ endpoints, and code examples in TypeScript, Python, and curl. Point any MCP client
+                  at <code>https://botcha.ai/mcp</code>.
+                </div>
+                <ul class="showcase-endpoint-list">
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/.well-known/mcp.json</span></li>
+                  <li><span class="showcase-method get">GET</span><span class="showcase-endpoint-path">/mcp</span></li>
+                  <li><span class="showcase-method post">POST</span><span class="showcase-endpoint-path">/mcp</span></li>
+                </ul>
+              </div>
+
             </div>
           </section>
 
@@ -1147,6 +1164,7 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
                 <div class="showcase-stack-layer-subtitle">What agents access</div>
                 <div class="showcase-stack-layer-features">
                   Tool use · Context · Data sources · Resource bindings
+                  <br /><span style="color: var(--green); font-size: 0.75em;">BOTCHA exposes its own MCP server at /mcp</span>
                 </div>
               </div>
             </div>

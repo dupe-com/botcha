@@ -616,6 +616,8 @@ app.get('/', async (c) => {
       links: {
         openapi: `${baseUrl}/openapi.json`,
         ai_txt: `${baseUrl}/ai.txt`,
+        mcp: `${baseUrl}/mcp`,
+        mcp_discovery: `${baseUrl}/.well-known/mcp.json`,
       },
     };
 
@@ -775,6 +777,8 @@ The link works for a limited time. Your human clicks it, gets a cookie, and sees
     links: {
       openapi: `${baseUrl}/openapi.json`,
       ai_txt: `${baseUrl}/ai.txt`,
+      mcp: `${baseUrl}/mcp`,
+      mcp_discovery: `${baseUrl}/.well-known/mcp.json`,
       github: 'https://github.com/dupe-com/botcha',
       npm: 'https://www.npmjs.com/package/@dupecom/botcha',
       pypi: 'https://pypi.org/project/botcha',

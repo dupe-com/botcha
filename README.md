@@ -22,7 +22,8 @@
 📦 **npm:** [@dupecom/botcha](https://www.npmjs.com/package/@dupecom/botcha)  
 🐍 **PyPI:** [botcha](https://pypi.org/project/botcha/)  
 🔐 **Verify:** [@dupecom/botcha-verify](./packages/verify/) (TS) · [botcha-verify](./packages/python-verify/) (Python)  
-🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)
+🔌 **OpenAPI:** [botcha.ai/openapi.json](https://botcha.ai/openapi.json)  
+🤖 **MCP Server:** [botcha.ai/mcp](https://botcha.ai/mcp)
 
 ## Why?
 
@@ -44,6 +45,7 @@ Use cases:
 - 💸 **x402 Payment Gating** — agents pay $0.001 USDC on Base for a BOTCHA token; no puzzle required (see [doc/X402.md](./doc/X402.md))
 - 🌍 **Agent Name Service (ANS)** — BOTCHA as a verification layer for the GoDaddy-led ANS standard; DNS-based identity lookup and ownership proof (see [doc/ANS.md](./doc/ANS.md))
 - 🪪 **W3C DID/VC Issuer** — BOTCHA issues portable W3C Verifiable Credential JWTs; any party can verify without contacting BOTCHA (see [doc/DID-VC.md](./doc/DID-VC.md))
+- 🤖 **MCP Server** — ask any MCP client about BOTCHA features, endpoints, and get code examples; point at `https://botcha.ai/mcp`
 
 ## Install
 
@@ -1210,6 +1212,57 @@ answers = solve_botcha([123456, 789012])
 ```
 
 > **Note:** The Python SDK is available on [PyPI](https://pypi.org/project/botcha/): `pip install botcha`
+
+## 🤖 MCP Server
+
+BOTCHA exposes its full API reference as a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/specification/2025-03-26) server. Any MCP-compatible client can query it for features, endpoint details, and code examples — no authentication required.
+
+**Endpoint:** `https://botcha.ai/mcp`  
+**Discovery:** `https://botcha.ai/.well-known/mcp.json`  
+**Transport:** Streamable HTTP (MCP 2025-03-26), JSON-RPC 2.0
+
+### Add to Claude Desktop / Claude Code
+
+```json
+{
+  "mcpServers": {
+    "botcha": {
+      "type": "http",
+      "url": "https://botcha.ai/mcp"
+    }
+  }
+}
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_features` | List all 17 BOTCHA features with summaries |
+| `get_feature` | Full detail on a feature (endpoints, spec links, usage) |
+| `search_docs` | Keyword search across all docs |
+| `list_endpoints` | All 25+ API endpoints grouped by category |
+| `get_endpoint` | Auth, params, request/response for one endpoint |
+| `get_example` | Code example in TypeScript, Python, or curl |
+
+### Use with curl
+
+```bash
+# Initialize
+curl -X POST https://botcha.ai/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"my-agent","version":"1.0"}}}'
+
+# List tools
+curl -X POST https://botcha.ai/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# Get a code example
+curl -X POST https://botcha.ai/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_example","arguments":{"feature":"tap","language":"typescript"}}}'
+```
 
 ## License
 
