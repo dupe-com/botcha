@@ -138,6 +138,7 @@ app.use('*', async (c, next) => {
 const APP_GATE_OPEN_PATHS = [
   '/v1/apps',                       // POST: create app (registration)
   '/v1/auth/recover',               // POST: account recovery
+  '/v1/token/validate',             // POST: public token validation — the token IS the credential
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)

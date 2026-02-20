@@ -259,6 +259,57 @@ describe('TAP Routes - registerTAPAgentRoute', () => {
     expect(data.message).toContain('Invalid public key format');
   });
 
+  test('should accept JWK object as public_key', async () => {
+    const jwkPublic = {
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+      y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+      use: 'sig',
+      alg: 'ES256',
+    };
+    const mockContext = createMockContext({
+      query: vi.fn((key: string) => key === 'app_id' ? TEST_APP_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        name: 'JWK Agent',
+        public_key: jwkPublic,
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await registerTAPAgentRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    expect(data.has_public_key).toBe(true);
+    expect(data.tap_enabled).toBe(true);
+  });
+
+  test('should accept JWK JSON string as public_key', async () => {
+    const jwkJson = JSON.stringify({
+      kty: 'EC',
+      crv: 'P-256',
+      x: 'f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU',
+      y: 'x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0',
+    });
+    const mockContext = createMockContext({
+      query: vi.fn((key: string) => key === 'app_id' ? TEST_APP_ID : undefined),
+      json: vi.fn().mockResolvedValue({
+        name: 'JWK String Agent',
+        public_key: jwkJson,
+        signature_algorithm: 'ecdsa-p256-sha256',
+      }),
+    });
+
+    const response = await registerTAPAgentRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    expect(data.has_public_key).toBe(true);
+  });
+
   test('should return 400 when capabilities is not an array', async () => {
     const mockContext = createMockContext({
       query: vi.fn((key: string) => key === 'app_id' ? TEST_APP_ID : undefined),

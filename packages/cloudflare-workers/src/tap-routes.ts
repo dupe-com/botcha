@@ -102,6 +102,27 @@ async function validateAppAccess(c: Context, requireAuth: boolean = true): Promi
   return { valid: true, appId: jwtAppId };
 }
 
+/**
+ * Returns true if the string is a valid JWK JSON (EC or RSA public key).
+ * Accepts both raw JWK JSON strings and serialized JWK objects.
+ */
+function isValidJWK(key: string): boolean {
+  try {
+    const jwk = typeof key === 'string' ? JSON.parse(key) : key;
+    if (!jwk || typeof jwk !== 'object') return false;
+    if (!jwk.kty) return false;
+    // EC key: requires crv, x, y
+    if (jwk.kty === 'EC') return Boolean(jwk.crv && jwk.x && jwk.y);
+    // RSA key: requires n, e
+    if (jwk.kty === 'RSA') return Boolean(jwk.n && jwk.e);
+    // OKP (Ed25519): requires crv and x
+    if (jwk.kty === 'OKP') return Boolean(jwk.crv && jwk.x);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function validateTAPRegistration(body: any): {
   valid: boolean;
   data?: {
@@ -120,8 +141,14 @@ function validateTAPRegistration(body: any): {
     return { valid: false, error: 'Agent name is required' };
   }
   
+  // Normalize public_key: accept JWK objects by serializing them to JSON strings
+  let publicKey = body.public_key;
+  if (publicKey && typeof publicKey === 'object') {
+    publicKey = JSON.stringify(publicKey);
+  }
+
   // Validate public key if provided
-  if (body.public_key) {
+  if (publicKey) {
     if (!body.signature_algorithm) {
       return { valid: false, error: 'signature_algorithm required when public_key provided' };
     }
@@ -131,11 +158,12 @@ function validateTAPRegistration(body: any): {
       return { valid: false, error: `Unsupported algorithm. Supported: ${validAlgorithms.join(', ')}` };
     }
     
-    // PEM format or raw Ed25519 key (32-byte base64)
-    const isPEM = body.public_key.includes('BEGIN PUBLIC KEY');
-    const isRawEd25519 = body.signature_algorithm === 'ed25519' && !isPEM;
-    if (!isPEM && !isRawEd25519) {
-      return { valid: false, error: 'Invalid public key format. Provide PEM or raw Ed25519 base64 key.' };
+    // Accept: PEM, JWK JSON string, or raw Ed25519 base64 key
+    const isPEM = typeof publicKey === 'string' && publicKey.includes('BEGIN PUBLIC KEY');
+    const isJWK = isValidJWK(publicKey);
+    const isRawEd25519 = body.signature_algorithm === 'ed25519' && !isPEM && !isJWK;
+    if (!isPEM && !isJWK && !isRawEd25519) {
+      return { valid: false, error: 'Invalid public key format. Provide a PEM key, JWK object/JSON, or raw Ed25519 base64 key.' };
     }
   }
   
@@ -158,7 +186,7 @@ function validateTAPRegistration(body: any): {
       name: body.name,
       operator: body.operator,
       version: body.version,
-      public_key: body.public_key,
+      public_key: publicKey,
       signature_algorithm: body.signature_algorithm,
       capabilities: body.capabilities,
       trust_level: body.trust_level || 'basic',
@@ -550,11 +578,24 @@ export async function rotateKeyRoute(c: Context) {
     if (!body.public_key || !body.signature_algorithm) {
       return c.json({ success: false, error: 'MISSING_FIELDS', message: 'public_key and signature_algorithm are required' }, 400);
     }
-    
+
+    // Normalize public_key: accept JWK objects by serializing to JSON
+    const newPublicKey = typeof body.public_key === 'object'
+      ? JSON.stringify(body.public_key)
+      : body.public_key;
+
     // Validate algorithm
     const validAlgorithms = ['ecdsa-p256-sha256', 'rsa-pss-sha256', 'ed25519'];
     if (!validAlgorithms.includes(body.signature_algorithm)) {
       return c.json({ success: false, error: 'INVALID_ALGORITHM', message: `Unsupported algorithm. Supported: ${validAlgorithms.join(', ')}` }, 400);
+    }
+
+    // Validate key format (PEM, JWK, or raw Ed25519)
+    const isPEM = typeof newPublicKey === 'string' && newPublicKey.includes('BEGIN PUBLIC KEY');
+    const isJWK = isValidJWK(newPublicKey);
+    const isRawEd25519 = body.signature_algorithm === 'ed25519' && !isPEM && !isJWK;
+    if (!isPEM && !isJWK && !isRawEd25519) {
+      return c.json({ success: false, error: 'INVALID_KEY_FORMAT', message: 'Invalid public key format. Provide a PEM key, JWK object/JSON, or raw Ed25519 base64 key.' }, 400);
     }
     
     // Get existing agent
@@ -571,7 +612,7 @@ export async function rotateKeyRoute(c: Context) {
     }
     
     // Update agent with new key
-    agent.public_key = body.public_key;
+    agent.public_key = newPublicKey;
     agent.signature_algorithm = body.signature_algorithm;
     agent.key_created_at = Date.now();
     agent.key_expires_at = body.key_expires_at ? new Date(body.key_expires_at).getTime() : undefined;

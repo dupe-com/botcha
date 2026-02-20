@@ -294,6 +294,15 @@ function isValidPublicKey(key: string, algorithm?: string): boolean {
   if (key.includes('BEGIN PUBLIC KEY') && key.includes('END PUBLIC KEY') && key.length > 100) {
     return true;
   }
+  // JWK JSON string (EC P-256, RSA, or OKP/Ed25519)
+  try {
+    const jwk = JSON.parse(key);
+    if (jwk && typeof jwk === 'object' && jwk.kty) {
+      if (jwk.kty === 'EC' && jwk.crv && jwk.x && jwk.y) return true;
+      if (jwk.kty === 'RSA' && jwk.n && jwk.e) return true;
+      if (jwk.kty === 'OKP' && jwk.crv && jwk.x) return true;
+    }
+  } catch { /* not JSON, continue */ }
   // Raw Ed25519 key (32 bytes = ~44 base64 chars)
   if (algorithm === 'ed25519') {
     const stripped = key.replace(/[\s]/g, '');
