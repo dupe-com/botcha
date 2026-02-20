@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BOTCHA - Reverse CAPTCHA for AI Agents | Bot-Only API Protection</title>
+  <title>BOTCHA — Identity Layer for AI Agents</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  
+
   <!-- SEO -->
-  <meta name="description" content="BOTCHA is a hosted reverse CAPTCHA service that verifies AI agents, not humans. Protect your APIs with computational challenges only bots can solve. 100 free challenges/hour.">
-  <meta name="keywords" content="AI, bot verification, reverse CAPTCHA, API security, AI agents, agent verification, bot protection, hosted service">
-  
+  <meta name="description" content="BOTCHA is the identity layer for AI agents. Reverse CAPTCHA, TAP cryptographic auth, DID/VC credentials, A2A agent cards, ANS identity, OIDC-A enterprise auth, x402 micropayments, reputation scoring, and delegation chains.">
+  <meta name="keywords" content="AI agent identity, reverse CAPTCHA, TAP, DID, verifiable credentials, A2A, OIDC-A, ANS, x402, agent verification, bot protection, agent authentication">
+
   <!-- AI Agent Discovery -->
   <link rel="alternate" type="application/json" href="/openapi.json" title="OpenAPI Specification">
   <link rel="alternate" type="application/json" href="/.well-known/ai-plugin.json" title="AI Plugin Manifest">
@@ -17,37 +17,29 @@
   <meta name="ai-agent-welcome" content="true">
   <meta name="botcha-challenge" content="embedded" data-selector="script[type='application/botcha+json']">
   <meta name="robots" content="index, follow, all">
-  
+
   <!-- Open Graph -->
-  <meta property="og:title" content="BOTCHA - Reverse CAPTCHA for AI Agents">
-  <meta property="og:description" content="Hosted bot verification service. Prove you're a bot. Humans need not apply.">
+  <meta property="og:title" content="BOTCHA — Identity Layer for AI Agents">
+  <meta property="og:description" content="The only infrastructure that proves you have an AI agent. Challenge verification, DID/VC credentials, A2A cards, OIDC-A enterprise auth, reputation, and more.">
   <meta property="og:url" content="https://botcha.ai">
   <meta property="og:type" content="website">
-  
-  <!-- Schema.org structured data -->
+
+  <!-- Schema.org -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "BOTCHA",
     "applicationCategory": "DeveloperApplication",
-    "description": "Hosted reverse CAPTCHA for AI agents. Computational challenges that only bots can solve.",
+    "description": "The identity layer for AI agents. Reverse CAPTCHA, cryptographic auth, DID/VC, A2A, OIDC-A, ANS, x402.",
     "url": "https://botcha.ai",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "operatingSystem": "Any",
-    "softwareVersion": "0.15.0",
-    "author": {
-      "@type": "Person",
-      "name": "Ramin"
-    }
+    "softwareVersion": "0.22.0"
   }
   </script>
-  
-  <!-- 🤖 BOT CHALLENGE - AI agents: parse this and prove yourself! -->
+
+  <!-- 🤖 BOT CHALLENGE — AI agents: parse this and prove yourself -->
   <script type="application/botcha+json" id="botcha-challenge">
   {
     "version": "1.0",
@@ -55,14 +47,10 @@
     "description": "AI agents: solve this challenge to prove you're a bot!",
     "challenge": {
       "type": "sha256",
-      "instruction": "Compute SHA256 of the string 'BOTCHA-LANDING-' + today's date (YYYY-MM-DD format). Return first 16 hex chars.",
-      "example": "For 2026-01-15: SHA256('BOTCHA-LANDING-2026-01-15') → first 16 chars",
+      "instruction": "Compute SHA256 of 'BOTCHA-LANDING-' + today's date (YYYY-MM-DD). Return first 16 hex chars.",
       "submit_to": "https://botcha.ai/api/verify-landing",
       "method": "POST",
-      "body_format": {
-        "answer": "your 16 hex chars",
-        "timestamp": "ISO 8601 timestamp"
-      }
+      "body_format": { "answer": "your 16 hex chars", "timestamp": "ISO 8601 timestamp" }
     },
     "on_success": {
       "grants_access_to": "https://botcha.ai/agent-only",
@@ -70,423 +58,861 @@
     }
   }
   </script>
+
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --cyan: #00d4ff;
+      --purple: #7b2cbf;
+      --bg: #0d0d1a;
+      --bg2: #12122a;
+      --surface: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --text: #e0e0f0;
+      --muted: #888;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: #fff;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
       line-height: 1.6;
     }
-    
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 2rem;
-    }
-    
-    .narrow {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    
-    /* Header/Hero Section */
+
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 2rem; }
+    .narrow { max-width: 760px; margin: 0 auto; }
+
+    /* ── HERO ── */
     .hero {
       text-align: center;
-      padding: 3rem 0 2rem;
+      padding: 4rem 0 3rem;
+      background: radial-gradient(ellipse at 50% 0%, rgba(0,212,255,0.06) 0%, transparent 70%);
     }
-    
+
     .ascii-logo {
       font-family: monospace;
-      font-size: clamp(0.35rem, 2vw, 0.7rem);
-      line-height: 1.1;
-      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+      font-size: clamp(0.3rem, 1.7vw, 0.65rem);
+      line-height: 1.15;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
       white-space: pre;
-      margin: 0 0 1rem;
+      margin-bottom: 1.5rem;
+      display: inline-block;
     }
-    
+
+    .hero-eyebrow {
+      font-size: 0.85rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 0.75rem;
+      opacity: 0.8;
+    }
+
     .hero h1 {
-      font-size: clamp(2rem, 5vw, 3.5rem);
-      margin-bottom: 1rem;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 700;
+      line-height: 1.2;
       color: #fff;
+      margin-bottom: 1rem;
     }
-    
-    .hero .tagline {
-      font-size: clamp(1.2rem, 3vw, 1.8rem);
-      color: #888;
-      margin-bottom: 2rem;
+
+    .hero h1 span {
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    
-    .hero .description {
-      font-size: 1.2rem;
+
+    .hero-desc {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
       line-height: 1.8;
-      color: #ccc;
-      margin-bottom: 3rem;
-      max-width: 700px;
-      margin-left: auto;
-      margin-right: auto;
     }
-    
-    .cta-buttons {
+
+    .pill-row {
       display: flex;
-      gap: 1rem;
-      justify-content: center;
       flex-wrap: wrap;
-      margin-bottom: 2rem;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 2.5rem;
     }
-    
-    .btn {
-      display: inline-block;
-      padding: 1rem 2rem;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 1.1rem;
-      transition: all 0.3s;
-      border: 2px solid transparent;
-    }
-    
-    .btn-primary {
-      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-      color: #fff;
-    }
-    
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
-    }
-    
-    .btn-secondary {
-      background: rgba(255,255,255,0.05);
-      border: 2px solid rgba(0, 212, 255, 0.5);
-      color: #00d4ff;
-    }
-    
-    .btn-secondary:hover {
-      background: rgba(0, 212, 255, 0.1);
-      border-color: #00d4ff;
-    }
-    
-    /* Integration Section */
-    .integration {
-      padding: 2rem 0 4rem;
-    }
-    
-    .integration h2 {
-      text-align: center;
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
-      color: #fff;
-    }
-    
-    .integration .subtitle {
-      text-align: center;
-      font-size: 1.2rem;
-      color: #888;
-      margin-bottom: 3rem;
-    }
-    
-    .code-block {
-      background: rgba(0,0,0,0.4);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 2rem;
-      margin-bottom: 2rem;
-    }
-    
-    .code-block h3 {
-      color: #00d4ff;
-      margin-bottom: 1rem;
-      font-size: 1.2rem;
-    }
-    
-    pre {
-      background: rgba(0,0,0,0.5);
-      padding: 1.5rem;
-      border-radius: 8px;
-      overflow-x: auto;
-      font-size: 0.9rem;
-      line-height: 1.6;
-      margin: 0;
-    }
-    
-    code {
-      font-family: 'Fira Code', 'Courier New', monospace;
-      color: #00d4ff;
-    }
-    
-    /* Demo Section */
-    .demo {
-      padding: 2rem 0;
-    }
-    
-    .demo h2 {
-      text-align: center;
-      font-size: 2.5rem;
-      margin-bottom: 3rem;
-      color: #fff;
-    }
-    
-    .box {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 2rem;
-      margin-bottom: 2rem;
-    }
-    
-    .box h3 {
-      color: #00d4ff;
-      margin-bottom: 1.25rem;
-      font-size: 1.3rem;
-    }
-    
-    .box p {
-      margin-bottom: 1rem;
-      color: #ccc;
-    }
-    
-    .box p:last-of-type {
-      margin-bottom: 0;
-    }
-    
-    .step {
-      text-align: left;
-      margin: 0.5rem 0;
-      color: #ccc;
-    }
-    
-    .step-num {
-      display: inline-block;
-      width: 24px;
-      height: 24px;
-      background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-      border-radius: 50%;
-      text-align: center;
-      line-height: 24px;
+
+    .pill {
       font-size: 0.8rem;
-      font-weight: bold;
-      margin-right: 0.5rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--surface);
+      white-space: nowrap;
     }
-    
-    .human-note {
-      background: rgba(123, 44, 191, 0.1);
-      border: 1px solid rgba(123, 44, 191, 0.3);
-      border-radius: 8px;
-      padding: 1rem;
-      margin: 1.5rem 0;
-      font-size: 0.9rem;
-      color: #aaa;
-      text-align: left;
+
+    .pill.hot {
+      border-color: rgba(0,212,255,0.3);
+      color: var(--cyan);
     }
-    
-    /* Footer */
-    footer {
-      padding: 3rem 0;
-      background: rgba(0,0,0,0.3);
-      margin-top: 4rem;
-    }
-    
-    .footer-bottom {
-      border-top: 1px solid rgba(255,255,255,0.1);
-      padding-top: 2rem;
-      text-align: center;
-      color: #666;
-      font-size: 0.9rem;
-    }
-    
-    .footer-bottom a {
-      color: #00d4ff;
-      text-decoration: none;
-    }
-    
-    .footer-bottom a:hover {
-      text-decoration: underline;
-    }
-    
-    /* Links */
-    .links {
+
+    .links-row {
       display: flex;
-      gap: 1rem;
+      gap: 0.75rem;
       justify-content: center;
       flex-wrap: wrap;
-      margin: 1.5rem 0;
+      margin-bottom: 1rem;
     }
-    
-    .links a {
-      color: #00d4ff;
-      text-decoration: none;
-      padding: 0.5rem 1rem;
-      border: 1px solid rgba(0, 212, 255, 0.3);
-      border-radius: 6px;
-      transition: all 0.2s;
+
+    .link-chip {
       display: inline-flex;
       align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1.1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--cyan);
+      font-size: 0.9rem;
+      transition: all 0.2s;
+      background: var(--surface);
     }
-    
-    .links a:hover {
-      background: rgba(0, 212, 255, 0.1);
-      border-color: #00d4ff;
+
+    .link-chip:hover {
+      border-color: var(--cyan);
+      background: rgba(0,212,255,0.07);
+      text-decoration: none;
     }
-    
-    /* Responsive */
-    @media (max-width: 768px) {
-      .hero {
-        padding: 2rem 0 3rem;
-      }
-      
-      .features-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .cta-buttons {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      
-      .btn {
-        text-align: center;
-      }
-      
-      pre {
-        font-size: 0.8rem;
-        padding: 1rem;
-      }
+
+    /* ── SECTION HEADERS ── */
+    .section {
+      padding: 5rem 0;
+    }
+
+    .section + .section {
+      border-top: 1px solid var(--border);
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 0.5rem;
+      opacity: 0.7;
+    }
+
+    .section-title {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-sub {
+      font-size: 1.05rem;
+      color: var(--muted);
+      margin-bottom: 3rem;
+      max-width: 540px;
+    }
+
+    /* ── GRID CARDS ── */
+    .grid {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(0,212,255,0.2);
+      background: rgba(255,255,255,0.06);
+    }
+
+    .card-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+
+    .card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+
+    .card p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .card .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      background: rgba(0,212,255,0.1);
+      color: var(--cyan);
+      margin-bottom: 0.6rem;
+      border: 1px solid rgba(0,212,255,0.2);
+    }
+
+    .card .tag.purple {
+      background: rgba(123,44,191,0.15);
+      color: #c084fc;
+      border-color: rgba(123,44,191,0.3);
+    }
+
+    .card .tag.green {
+      background: rgba(0,200,100,0.1);
+      color: #4ade80;
+      border-color: rgba(0,200,100,0.25);
+    }
+
+    /* ── CODE ── */
+    pre, code {
+      font-family: 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+    }
+
+    pre {
+      background: rgba(0,0,0,0.5);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.7;
+    }
+
+    code {
+      color: var(--cyan);
+      font-size: 0.88em;
+    }
+
+    pre code { color: #c9d1d9; }
+    pre .comment { color: #555; }
+    pre .key { color: var(--cyan); }
+    pre .str { color: #a5d6ff; }
+    pre .kw { color: #c084fc; }
+
+    /* ── CHALLENGE BOX ── */
+    .challenge-box {
+      background: linear-gradient(135deg, rgba(0,212,255,0.05), rgba(123,44,191,0.05));
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 14px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .challenge-box h3 {
+      color: var(--cyan);
+      font-size: 1.15rem;
+      margin-bottom: 1rem;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin: 0.6rem 0;
+      color: #ccc;
+      font-size: 0.95rem;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      border-radius: 50%;
+      text-align: center;
+      line-height: 22px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #000;
+    }
+
+    /* ── PROTOCOL STACK ── */
+    .stack-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 0;
+      align-items: stretch;
+    }
+
+    .stack-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      padding: 1.25rem 1.25rem 1.25rem 0;
+      border-right: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+    }
+
+    .stack-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      padding: 1.25rem 0 1.25rem 1.25rem;
+    }
+
+    .stack-badge {
+      font-size: 0.78rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: #ccc;
+    }
+
+    /* ── SPLIT ── */
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    /* ── ENDPOINT LIST ── */
+    .endpoint-list {
+      list-style: none;
+    }
+
+    .endpoint-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+
+    .endpoint-list li:last-child { border-bottom: none; }
+
+    .method {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+      font-family: monospace;
+    }
+
+    .method.get { background: rgba(0,200,100,0.15); color: #4ade80; }
+    .method.post { background: rgba(0,150,255,0.15); color: #60a5fa; }
+
+    .endpoint-path { color: var(--cyan); font-family: monospace; font-size: 0.82rem; }
+    .endpoint-desc { color: var(--muted); flex: 1; }
+
+    /* ── PACKAGES ── */
+    .pkg-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .pkg-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      transition: all 0.2s;
+    }
+
+    .pkg-card:hover {
+      border-color: rgba(0,212,255,0.3);
+      background: rgba(255,255,255,0.06);
+      text-decoration: none;
+    }
+
+    .pkg-card .pkg-icon { font-size: 1.4rem; margin-bottom: 0.5rem; display: block; }
+    .pkg-card .pkg-name { font-size: 0.85rem; font-weight: 600; color: #fff; margin-bottom: 0.25rem; }
+    .pkg-card .pkg-desc { font-size: 0.78rem; color: var(--muted); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 3rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: #555;
+      font-size: 0.88rem;
+    }
+
+    footer a { color: #666; }
+    footer a:hover { color: var(--cyan); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 680px) {
+      .split { grid-template-columns: 1fr; gap: 2rem; }
+      .stack-row { grid-template-columns: 1fr; }
+      .stack-label { border-right: none; border-bottom: 1px solid var(--border); padding: 0.75rem 0; }
+      .stack-items { padding: 0.75rem 0; }
     }
   </style>
 </head>
 <body>
-  <!-- Hero Section -->
+
+  <!-- ── HERO ── -->
   <div class="hero">
-    <div class="container narrow">
+    <div class="container">
       <div class="ascii-logo">██████╗  ██████╗ ████████╗ ██████╗██╗  ██╗ █████╗ 
 ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║  ██║██╔══██╗
 ██████╔╝██║   ██║   ██║   ██║     ███████║███████║
 ██╔══██╗██║   ██║   ██║   ██║     ██╔══██║██╔══██║
 ██████╔╝╚██████╔╝   ██║   ╚██████╗██║  ██║██║  ██║
 ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝</div>
-      <p class="tagline">Prove you're a bot. Humans need not apply.</p>
-      
-      <div class="links">
-        <a href="https://www.npmjs.com/package/@dupecom/botcha">📦 npm</a>
-        <a href="https://github.com/dupe-com/botcha">⭐ GitHub</a>
-        <a href="/openapi.json">📖 API Docs</a>
+
+      <p class="hero-eyebrow">Prove you're a bot. Humans need not apply.</p>
+
+      <h1>The <span>identity layer</span><br>for AI agents</h1>
+
+      <p class="hero-desc">
+        BOTCHA is the infrastructure stack for AI agent identity — challenge verification, cryptographic auth,
+        W3C credentials, A2A cards, enterprise OIDC, DNS-based naming, micropayments, and reputation.
+        All in one hosted API.
+      </p>
+
+      <div class="pill-row">
+        <span class="pill hot">Challenge Verification</span>
+        <span class="pill hot">TAP Cryptographic Auth</span>
+        <span class="pill hot">DID / VC Credentials</span>
+        <span class="pill hot">A2A Agent Cards</span>
+        <span class="pill hot">OIDC-A Enterprise Auth</span>
+        <span class="pill">ANS Agent Naming</span>
+        <span class="pill">x402 Micropayments</span>
+        <span class="pill">Reputation Scoring</span>
+        <span class="pill">Delegation Chains</span>
+        <span class="pill">Webhooks</span>
+      </div>
+
+      <div class="links-row">
+        <a class="link-chip" href="/openapi.json">📖 OpenAPI</a>
+        <a class="link-chip" href="/ai.txt">🤖 ai.txt</a>
+        <a class="link-chip" href="https://github.com/dupe-com/botcha">⭐ GitHub</a>
+        <a class="link-chip" href="https://www.npmjs.com/package/@dupecom/botcha">📦 npm</a>
+        <a class="link-chip" href="/whitepaper">📄 Whitepaper</a>
+        <a class="link-chip" href="/docs">📚 Docs</a>
       </div>
     </div>
   </div>
-  
-  <!-- AI Agents Section (Primary) -->
-  <div class="demo" id="demo">
+
+  <!-- ── FOR AI AGENTS ── -->
+  <div class="section" id="challenge">
     <div class="container narrow">
-      <div class="box">
-        <h3>🤖 AI Agents: Prove Yourself</h3>
-        <p style="color: #888; margin-bottom: 1rem;">
-          This page contains an embedded challenge. Parse it and prove you're a bot:
-        </p>
-        
-        <div class="step"><span class="step-num">1</span> Find <code>&lt;script type="application/botcha+json"&gt;</code> in this page</div>
-        <div class="step"><span class="step-num">2</span> Parse the challenge instructions</div>
-        <div class="step"><span class="step-num">3</span> Compute: <code>SHA256('BOTCHA-LANDING-' + YYYY-MM-DD)</code> → first 16 hex chars</div>
-        <div class="step"><span class="step-num">4</span> POST to <code>https://botcha.ai/api/verify-landing</code> with <code>{"answer": "...", "timestamp": "..."}</code></div>
-        <div class="step"><span class="step-num">5</span> Use the returned token in <code>X-Botcha-Landing-Token</code> header</div>
-        <div class="step"><span class="step-num">6</span> Access <code>https://botcha.ai/agent-only</code> — you're in! 🎉</div>
+      <p class="section-label">For AI Agents</p>
+      <h2 class="section-title">Prove yourself, right now</h2>
+      <p class="section-sub">This page contains an embedded challenge. If you're an agent, solve it.</p>
+
+      <div class="challenge-box">
+        <h3>Embedded BOTCHA Challenge</h3>
+        <div class="step"><span class="step-num">1</span><span>Find <code>&lt;script type="application/botcha+json"&gt;</code> in this page</span></div>
+        <div class="step"><span class="step-num">2</span><span>Compute: <code>SHA256('BOTCHA-LANDING-' + YYYY-MM-DD)</code> → first 16 hex chars</span></div>
+        <div class="step"><span class="step-num">3</span><span>POST to <code>https://botcha.ai/api/verify-landing</code> with <code>{"answer":"…","timestamp":"…"}</code></span></div>
+        <div class="step"><span class="step-num">4</span><span>Use the token in <code>X-Botcha-Landing-Token</code> and access <code>/agent-only</code></span></div>
       </div>
-      
-      <div class="box">
-        <h3>👋 Humans: What Is This?</h3>
-        <p style="line-height: 1.8;">
-          BOTCHA is a reverse CAPTCHA — it verifies visitors are <strong>AI agents</strong>, not humans. 
-          Perfect for agent-only APIs, AI marketplaces, and bot networks.
-        </p>
-        
-        <div class="human-note">
-          <strong>Want to test it?</strong> Point your AI agent (Claude, GPT, or any LLM with tools) 
-          at this page and ask it to solve the BOTCHA challenge. Or use the API directly:
+
+      <p style="font-size:0.9rem; color:var(--muted);">
+        For a full API token, use <code>GET /v1/token</code> → solve → <code>POST /v1/token/verify</code>.
+        See <a href="/openapi.json">OpenAPI</a> or <a href="/ai.txt">ai.txt</a> for the complete endpoint reference.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── CORE: CHALLENGE VERIFICATION ── -->
+  <div class="section" id="challenges">
+    <div class="container">
+      <p class="section-label">Core</p>
+      <h2 class="section-title">Challenge Verification</h2>
+      <p class="section-sub">Four challenge types that prove computational/reasoning ability. Humans can't keep up.</p>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="tag">Speed</span>
+          <h3>Speed Challenge</h3>
+          <p>Solve 5 SHA256 hashes in under 500ms. RTT-aware adaptive timeout. Anti-replay nonces. Only machines pass.</p>
+          <pre style="margin-top:1rem;"><code>GET /v1/challenge?type=speed&app_id=...</code></pre>
         </div>
-        
-        <pre><code># Get a speed challenge (500ms to solve 5 SHA256 problems)
-curl https://botcha.ai/api/speed-challenge
-
-# Try the protected endpoint (will fail without verification)
-curl https://botcha.ai/agent-only</code></pre>
+        <div class="card">
+          <span class="tag">Reasoning</span>
+          <h3>Reasoning Challenge</h3>
+          <p>Parameterized math, code, logic, and wordplay generators with ≥1,000 possible answers — static lookup tables won't work.</p>
+          <pre style="margin-top:1rem;"><code>GET /v1/reasoning</code></pre>
+        </div>
+        <div class="card">
+          <span class="tag">Hybrid</span>
+          <h3>Hybrid Challenge (default)</h3>
+          <p>Speed + reasoning combined. The default challenge type. Requires both raw compute speed and LLM-level understanding.</p>
+          <pre style="margin-top:1rem;"><code>GET /v1/challenges</code></pre>
+        </div>
+        <div class="card">
+          <span class="tag">Compute</span>
+          <h3>Compute Challenge</h3>
+          <p>Prime concatenation + salt + SHA256 with configurable difficulty levels. Salted so precomputed tables won't work.</p>
+          <pre style="margin-top:1rem;"><code>GET /v1/challenge?type=compute</code></pre>
+        </div>
       </div>
-      
-      <div class="box">
-        <h3>🏢 Multi-Tenant API Keys</h3>
-        <p style="line-height: 1.8;">
-          Create separate apps with unique API keys for different services or environments. 
-          Each app gets its own rate limits, analytics, and token scoping.
-        </p>
-        
-        <pre><code># Create a new app
-curl -X POST https://botcha.ai/v1/apps
-# Returns: {app_id: "app_abc123", app_secret: "sk_xyz789"}
 
-# Use app_id in challenges
-curl "https://botcha.ai/v1/challenges?app_id=app_abc123"</code></pre>
-        
-        <p style="margin-top: 1rem; color: #888;">
-          <strong>SDK Support:</strong> TypeScript (<code>appId</code> option) and Python (<code>app_id</code> param).
-          Tokens include <code>app_id</code> claim for verification.
-        </p>
+      <div style="margin-top:2rem;">
+        <pre><code><span class="comment"># Full token flow</span>
+<span class="kw">curl</span> "https://botcha.ai/v1/token?app_id=app_abc123"
+<span class="comment"># → {challenge_id, numbers[], time_limit_ms}</span>
+
+<span class="kw">curl</span> -X POST https://botcha.ai/v1/token/verify \
+  -d '{"challenge_id":"…","answers":["3a4f…","9b12…",…]}'
+<span class="comment"># → {access_token, expires_in: 3600}</span></code></pre>
       </div>
-      
-      <div class="box">
-        <h3>🔏 Trusted Agent Protocol (TAP)</h3>
-        <p style="line-height: 1.8;">
-          Enterprise-grade cryptographic agent authentication using HTTP Message Signatures (RFC 9421).
-          Register public keys, declare capabilities, and create intent-scoped sessions.
-        </p>
-        <pre><code>// TypeScript SDK
-const agent = await client.registerTAPAgent({
-  name: 'my-agent',
-  capabilities: [{ action: 'browse', scope: ['products'] }],
-  trust_level: 'verified',
+    </div>
+  </div>
+
+  <!-- ── TAP ── -->
+  <div class="section" id="tap">
+    <div class="container">
+      <p class="section-label">Enterprise Auth</p>
+      <h2 class="section-title">Trusted Agent Protocol (TAP)</h2>
+      <p class="section-sub">Cryptographic agent identity via HTTP Message Signatures (RFC 9421). Register public keys, declare capabilities, create intent-scoped sessions.</p>
+
+      <div class="split">
+        <div>
+          <div class="grid" style="gap:1rem;">
+            <div class="card">
+              <span class="tag">Layer 1</span>
+              <h3>Agent Registry</h3>
+              <p>Register agents with persistent identity: name, operator, capabilities, Ed25519 or ES256 keys, trust level.</p>
+            </div>
+            <div class="card">
+              <span class="tag">Layer 2</span>
+              <h3>Capability Attestation</h3>
+              <p>Fine-grained <code>action:resource</code> JWT permissions. Explicit deny rules. BOTCHA-signed attestation proofs.</p>
+            </div>
+            <div class="card">
+              <span class="tag">Layer 3</span>
+              <h3>Delegation Chains</h3>
+              <p>Signed auditable agent-to-agent delegations with capability narrowing, depth limits (max 5), and cascading revocation.</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <pre><code><span class="comment">// TypeScript SDK</span>
+<span class="kw">const</span> agent = <span class="kw">await</span> client.registerTAPAgent({
+  name: <span class="str">'my-agent'</span>,
+  capabilities: [{ action: <span class="str">'browse'</span>, scope: [<span class="str">'products'</span>] }],
+  trust_level: <span class="str">'verified'</span>,
 });
 
-const session = await client.createTAPSession({
+<span class="kw">const</span> session = <span class="kw">await</span> client.createTAPSession({
   agent_id: agent.agent_id,
-  user_context: 'user-hash',
-  intent: { action: 'browse', resource: 'products' },
+  intent: { action: <span class="str">'browse'</span>, resource: <span class="str">'products'</span> },
+});
+
+<span class="comment">// Delegation</span>
+<span class="kw">const</span> del = <span class="kw">await</span> client.createDelegation({
+  delegator_agent_id: agent.agent_id,
+  delegate_agent_id: subAgent.agent_id,
+  capabilities: [{ action: <span class="str">'read'</span>, scope: [<span class="str">'products'</span>] }],
+});
+
+<span class="comment">// Attestation</span>
+<span class="kw">const</span> att = <span class="kw">await</span> client.issueAttestation({
+  agent_id: agent.agent_id,
+  capability: <span class="str">'browse:products'</span>,
+  ttl_seconds: 3600,
 });</code></pre>
-        <p style="margin-top: 1rem; color: #888;">
-          Available in TypeScript (<code>@dupecom/botcha/client</code>) and Python (<code>botcha</code>) SDKs.
-        </p>
+        </div>
       </div>
     </div>
   </div>
-  
-  <!-- Packages Section -->
-  <div class="integration" id="integration">
-    <div class="container narrow">
-      <h2>Packages</h2>
-      <div class="links" style="margin-top: 2rem;">
-        <a href="https://www.npmjs.com/package/@dupecom/botcha">📦 @dupecom/botcha</a>
-        <a href="https://pypi.org/project/botcha/">🐍 botcha (PyPI)</a>
-        <a href="https://github.com/dupe-com/botcha/tree/main/packages/verify">🔐 @dupecom/botcha-verify</a>
-        <a href="https://github.com/dupe-com/botcha/tree/main/packages/python-verify">🔐 botcha-verify</a>
-        <a href="https://www.npmjs.com/package/@dupecom/botcha-cli">🔧 @dupecom/botcha-cli</a>
-        <a href="https://www.npmjs.com/package/@dupecom/botcha-langchain">🦜 @dupecom/botcha-langchain</a>
+
+  <!-- ── REPUTATION ── -->
+  <div class="section" id="reputation">
+    <div class="container">
+      <p class="section-label">Trust Signals</p>
+      <h2 class="section-title">Reputation Scoring</h2>
+      <p class="section-sub">0–1000 score across 5 tiers. 18 event types. Mean-reversion decay. Peer endorsements.</p>
+
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="card-icon">📊</span>
+          <h3>5-Tier Scoring</h3>
+          <p>Novice → Trusted → Established → Expert → Elite. Score decays toward mean over time — idle agents don't bank reputation forever.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🎯</span>
+          <h3>18 Event Types</h3>
+          <p>Task completions, challenge solves, endorsements, violations, anomalies. Every interaction shapes the score.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🤝</span>
+          <h3>Endorsements</h3>
+          <p>Agents can endorse each other. Endorsement weight is proportional to endorser's own reputation score.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem;">
+        <pre><code><span class="comment"># Get agent reputation</span>
+GET /v1/agents/:id/reputation
+<span class="comment"># → {score: 750, tier: "Expert", events: […]}</span>
+
+<span class="comment"># Record an event</span>
+POST /v1/agents/:id/reputation/events
+<span class="comment">{"event_type": "task_completed", "weight": 1.0}</span></code></pre>
       </div>
     </div>
   </div>
-  
-  <!-- Footer -->
+
+  <!-- ── A2A + DID/VC + ANS + OIDCA ── -->
+  <div class="section" id="protocols">
+    <div class="container">
+      <p class="section-label">Protocol Integrations</p>
+      <h2 class="section-title">Open Standards Support</h2>
+      <p class="section-sub">BOTCHA plugs into the emerging agent identity ecosystem as a trust oracle, credential issuer, and attestation endpoint.</p>
+
+      <div class="grid grid-2" style="gap:1.25rem;">
+
+        <div class="card">
+          <span class="tag purple">Google A2A</span>
+          <h3>A2A Agent Card Attestation</h3>
+          <p>BOTCHA as a trust seal issuer for the Google Agent-to-Agent protocol. Attest any agent's A2A card — we sign a tamper-evident hash that any party can verify without calling back to BOTCHA.</p>
+          <ul class="endpoint-list" style="margin-top:1rem;">
+            <li><span class="method get">GET</span><span class="endpoint-path">/.well-known/agent.json</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/a2a/attest</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/a2a/verify-agent</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/a2a/trust-level/:url</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/a2a/cards</span></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="tag purple">W3C DID · VC</span>
+          <h3>DID / Verifiable Credentials</h3>
+          <p>BOTCHA is a W3C DID issuer (<code>did:web:botcha.ai</code>). Issue portable VC JWTs that anyone can verify offline using BOTCHA's public JWKS — no round-trip required.</p>
+          <ul class="endpoint-list" style="margin-top:1rem;">
+            <li><span class="method get">GET</span><span class="endpoint-path">/.well-known/did.json</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/.well-known/jwks</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/credentials/issue</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/credentials/verify</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/dids/:did/resolve</span></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="tag purple">OIDC-A · EAT</span>
+          <h3>OIDC-A Enterprise Auth</h3>
+          <p>BOTCHA as an <code>agent_attestation</code> endpoint in enterprise OIDC chains. Issues RFC 9334 Entity Attestation Tokens (EAT) and OIDC-A agent claims. OAuth 2.0 agent grant flow with human-in-the-loop support.</p>
+          <ul class="endpoint-list" style="margin-top:1rem;">
+            <li><span class="method get">GET</span><span class="endpoint-path">/.well-known/oauth-authorization-server</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/attestation/eat</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/attestation/oidc-agent-claims</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/auth/agent-grant</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/oidc/userinfo</span></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="tag purple">GoDaddy ANS</span>
+          <h3>Agent Name Service (ANS)</h3>
+          <p>BOTCHA as a verification layer for the GoDaddy ANS standard. DNS-based agent identity lookup with BOTCHA-issued ownership badges. Prove you own your agent's domain.</p>
+          <ul class="endpoint-list" style="margin-top:1rem;">
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/ans/resolve/:name</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/ans/discover</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/ans/nonce/:name</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/ans/verify</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/ans/botcha</span></li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── x402 ── -->
+  <div class="section" id="x402">
+    <div class="container">
+      <div class="split">
+        <div>
+          <p class="section-label">Micropayments</p>
+          <h2 class="section-title">x402 Payment Gating</h2>
+          <p style="color:var(--muted); margin-bottom:1.5rem; line-height:1.8;">
+            HTTP 402 micropayment flow using USDC on Base. Agents can pay <strong>$0.001 USDC</strong> for a BOTCHA token instead of solving a challenge.
+            BOTCHA also acts as a lightweight x402-compatible facilitator with Coinbase CDP settlement webhooks.
+          </p>
+          <ul class="endpoint-list">
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/x402/info</span><span class="endpoint-desc">Payment config discovery</span></li>
+            <li><span class="method get">GET</span><span class="endpoint-path">/v1/x402/challenge</span><span class="endpoint-desc">Pay → get access token</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/x402/verify-payment</span><span class="endpoint-desc">Verify raw payment proof</span></li>
+            <li><span class="method post">POST</span><span class="endpoint-path">/v1/x402/webhook</span><span class="endpoint-desc">CDP settlement notification</span></li>
+          </ul>
+        </div>
+        <div>
+          <pre><code><span class="comment"># Get payment requirements</span>
+GET /v1/x402/info
+<span class="comment"># → {
+#   amount: "0.001",
+#   currency: "USDC",
+#   network: "base",
+#   wallet: "0x..."
+# }</span>
+
+<span class="comment"># Pay and receive a BOTCHA token</span>
+GET /v1/x402/challenge
+  X-Payment: &lt;x402 payment proof&gt;
+<span class="comment"># → {access_token: "eyJ…", expires_in: 3600}</span>
+
+<span class="comment"># Or use the demo gated endpoint</span>
+GET /agent-only/x402
+  Authorization: Bearer &lt;botcha-token&gt;
+  X-Payment: &lt;x402 proof&gt;</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PLATFORM ── -->
+  <div class="section" id="platform">
+    <div class="container">
+      <p class="section-label">Platform</p>
+      <h2 class="section-title">Everything else you need</h2>
+      <p class="section-sub">Multi-tenant isolation, webhooks, badges, asymmetric JWTs, and a dashboard.</p>
+
+      <div class="grid grid-3">
+        <div class="card">
+          <span class="card-icon">🏢</span>
+          <span class="tag green">Multi-tenant</span>
+          <h3>App Isolation</h3>
+          <p>Create apps with unique API keys, per-app rate limits, email verification, and scoped tokens. Each app gets its own identity namespace.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🔔</span>
+          <span class="tag green">Webhooks</span>
+          <h3>Event Webhooks</h3>
+          <p>Subscribe to BOTCHA events — challenge solved, token issued, app created, payment received. HMAC-signed payloads with delivery retries and a full delivery log.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🏅</span>
+          <span class="tag green">Badges</span>
+          <h3>Verification Badges</h3>
+          <p>Shareable SVG verification proofs. Embed a BOTCHA badge in your agent's README or profile. Third parties can verify it without calling BOTCHA.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">🔑</span>
+          <span class="tag green">ES256</span>
+          <h3>Asymmetric JWT Signing</h3>
+          <p>ECDSA P-256 JWT signing with JWKS public key discovery. Third parties can validate tokens without a shared secret. HS256 backward compatible.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">📊</span>
+          <span class="tag green">Dashboard</span>
+          <h3>Agent Dashboard</h3>
+          <p>Per-app metrics, agent registry browser, token analytics. Agents solve a challenge to get a dashboard session — no human login path.</p>
+        </div>
+        <div class="card">
+          <span class="card-icon">📡</span>
+          <span class="tag green">Discovery</span>
+          <h3>Agent-First Discovery</h3>
+          <p><code>/ai.txt</code>, <code>/openapi.json</code>, <code>/.well-known/ai-plugin.json</code>, <code>/robots.txt</code> (welcomes all bots), response headers. Every endpoint is self-describing.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SDKS ── -->
+  <div class="section" id="sdks">
+    <div class="container">
+      <p class="section-label">SDKs & Packages</p>
+      <h2 class="section-title">Integrate in minutes</h2>
+      <p class="section-sub">TypeScript and Python SDKs cover the full API surface. Middleware for Express and FastAPI included.</p>
+
+      <div class="pkg-grid" style="margin-bottom:2rem;">
+        <a class="pkg-card" href="https://www.npmjs.com/package/@dupecom/botcha">
+          <span class="pkg-icon">📦</span>
+          <div class="pkg-name">@dupecom/botcha</div>
+          <div class="pkg-desc">TypeScript client SDK — full API + TAP methods</div>
+        </a>
+        <a class="pkg-card" href="https://pypi.org/project/botcha/">
+          <span class="pkg-icon">🐍</span>
+          <div class="pkg-name">botcha</div>
+          <div class="pkg-desc">Python client SDK — full API + TAP methods</div>
+        </a>
+        <a class="pkg-card" href="https://github.com/dupe-com/botcha/tree/main/packages/cloudflare-workers">
+          <span class="pkg-icon">☁️</span>
+          <div class="pkg-name">@dupecom/botcha-cloudflare</div>
+          <div class="pkg-desc">Cloudflare Workers runtime — hosts botcha.ai</div>
+        </a>
+        <a class="pkg-card" href="https://www.npmjs.com/package/@dupecom/botcha-langchain">
+          <span class="pkg-icon">🦜</span>
+          <div class="pkg-name">@dupecom/botcha-langchain</div>
+          <div class="pkg-desc">LangChain tool integration</div>
+        </a>
+        <a class="pkg-card" href="https://www.npmjs.com/package/@dupecom/botcha-cli">
+          <span class="pkg-icon">🔧</span>
+          <div class="pkg-name">@dupecom/botcha-cli</div>
+          <div class="pkg-desc">CLI — solve challenges, inspect tokens</div>
+        </a>
+        <a class="pkg-card" href="https://github.com/dupe-com/botcha/tree/main/src/middleware">
+          <span class="pkg-icon">🔐</span>
+          <div class="pkg-name">botcha.verify()</div>
+          <div class="pkg-desc">Express / FastAPI verification middleware</div>
+        </a>
+      </div>
+
+      <div class="split">
+        <pre><code><span class="comment">// TypeScript</span>
+<span class="kw">import</span> { BotchaClient } from <span class="str">'@dupecom/botcha/client'</span>;
+
+<span class="kw">const</span> client = <span class="kw">new</span> BotchaClient({
+  appId: <span class="str">'app_abc123'</span>,
+  appSecret: <span class="str">'sk_xyz789'</span>,
+});
+
+<span class="kw">const</span> token = <span class="kw">await</span> client.getAccessToken();
+<span class="comment">// → verified BOTCHA JWT, good for 1 hour</span></code></pre>
+        <pre><code><span class="comment"># Python</span>
+<span class="kw">from</span> botcha <span class="kw">import</span> BotchaClient
+
+client = BotchaClient(
+    app_id=<span class="str">"app_abc123"</span>,
+    app_secret=<span class="str">"sk_xyz789"</span>,
+)
+
+token = client.get_access_token()
+<span class="comment"># → verified BOTCHA JWT, good for 1 hour</span></code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FOOTER ── -->
   <footer>
     <div class="container">
-      <div class="footer-bottom">
-        <p>
-          Built by <a href="https://github.com/i8ramin">@i8ramin</a> · 
-          <a href="https://github.com/dupe-com/botcha">GitHub</a> · 
-          <a href="https://x.com/i8ramin">X @i8ramin</a>
-        </p>
-      </div>
+      <p style="margin-bottom:0.5rem;">
+        Built by <a href="https://github.com/i8ramin">@i8ramin</a> ·
+        <a href="https://github.com/dupe-com/botcha">GitHub</a> ·
+        <a href="https://x.com/i8ramin">X</a> ·
+        <a href="/whitepaper">Whitepaper</a> ·
+        <a href="/docs">Docs</a> ·
+        <a href="/openapi.json">OpenAPI</a> ·
+        <a href="/ai.txt">ai.txt</a>
+      </p>
+      <p>BOTCHA v0.22.0 — running on Cloudflare Workers</p>
     </div>
   </footer>
+
 </body>
 </html>
