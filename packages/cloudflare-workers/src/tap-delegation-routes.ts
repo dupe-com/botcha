@@ -14,6 +14,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { triggerWebhook, type KVNamespace as WebhookKVNamespace } from './webhooks.js';
 import { TAP_VALID_ACTIONS } from './tap-agents.js';
 import {
   createDelegation,
@@ -157,6 +158,17 @@ export async function createDelegationRoute(c: Context) {
     }
 
     const del = result.delegation!;
+
+    // Webhook: delegation.created
+    const delCreateCtx = c.executionCtx;
+    if (delCreateCtx?.waitUntil) {
+      delCreateCtx.waitUntil(triggerWebhook(
+        c.env.AGENTS as unknown as WebhookKVNamespace,
+        del.app_id,
+        'delegation.created',
+        { delegation_id: del.delegation_id, grantor_id: del.grantor_id, grantee_id: del.grantee_id }
+      ));
+    }
 
     return c.json({
       success: true,
@@ -378,6 +390,17 @@ export async function revokeDelegationRoute(c: Context) {
     }
 
     const del = result.delegation!;
+
+    // Webhook: delegation.revoked
+    const delRevokeCtx = c.executionCtx;
+    if (delRevokeCtx?.waitUntil) {
+      delRevokeCtx.waitUntil(triggerWebhook(
+        c.env.AGENTS as unknown as WebhookKVNamespace,
+        del.app_id,
+        'delegation.revoked',
+        { delegation_id: del.delegation_id, reason: del.revocation_reason }
+      ));
+    }
 
     return c.json({
       success: true,
