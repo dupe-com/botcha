@@ -11,6 +11,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import type { KVNamespace as SessionsKV } from './agents.js';
 import {
   getBotchaAgentCard,
   attestCard,
@@ -398,11 +399,15 @@ export async function getCardAttestationRoute(c: Context) {
  */
 export async function verifyAgentRoute(c: Context) {
   try {
-    const body = await c.req.json<{ agent_card?: any; agent_url?: string }>().catch(() => ({}));
+    const body = await c.req
+      .json<{ agent_card?: A2AAgentCard; agent_url?: string }>()
+      .catch(() => ({} as { agent_card?: A2AAgentCard; agent_url?: string }));
+
+    const sessions = c.env.SESSIONS as unknown as SessionsKV;
 
     // Shorthand: agent_url lookup
     if (body.agent_url && !body.agent_card) {
-      const cards = await listVerifiedCards(c.env.SESSIONS as KVNamespace, {
+      const cards = await listVerifiedCards(sessions, {
         agent_url: body.agent_url,
         verified_only: true,
         limit: 1,
@@ -442,11 +447,7 @@ export async function verifyAgentRoute(c: Context) {
       }, 400);
     }
 
-    const signingKey = (c.env as any).JWT_SIGNING_KEY
-      ? (() => { try { return JSON.parse((c.env as any).JWT_SIGNING_KEY); } catch { return undefined; } })()
-      : undefined;
-
-    const result = await verifyCard(body.agent_card, c.env.SESSIONS as KVNamespace, c.env.JWT_SECRET, signingKey);
+    const result = await verifyCard(sessions, c.env.JWT_SECRET, body.agent_card);
 
     if (!result.success) {
       return c.json({
@@ -466,7 +467,7 @@ export async function verifyAgentRoute(c: Context) {
       card_hash: result.card_hash,
       issued_at: result.issued_at,
       expires_at: result.expires_at,
-      issuer: result.issuer,
+      issuer: 'https://botcha.ai',
     });
   } catch (error) {
     console.error('A2A verify-agent route error:', error);
@@ -483,6 +484,7 @@ export async function verifyAgentRoute(c: Context) {
 export async function agentTrustLevelRoute(c: Context) {
   try {
     const agentUrl = decodeURIComponent(c.req.param('agent_url') || '');
+    const sessions = c.env.SESSIONS as unknown as SessionsKV;
 
     if (!agentUrl) {
       return c.json({
@@ -492,7 +494,7 @@ export async function agentTrustLevelRoute(c: Context) {
       }, 400);
     }
 
-    const cards = await listVerifiedCards(c.env.SESSIONS as KVNamespace, {
+    const cards = await listVerifiedCards(sessions, {
       agent_url: agentUrl,
       verified_only: true,
       limit: 1,
