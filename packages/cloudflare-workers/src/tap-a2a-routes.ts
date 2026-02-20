@@ -389,10 +389,148 @@ export async function getCardAttestationRoute(c: Context) {
   }
 }
 
+/**
+ * POST /v1/a2a/verify-agent
+ *
+ * Verify an agent by agent_card (with embedded attestation) or by agent_url.
+ * Convenience wrapper: accepts the same payload as /v1/a2a/verify-card
+ * plus an `agent_url` shorthand to look up the latest active attestation.
+ */
+export async function verifyAgentRoute(c: Context) {
+  try {
+    const body = await c.req.json<{ agent_card?: any; agent_url?: string }>().catch(() => ({}));
+
+    // Shorthand: agent_url lookup
+    if (body.agent_url && !body.agent_card) {
+      const cards = await listVerifiedCards(c.env.SESSIONS as KVNamespace, {
+        agent_url: body.agent_url,
+        verified_only: true,
+        limit: 1,
+      });
+
+      if (!cards.success || !cards.attestations?.length) {
+        return c.json({
+          success: false,
+          verified: false,
+          error: 'NOT_FOUND',
+          message: `No active attestation found for agent_url: ${body.agent_url}`,
+        }, 404);
+      }
+
+      const att = cards.attestations[0];
+      return c.json({
+        success: true,
+        verified: true,
+        agent_url: att.agent_url,
+        agent_name: att.agent_name,
+        attestation_id: att.attestation_id,
+        trust_level: att.trust_level,
+        issued_at: new Date(att.created_at).toISOString(),
+        expires_at: new Date(att.expires_at).toISOString(),
+        issuer: 'https://botcha.ai',
+      });
+    }
+
+    // Full card verification path (same as verify-card)
+    if (!body.agent_card) {
+      return c.json({
+        success: false,
+        verified: false,
+        error: 'MISSING_CARD',
+        message: 'Provide { agent_card: {...} } (Agent Card with embedded attestation) or { agent_url: "..." }',
+        example: { agent_card: { name: 'My Agent', url: 'https://example.com', extensions: { botcha_attestation: '...' } } },
+      }, 400);
+    }
+
+    const signingKey = (c.env as any).JWT_SIGNING_KEY
+      ? (() => { try { return JSON.parse((c.env as any).JWT_SIGNING_KEY); } catch { return undefined; } })()
+      : undefined;
+
+    const result = await verifyCard(body.agent_card, c.env.SESSIONS as KVNamespace, c.env.JWT_SECRET, signingKey);
+
+    if (!result.success) {
+      return c.json({
+        success: false,
+        verified: false,
+        error: result.error || 'VERIFICATION_FAILED',
+        valid: false,
+      }, result.error === 'MISSING_CARD' ? 400 : 200);
+    }
+
+    return c.json({
+      success: true,
+      verified: result.valid,
+      valid: result.valid,
+      attestation_id: result.attestation_id,
+      trust_level: result.trust_level,
+      card_hash: result.card_hash,
+      issued_at: result.issued_at,
+      expires_at: result.expires_at,
+      issuer: result.issuer,
+    });
+  } catch (error) {
+    console.error('A2A verify-agent route error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
+/**
+ * GET /v1/a2a/trust-level/:agent_url
+ *
+ * Returns the current trust level for an agent identified by URL.
+ * The :agent_url path param should be URL-encoded.
+ */
+export async function agentTrustLevelRoute(c: Context) {
+  try {
+    const agentUrl = decodeURIComponent(c.req.param('agent_url') || '');
+
+    if (!agentUrl) {
+      return c.json({
+        success: false,
+        error: 'MISSING_AGENT_URL',
+        message: 'Provide the agent URL as a URL-encoded path parameter: /v1/a2a/trust-level/:agent_url',
+      }, 400);
+    }
+
+    const cards = await listVerifiedCards(c.env.SESSIONS as KVNamespace, {
+      agent_url: agentUrl,
+      verified_only: true,
+      limit: 1,
+    });
+
+    if (!cards.success || !cards.attestations?.length) {
+      return c.json({
+        success: true,
+        agent_url: agentUrl,
+        trust_level: 'unverified',
+        attestation_count: 0,
+        message: 'No active BOTCHA attestation found for this agent.',
+      });
+    }
+
+    const att = cards.attestations[0];
+    return c.json({
+      success: true,
+      agent_url: att.agent_url,
+      agent_name: att.agent_name,
+      trust_level: att.trust_level,
+      attestation_id: att.attestation_id,
+      issued_at: new Date(att.created_at).toISOString(),
+      expires_at: new Date(att.expires_at).toISOString(),
+      verified: !att.revoked,
+    });
+  } catch (error) {
+    console.error('A2A trust-level route error:', error);
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: 'Internal server error' }, 500);
+  }
+}
+
 export default {
   agentCardRoute,
   attestCardRoute,
   verifyCardRoute,
   listCardsRoute,
   getCardAttestationRoute,
+  verifyAgentRoute,
+  agentTrustLevelRoute,
 };

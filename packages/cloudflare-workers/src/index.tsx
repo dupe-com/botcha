@@ -115,6 +115,8 @@ import {
   verifyCardRoute,
   listCardsRoute,
   getCardAttestationRoute,
+  verifyAgentRoute,
+  agentTrustLevelRoute,
 } from './tap-a2a-routes.js';
 import {
   type AnalyticsEngineDataset,
@@ -2468,10 +2470,13 @@ app.get('/v1/dids/:did/resolve', resolveDIDRoute);
 
 // BOTCHA's own A2A Agent Card (public discovery)
 app.get('/.well-known/agent.json', agentCardRoute);
+app.get('/v1/a2a/agent-card', agentCardRoute); // alias — same content at predictable /v1/ path
 
 // A2A attestation endpoints
 app.post('/v1/a2a/attest', attestCardRoute);
 app.post('/v1/a2a/verify-card', verifyCardRoute);
+app.post('/v1/a2a/verify-agent', verifyAgentRoute);  // by card or agent_url shorthand
+app.get('/v1/a2a/trust-level/:agent_url', agentTrustLevelRoute);
 app.get('/v1/a2a/cards', listCardsRoute);
 app.get('/v1/a2a/cards/:id', getCardAttestationRoute);
 // ============ AGENT REGISTRY API ============
