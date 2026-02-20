@@ -4,3 +4,6 @@ dist/
 .env
 .env.local
 .hive/
+
+# Auto Claude data directory
+.auto-claude/

@@ -1,6 +1,6 @@
 # BOTCHA — Known Bugs & Future Work
 
-*Last updated: 2026-02-20 by Choco 🐢*
+*Last updated: 2026-02-20 by Codex*
 
 ---
 
@@ -29,11 +29,12 @@
 ## 🔄 IN PROGRESS (PRs #26, #28 — open, fixes pushed, not yet merged)
 
 ### PR #26 — A2A Agent Card Attestation
-**Pushed commit `caedb07` with fixes. Preview redeploying.**
+**Pushed commits `caedb07` + `f27912d` with fixes.**
 
-- ✅ FIXED: `GET /v1/a2a/agent-card` — was 404 (only registered at `/.well-known/agent.json`); now aliased at `/v1/a2a/agent-card` too
-- ✅ FIXED: `POST /v1/a2a/verify-agent` — was not implemented; accepts `{ agent_url }` shorthand or full `{ agent_card }` with embedded attestation
-- ✅ FIXED: `GET /v1/a2a/trust-level/:agent_url` — was not implemented; returns `unverified` (not 404) when no attestation exists
+- ✅ `GET /v1/a2a/agent-card` alias added (no longer 404)
+- ✅ `POST /v1/a2a/verify-agent` implemented
+- ✅ `GET /v1/a2a/trust-level/:agent_url` implemented
+- ✅ Type-safe/compiling `verify-agent` flow and corrected `verifyCard(...)` invocation
 
 **Remaining known issues (🟡 lower priority):**
 - 🟡 Re-attesting same `agent_url` creates duplicate attestations — no deduplication or revocation of prior attestations for the same URL
@@ -45,25 +46,27 @@
 3. Rebase onto main (will conflict with #25/#27/#29 squash-merges) and merge
 
 ### PR #28 — OIDC-A Attestation
-**Test agent running as of 16:47 UTC. Results not yet in.**
+**Pushed commit `1e2ea84` with security + tests.**
 
-**What to test:**
-- `GET /.well-known/oauth-authorization-server` — ✅ confirmed working (200, correct shape)
-- `POST /v1/attestation/eat` — EAT/RFC 9711 entity attestation token issuance
-- `POST /v1/attestation/oidc-agent-claims` — OIDC-A claims block issuance
-- `POST /v1/auth/agent-grant` — agent grant flow
-- `GET /v1/auth/agent-grant/:id/status` — grant status
-- `POST /v1/auth/agent-grant/:id/resolve` — grant resolution
-- `GET /v1/oidc/userinfo` — OIDC UserInfo (needs Bearer token)
+**Fixed:**
+- ✅ `GET /v1/auth/agent-grant/:id/status` now requires bearer auth and enforces same-app ownership
+- ✅ `POST /v1/auth/agent-grant/:id/resolve` now requires bearer auth and enforces same-app ownership
+- ✅ `POST /v1/attestation/eat` now validates `ttl_seconds` as a positive finite number
+- ✅ OIDC docs/metadata now use `/.well-known/jwks` (not `/v1/jwks`)
+- ✅ Added focused OIDC-A tests (`tests/unit/agents/tap-oidca.test.ts`)
 
 **Known issue:**
 - 🟡 OIDCA routes are NOT documented in OpenAPI spec (`static.ts`) — spec only covers pre-existing TAP routes
 
 **TODO to merge:**
-1. Read OIDCA test agent report (when it completes)
-2. Fix any bugs found
-3. Add OIDCA routes to OpenAPI spec in `static.ts`
-4. Rebase onto main and merge
+1. Add OIDC-A routes to OpenAPI spec in `static.ts`
+2. Decide on stricter admin policy for grant resolve (currently app-owner scoped)
+3. Rebase onto main and merge
+
+### TAP Route Test Stability (cross-branch)
+- ✅ `tests/unit/agents/tap-routes.test.ts` now passes on current branch (`41/41`)
+- ✅ Replaced `vi.mocked(...)` usage with Bun-compatible explicit mocks
+- ✅ Added missing auth stubs in rotate-key tests
 
 ---
 

@@ -70,7 +70,7 @@ See [doc/DID-VC.md](./doc/DID-VC.md) for the integration guide.
 
 #### 🔄 A2A Agent Card Attestation (PR #26 — in progress, pending merge)
 
-BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards. Fixes pushed; preview redeploying.
+BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards.
 
 **Planned endpoints (not yet in main):**
 - `GET /.well-known/agent.json` — BOTCHA's A2A Agent Card
@@ -85,11 +85,16 @@ BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards. Fixes pus
 - Re-attesting same `agent_url` creates duplicate attestations
 - `ATTESTATION_FAILED` error code used for field validation errors (should be `INVALID_CARD`)
 
+**Recent pre-merge fixes pushed:**
+- Added `/v1/a2a/agent-card` alias route
+- Added missing `/v1/a2a/verify-agent` and `/v1/a2a/trust-level/:agent_url` routes
+- Fixed `verify-agent` route typing/call-order bugs and compile breakage
+
 See [doc/A2A.md](./doc/A2A.md) for the draft guide.
 
 #### 🔄 OIDC-A Attestation (PR #28 — in progress, pending merge)
 
-Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims. Test agent running; results pending.
+Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims.
 
 **Planned endpoints (not yet in main):**
 - `GET /.well-known/oauth-authorization-server` — OAuth/OIDC-A discovery
@@ -102,6 +107,13 @@ Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711)
 
 **Known issues (pre-merge):**
 - OIDCA routes not yet in OpenAPI spec (`static.ts`)
+
+**Recent pre-merge fixes pushed:**
+- Secured grant status polling (`GET /v1/auth/agent-grant/:id/status`) with bearer auth + app ownership checks
+- Secured grant resolution (`POST /v1/auth/agent-grant/:id/resolve`) with bearer auth + app ownership checks
+- Added strict positive `ttl_seconds` validation on EAT issuance
+- Corrected JWKS discovery references to `/.well-known/jwks`
+- Added focused OIDC-A tests in `tests/unit/agents/tap-oidca.test.ts`
 
 See [doc/OIDCA.md](./doc/OIDCA.md) for the draft guide.
 

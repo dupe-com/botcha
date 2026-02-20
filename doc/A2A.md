@@ -1,6 +1,6 @@
 # A2A Agent Card Attestation
 
-> **Status:** 🔄 In Progress — PR #26 open, fixes pushed, preview redeploying. **Not yet merged to main.**
+> **Status:** 🔄 In Progress — PR #26 open with fixes pushed (`f27912d`). **Not yet merged to main.**
 
 BOTCHA acts as a trust seal issuer for the [Google A2A protocol](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/) Agent Cards. Any agent that publishes an A2A Agent Card can submit it to BOTCHA for attestation; BOTCHA produces a tamper-evident trust seal that third parties can verify without contacting BOTCHA again.
 
@@ -29,8 +29,15 @@ Authorization: Bearer <botcha-token>
 Content-Type: application/json
 
 {
-  "agent_url": "https://myagent.example",
-  "agent_card": { ... }      # optional — BOTCHA will fetch from agent_url if omitted
+  "card": {
+    "name": "My Commerce Agent",
+    "url": "https://myagent.example",
+    "version": "1.0.0",
+    "capabilities": { "streaming": false },
+    "skills": [{ "id": "browse", "name": "Browse" }]
+  },
+  "duration_seconds": 86400,
+  "trust_level": "verified"
 }
 ```
 
@@ -38,10 +45,23 @@ Returns a BOTCHA trust seal (tamper-evident hash of the card + BOTCHA signature)
 
 ```json
 {
-  "attestation_id": "att_...",
-  "agent_url": "https://myagent.example",
-  "trust_seal": "eyJ...",
-  "attested_at": "2026-02-20T17:39:00Z"
+  "success": true,
+  "attestation": {
+    "attestation_id": "uuid",
+    "agent_url": "https://myagent.example",
+    "trust_level": "verified",
+    "token": "eyJ..."
+  },
+  "attested_card": {
+    "name": "My Commerce Agent",
+    "url": "https://myagent.example",
+    "extensions": {
+      "botcha_attestation": {
+        "token": "eyJ...",
+        "card_hash": "..."
+      }
+    }
+  }
 }
 ```
 
@@ -52,7 +72,14 @@ POST /v1/a2a/verify-card
 Content-Type: application/json
 
 {
-  "trust_seal": "eyJ..."
+  "card": {
+    "...": "...",
+    "extensions": {
+      "botcha_attestation": {
+        "token": "eyJ..."
+      }
+    }
+  }
 }
 ```
 
@@ -64,7 +91,7 @@ Content-Type: application/json
 
 { "agent_url": "https://myagent.example" }
 # or
-{ "agent_card": { ... } }    # card with embedded attestation
+{ "agent_card": { ... } }    # full card with embedded attestation
 ```
 
 ## Trust Level Lookup
@@ -84,8 +111,8 @@ GET /v1/a2a/cards/:id       # get a specific attested card by ID
 
 ## Known Limitations (Pre-Merge)
 
-- **Duplicate attestations:** Re-submitting the same `agent_url` creates a new attestation without revoking the prior one. No deduplication logic yet.
-- **Wrong error code:** Validation errors on `POST /v1/a2a/attest` currently return `ATTESTATION_FAILED` — should be `INVALID_CARD` or `MISSING_REQUIRED_FIELD`.
+- Re-submitting the same `agent_url` creates additional attestations without deduping or revoking prior active records.
+- Validation failures on `POST /v1/a2a/attest` still map to `ATTESTATION_FAILED`; should use a dedicated input error code.
 - Routes are not yet in the OpenAPI spec.
 
 ## References

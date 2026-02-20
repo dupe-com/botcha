@@ -1,10 +1,10 @@
 # OIDC-A Attestation
 
-> **Status:** 🔄 In Progress — PR #28 open, test agent running, results pending. **Not yet merged to main.**
+> **Status:** 🔄 In Progress — PR #28 open with security/test fixes pushed (`1e2ea84`). **Not yet merged to main.**
 
-BOTCHA implements OIDC-A (OpenID Connect for Agents) attestation for enterprise agent authentication chains. This covers Entity Attestation Tokens (EAT, RFC 9711) and OIDC-A agent claims blocks — the building blocks for OAuth2-style agent grant flows in enterprise environments.
+BOTCHA implements OIDC-A (OpenID Connect for Agents) attestation for enterprise agent authentication chains. This covers Entity Attestation Tokens (EAT) and OIDC-A agent claims blocks, plus an OAuth-style agent grant flow.
 
-> ⚠️ **This feature is not yet available on botcha.ai.** The endpoints below describe the planned API. This document will be updated when PR #28 merges.
+> ⚠️ **This feature is not yet available on botcha.ai main.** The endpoints below reflect the current PR contract and will be finalized at merge.
 
 ## What is OIDC-A?
 
@@ -22,7 +22,7 @@ The discovery doc is already confirmed working (200, correct shape) in the previ
 
 ## Entity Attestation Tokens (EAT)
 
-Issue an EAT per [RFC 9711](https://www.rfc-editor.org/rfc/rfc9711):
+Issue an EAT token:
 
 ```bash
 POST /v1/attestation/eat
@@ -30,11 +30,10 @@ Authorization: Bearer <botcha-token>
 Content-Type: application/json
 
 {
-  "agent_id": "agent_abc123",
-  "claims": {
-    "hardware_id": "...",
-    "software_version": "1.0.0"
-  }
+  "nonce": "optional-client-nonce",
+  "agent_model": "gpt-5",
+  "ttl_seconds": 900,
+  "verification_method": "speed-challenge"
 }
 ```
 
@@ -50,9 +49,14 @@ Authorization: Bearer <botcha-token>
 Content-Type: application/json
 
 {
-  "agent_id": "agent_abc123",
-  "scopes": ["read:invoices", "write:orders"],
-  "operator": "Acme Corp"
+  "agent_model": "gpt-5",
+  "agent_version": "1.0.0",
+  "agent_capabilities": ["agent:tool-use"],
+  "agent_operator": "Acme Corp",
+  "human_oversight_required": true,
+  "task_id": "task-123",
+  "task_purpose": "invoice reconciliation",
+  "nonce": "optional-client-nonce"
 }
 ```
 
@@ -69,11 +73,14 @@ Authorization: Bearer <botcha-token>
 Content-Type: application/json
 
 {
-  "agent_id": "agent_abc123",
-  "requested_scopes": ["read:invoices"],
-  "resource": "https://api.example.com"
+  "scope": "agent:read openid",
+  "human_oversight_required": true,
+  "agent_model": "gpt-5",
+  "agent_operator": "Acme Corp",
+  "task_id": "task-123",
+  "task_purpose": "invoice reconciliation"
 }
-# Returns: { "grant_id": "grant_...", "status": "pending" }
+# Returns signed grant token + optional pending oversight URL
 
 # Poll status
 GET /v1/auth/agent-grant/:id/status
@@ -84,7 +91,7 @@ POST /v1/auth/agent-grant/:id/resolve
 Authorization: Bearer <botcha-token>
 Content-Type: application/json
 
-{ "approved": true }
+{ "decision": "approved" }
 ```
 
 ## OIDC UserInfo
@@ -98,9 +105,9 @@ Returns OIDC-A UserInfo claims for the authenticated agent.
 
 ## Known Limitations (Pre-Merge)
 
-- OIDCA routes are **not yet documented in the OpenAPI spec** (`static.ts`). This will be fixed before merge.
-- Test agent results are still pending — route-level bugs may exist.
-- The `/.well-known/oauth-authorization-server` discovery endpoint is confirmed working; other routes are unconfirmed.
+- OIDC-A routes are not yet documented in the OpenAPI spec (`static.ts`).
+- `POST /v1/auth/agent-grant/:id/resolve` currently requires BOTCHA bearer auth and app ownership checks, but does not yet enforce a stricter admin role model.
+- Grant status/resolve is app-scoped: only the owning `app_id` can poll/resolve a grant.
 
 ## References
 
