@@ -87,7 +87,6 @@ jobs:
               ``,
               `# Challenge flow`,
               `APP_ID=app_c4e8aade83ce32f0`,
-              `APP_SECRET=sk_9d70ac2f1f28b224e8a49e3e1af62afb`,
               `curl "$BASE/v1/challenge?app_id=$APP_ID"`,
               ``,
               `# New endpoints on this PR (check EPIC.md for specifics)`,

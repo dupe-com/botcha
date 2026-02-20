@@ -594,7 +594,7 @@ export async function generateANSNonce(
   ansName: string,
 ): Promise<string> {
   const nonce = generateId('nonce');
-  const key = `ans_nonce:${ansName}`;
+  const key = buildANSNonceKey(ansName);
   await kv.put(key, JSON.stringify({ nonce, created_at: Date.now() }), {
     expirationTtl: 600, // 10 minutes
   });
@@ -610,7 +610,7 @@ export async function consumeANSNonce(
   ansName: string,
   providedNonce: string,
 ): Promise<boolean> {
-  const key = `ans_nonce:${ansName}`;
+  const key = buildANSNonceKey(ansName);
   const raw = await kv.get(key);
   if (!raw) return false;
 
@@ -620,6 +620,15 @@ export async function consumeANSNonce(
   // Delete nonce — single use
   await kv.delete(key);
   return true;
+}
+
+function buildANSNonceKey(ansName: string): string {
+  const parsed = parseANSName(ansName);
+  if (parsed.success && parsed.components) {
+    const canonical = `ans://${parsed.components.version}.${parsed.components.fqdn}`.toLowerCase();
+    return `ans_nonce:${canonical}`;
+  }
+  return `ans_nonce:${ansName.trim().toLowerCase()}`;
 }
 
 // ============ BOTCHA'S OWN ANS RECORD ============

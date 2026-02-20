@@ -92,11 +92,13 @@ import {
   discoverANSAgentsRoute,
   getBotchaANSRoute,
 } from './tap-ans-routes.js';
+import {
   didDocumentRoute,
   issueVCRoute,
   verifyVCRoute,
   resolveDIDRoute,
-} from './tap-vc-routes.js';import {
+} from './tap-vc-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -122,6 +124,7 @@ type Bindings = {
   BOTCHA_INTERNAL_APP_ID: string; // Internal demo app for homepage challenges
   BOTCHA_PAYMENT_WALLET?: string; // BOTCHA receiving wallet (overrides default)
   BOTCHA_WEBHOOK_SECRET?: string; // HMAC secret for x402 webhook verification
+  BOTCHA_X402_ALLOW_STRUCTURAL?: string; // Unsafe dev escape hatch for structural-only x402 checks
 };
 
 type Variables = {
@@ -164,6 +167,11 @@ const APP_GATE_OPEN_PATHS = [
   '/v1/x402/verify-payment',        // POST: facilitator payment verification
   '/v1/x402/webhook',               // POST: settlement notifications
   '/v1/x402/info',                  // GET: public payment configuration
+  // Public ANS + DID/VC endpoints under /v1/*
+  '/v1/ans/discover',
+  '/v1/ans/botcha',
+  '/v1/ans/resolve/lookup',
+  '/v1/credentials/verify',
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
@@ -171,11 +179,21 @@ function isAppManagementPath(path: string): boolean {
   return /^\/v1\/apps\/[^/]+\/(verify-email|resend-verification)$/.test(path);
 }
 
+function isPublicV1Path(path: string): boolean {
+  // Public ANS resolution paths: /v1/ans/resolve/:name
+  if (path.startsWith('/v1/ans/resolve/')) return true;
+
+  // Public DID resolution path: /v1/dids/:did/resolve
+  if (/^\/v1\/dids\/[^/]+\/resolve$/.test(path)) return true;
+
+  return false;
+}
+
 app.use('/v1/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
 
   // Allow open paths through without app_id
-  if (APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path)) {
+  if (APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path) || isPublicV1Path(path)) {
     return next();
   }
 

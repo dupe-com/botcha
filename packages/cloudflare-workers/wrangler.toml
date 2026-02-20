@@ -89,10 +89,9 @@ routes = []  # Override prod routes — preview uses workers.dev only
 BOTCHA_VERSION = "preview"
 BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
 BOTCHA_ENV = "preview"
-# Static test secrets for preview workers — NOT used in production
-JWT_SECRET = "botcha-preview-secret-for-testing-only"
-# Static ephemeral EC key — production uses Cloudflare secret `wrangler secret put JWT_SIGNING_KEY`
-JWT_SIGNING_KEY = '{"key_ops":["sign"],"ext":true,"kty":"EC","x":"GEVaqHrpEP7_YZFWXIsbqKGyNVpY5Xyt7reMgP9Yje8","y":"-kkzazxvkdLB0Vm2sPWgRkPw6gipZuM5FmrO-KvaswE","crv":"P-256","d":"Pre0xKfoqCbOCCuaR5jmAuLHFAiRWY1oKJLdWwaksCg","kid":"botcha-preview-1","use":"sig","alg":"ES256"}'
+# Set preview auth secrets via Cloudflare Secrets, not git:
+#   wrangler secret put JWT_SECRET --env preview
+#   wrangler secret put JWT_SIGNING_KEY --env preview
 
 [[env.preview.kv_namespaces]]
 binding = "CHALLENGES"
