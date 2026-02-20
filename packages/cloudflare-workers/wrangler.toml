@@ -83,6 +83,7 @@ local_protocol = "http"
 # No route bindings — workers.dev only
 [env.preview]
 workers_dev = true
+routes = []  # Override prod routes — preview uses workers.dev only
 
 [env.preview.vars]
 BOTCHA_VERSION = "preview"
