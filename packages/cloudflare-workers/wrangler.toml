@@ -89,6 +89,8 @@ routes = []  # Override prod routes — preview uses workers.dev only
 BOTCHA_VERSION = "preview"
 BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
 BOTCHA_ENV = "preview"
+# Static test secret for preview workers — NOT used in production
+JWT_SECRET = "botcha-preview-secret-for-testing-only"
 
 [[env.preview.kv_namespaces]]
 binding = "CHALLENGES"
