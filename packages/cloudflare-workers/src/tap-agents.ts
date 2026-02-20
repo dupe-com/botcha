@@ -31,6 +31,12 @@ export interface TAPAgent extends Agent {
   issuer?: string;              // Who issued/verified this agent
   tap_enabled?: boolean;        // Whether agent supports TAP
   last_verified_at?: number;    // Last successful TAP verification
+
+  // ANS (Agent Name Service) integration
+  ans_name?: string;            // ANS name e.g. "ans://v1.0.myagent.example.com"
+  ans_badge_id?: string;        // BOTCHA-issued ANS verification badge ID
+  ans_trust_level?: 'domain-validated' | 'key-validated' | 'behavior-validated';
+  ans_verified_at?: number;     // When ANS verification was last performed
 }
 
 /** Valid TAP capability actions — single source of truth */
@@ -82,6 +88,7 @@ export async function registerTAPAgent(
     capabilities?: TAPCapability[];
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
+    ans_name?: string;   // optional ANS identity link
   }
 ): Promise<{ success: boolean; agent?: TAPAgent; error?: string }> {
   try {
@@ -104,7 +111,10 @@ export async function registerTAPAgent(
       trust_level: registration.trust_level || 'basic',
       issuer: registration.issuer,
       tap_enabled: Boolean(registration.public_key),
-      last_verified_at: undefined
+      last_verified_at: undefined,
+
+      // ANS fields
+      ans_name: registration.ans_name,
     };
 
     // Validate TAP configuration

@@ -86,6 +86,13 @@ import {
   x402InfoRoute,
 } from './tap-x402-routes.js';
 import {
+  resolveANSNameRoute,
+  getANSNonceRoute,
+  verifyANSNameRoute,
+  discoverANSAgentsRoute,
+  getBotchaANSRoute,
+} from './tap-ans-routes.js';
+import {
   type AnalyticsEngineDataset,
   trackChallengeGenerated,
   trackChallengeVerified,
@@ -2369,6 +2376,33 @@ app.post('/v1/x402/webhook', x402WebhookRoute);
 
 // Demo: BOTCHA token + x402 payment required (double-gated resource)
 app.get('/agent-only/x402', agentOnlyX402Route);
+
+// ============ ANS (AGENT NAME SERVICE) ENDPOINTS ============
+// BOTCHA as verification layer for the GoDaddy-led ANS standard.
+// ANS gives domain-level trust; BOTCHA adds behavior verification.
+// Reference: https://agentnameregistry.org
+//
+// NOTE: /v1/ans/discover and /v1/ans/botcha are public (no auth required).
+// /v1/ans/resolve/:name is public (DNS lookup, no sensitive data).
+// /v1/ans/verify requires app auth (issues signed credentials).
+// /v1/ans/nonce/:name requires app auth (nonce for ownership proof).
+
+// Public: BOTCHA's own ANS identity
+app.get('/v1/ans/botcha', getBotchaANSRoute);
+
+// Public: resolve any ANS name
+app.get('/v1/ans/resolve/lookup', resolveANSNameRoute);
+app.get('/v1/ans/resolve/:name', resolveANSNameRoute);
+
+// Public: discover BOTCHA-verified ANS agents
+app.get('/v1/ans/discover', discoverANSAgentsRoute);
+
+// Auth required: get a nonce for ownership verification
+app.get('/v1/ans/nonce/:name', getANSNonceRoute);
+app.get('/v1/ans/nonce', getANSNonceRoute);
+
+// Auth required: verify ANS ownership and issue badge
+app.post('/v1/ans/verify', verifyANSNameRoute);
 
 // ============ AGENT REGISTRY API ============
 
