@@ -40,6 +40,8 @@
   },
   "homepage": "https://botcha.ai",
   "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
     "hono": "^4.7.0",
     "jose": "^5.9.6"
   },

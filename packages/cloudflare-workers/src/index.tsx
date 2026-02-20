@@ -125,7 +125,6 @@ type Bindings = {
   BOTCHA_INTERNAL_APP_ID: string; // Internal demo app for homepage challenges
   BOTCHA_PAYMENT_WALLET?: string; // BOTCHA receiving wallet (overrides default)
   BOTCHA_WEBHOOK_SECRET?: string; // HMAC secret for x402 webhook verification
-  BOTCHA_X402_ALLOW_STRUCTURAL?: string; // Unsafe dev escape hatch for structural-only x402 checks
 };
 
 type Variables = {

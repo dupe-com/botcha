@@ -89,9 +89,9 @@ routes = []  # Override prod routes — preview uses workers.dev only
 BOTCHA_VERSION = "preview"
 BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
 BOTCHA_ENV = "preview"
-# Set preview auth secrets via Cloudflare Secrets, not git:
-#   wrangler secret put JWT_SECRET --env preview
-#   wrangler secret put JWT_SIGNING_KEY --env preview
+# Preview auth secrets are synced in CI from GitHub Actions secrets:
+#   PREVIEW_JWT_SECRET
+#   PREVIEW_JWT_SIGNING_KEY (optional; enables ES256/JWKS in preview)
 
 [[env.preview.kv_namespaces]]
 binding = "CHALLENGES"

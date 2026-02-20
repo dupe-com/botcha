@@ -10,6 +10,13 @@ Reviewed these commits in depth:
 - `bbe8b7e` ci: PR preview environments
 - `4c00504` fix: `/v1/token/validate` open path + JWK support
 
+## Status Update (Branch: `feat/epic-hardening-phase1`)
+- Workers package build regressions are fixed; root and workers `tsc` both pass.
+- x402 now performs cryptographic ERC-3009 EIP-712 signature verification (secp256k1 recovery), replacing structural-only acceptance.
+- x402 route-level 503 gating for verification backend unavailability has been removed for valid cryptographic proofs.
+- App-gate bypass logic is extracted to `app-gate.ts` and covered by dedicated tests.
+- Preview workflow now supports automatic per-PR secret sync from GitHub Actions secrets.
+
 ## Validation Run
 - `bun run build` (repo root): passes.
 - `bun test tests/unit/agents/tap-x402.test.ts tests/unit/agents/tap-ans.test.ts tests/unit/agents/tap-did.test.ts tests/unit/agents/tap-vc.test.ts`: `148` passing.

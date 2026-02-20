@@ -78,15 +78,6 @@ function extractAppId(c: Context): string | undefined {
   );
 }
 
-/**
- * Structural-only verification is unsafe in production because it does not
- * perform full EIP-712 signature recovery or on-chain settlement checks.
- * Default: disabled unless explicitly opted in.
- */
-function allowStructuralX402(env: any): boolean {
-  return String(env.BOTCHA_X402_ALLOW_STRUCTURAL || '').toLowerCase() === 'true';
-}
-
 // ============ ROUTE HANDLERS ============
 
 /**
@@ -166,15 +157,6 @@ export async function verifyPaymentRoute(c: Context): Promise<Response> {
         error: result.error,
         errorCode: result.errorCode,
       }, 400);
-    }
-
-    if (!allowStructuralX402(c.env)) {
-      return c.json({
-        verified: false,
-        error: 'PAYMENT_VERIFICATION_UNAVAILABLE',
-        errorCode: 'VERIFICATION_BACKEND_UNAVAILABLE',
-        message: 'x402 verification backend is not configured for secure cryptographic settlement checks.',
-      }, 503);
     }
 
     // Return x402-compliant success response
@@ -280,15 +262,6 @@ export async function x402ChallengeRoute(c: Context): Promise<Response> {
           buildPaymentRequiredDescriptor(resource, { payTo: wallet, appId })
         ),
       });
-    }
-
-    if (!allowStructuralX402(c.env)) {
-      return c.json({
-        verified: false,
-        error: 'PAYMENT_VERIFICATION_UNAVAILABLE',
-        errorCode: 'VERIFICATION_BACKEND_UNAVAILABLE',
-        message: 'x402 token issuance is disabled until secure cryptographic/facilitator verification is configured.',
-      }, 503);
     }
 
     // Payment verified — issue BOTCHA token
@@ -466,13 +439,6 @@ export async function agentOnlyX402Route(c: Context): Promise<Response> {
         buildPaymentRequiredDescriptor(resource, { payTo: wallet })
       ),
     });
-  }
-
-  if (!allowStructuralX402(c.env)) {
-    return c.json({
-      error: 'PAYMENT_VERIFICATION_UNAVAILABLE',
-      message: 'x402 resource access is disabled until secure cryptographic/facilitator verification is configured.',
-    }, 503);
   }
 
   // ---- Both verified! ----
@@ -675,9 +641,7 @@ export async function x402InfoRoute(c: Context): Promise<Response> {
       confirmation_header: 'X-Payment-Response',
       spec: 'https://x402.org',
     },
-    verification_mode: allowStructuralX402(c.env)
-      ? 'structural-only (unsafe, dev use only)'
-      : 'secure verification required (structural-only disabled)',
+    verification_mode: 'cryptographic-signature-check + nonce replay protection',
   });
 }
 

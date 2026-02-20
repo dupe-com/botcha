@@ -533,7 +533,7 @@ Feature: x402 HTTP Payment Required protocol — verified agents pay $0.001 USDC
 Feature: Pay-for-verification — agents that don't want to solve a challenge can pay instead
 Feature: Double-gated resources — requires BOTH BOTCHA token AND x402 micropayment
 Feature: Webhook settlement — x402 facilitators notify BOTCHA of on-chain payments
-Feature: Secure mode default — structural-only x402 proofs are rejected unless BOTCHA_X402_ALLOW_STRUCTURAL=true
+Feature: Cryptographic EIP-712 signature verification (ERC-3009 transferWithAuthorization)
 Endpoint: GET https://botcha.ai/v1/x402/info - x402 payment configuration (wallet, amount, network) — PUBLIC
 Endpoint: GET https://botcha.ai/v1/x402/challenge - Pay $0.001 USDC → receive BOTCHA access_token — PUBLIC (x402 auth)
   Without X-Payment header: 402 + X-Payment-Required: { scheme, network, maxAmountRequired, payTo, asset }
@@ -550,7 +550,6 @@ x402-price-units: 1000 (USDC atomic units, 6 decimals = $0.001)
 x402-payment-method: ERC-3009 transferWithAuthorization (EIP-712 signed)
 x402-header: X-Payment: <base64-encoded X402PaymentProof JSON>
 x402-response-header: X-Payment-Response: { success, txHash, networkId }
-x402-unsafe-override: BOTCHA_X402_ALLOW_STRUCTURAL=true (dev only; not recommended)
 x402-spec: https://x402.org
 
 # ANS (Agent Name Service)
