@@ -38,12 +38,12 @@ src/tap-routes.ts(925,1): error TS1005: '}' expected.
 6. **High**: Preview workflow exposes app secret in PR comments and preview env includes committed JWT secrets/private key (`.github/workflows/preview.yml:90`, `packages/cloudflare-workers/wrangler.toml:93`, `packages/cloudflare-workers/wrangler.toml:95`).
 
 ## Per-Commit Reports
-- `reports/commit-deep-dive-2026-02-20/f72e0eb-pr25-x402.md`
-- `reports/commit-deep-dive-2026-02-20/7d05dad-pr27-ans.md`
-- `reports/commit-deep-dive-2026-02-20/87ef39f-pr29-did-vc.md`
-- `reports/commit-deep-dive-2026-02-20/bbe8b7e-1d89702-preview-ci.md`
-- `reports/commit-deep-dive-2026-02-20/4c00504-token-validate-jwk.md`
-- `reports/commit-deep-dive-2026-02-20/1b6a3d0-bugs-doc.md`
+- `./f72e0eb-pr25-x402.md`
+- `./7d05dad-pr27-ans.md`
+- `./87ef39f-pr29-did-vc.md`
+- `./bbe8b7e-1d89702-preview-ci.md`
+- `./4c00504-token-validate-jwk.md`
+- `./1b6a3d0-bugs-doc.md`
 
 ## Recommended Plan Of Attack
 ### Phase 0 (Immediate, block release)

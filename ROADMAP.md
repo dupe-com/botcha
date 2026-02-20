@@ -375,25 +375,23 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 
 ---
 
-## In Progress
+## Current Status
 
-### 🔄 A2A Agent Card Attestation — IN PROGRESS (PR #26)
-**What:** BOTCHA as a trust seal issuer for Google A2A protocol Agent Cards. Fixes pushed; preview redeploying. Not yet merged.
-**Implementation (planned):**
+### ✅ A2A Agent Card Attestation — SHIPPED (v0.23.0, PR #26)
+**What:** BOTCHA as a trust seal issuer for Google A2A protocol Agent Cards.
+**Implementation:**
 - `GET /.well-known/agent.json` and `GET /v1/a2a/agent-card` — BOTCHA's A2A Agent Card
 - `POST /v1/a2a/attest` — attest an agent's A2A card → get BOTCHA trust seal
 - `POST /v1/a2a/verify-card` — verify an attested card (tamper-evident hash check)
 - `POST /v1/a2a/verify-agent` — verify agent by card or `agent_url`
 - `GET /v1/a2a/trust-level/:agent_url` — get current trust level
 - `GET /v1/a2a/cards` and `GET /v1/a2a/cards/:id` — registry browsing
-**Known issues (pre-merge):**
-- 🟡 Re-attesting same `agent_url` creates duplicate attestations (no deduplication)
-- 🟡 `ATTESTATION_FAILED` error code used for validation errors (should be `INVALID_CARD`)
-**Docs (draft):** [doc/A2A.md](./doc/A2A.md)
+**Docs:** [doc/A2A.md](./doc/A2A.md)
+**Open issues:** tracked in [BUGS.md](./BUGS.md)
 
 ### 🔄 OIDC-A Attestation — IN PROGRESS (PR #28)
-**What:** Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims. Test agent running; results pending.
-**Implementation (planned):**
+**What:** Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims.
+**Implementation (current branch):**
 - `GET /.well-known/oauth-authorization-server` — OAuth/OIDC-A discovery
 - `POST /v1/attestation/eat` — issue Entity Attestation Token (EAT/RFC 9711)
 - `POST /v1/attestation/oidc-agent-claims` — issue OIDC-A agent claims block
@@ -401,25 +399,14 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - `GET /v1/auth/agent-grant/:id/status` — grant status
 - `POST /v1/auth/agent-grant/:id/resolve` — approve/resolve grant
 - `GET /v1/oidc/userinfo` — OIDC-A UserInfo endpoint
-**Known issues (pre-merge):**
-- 🟡 OIDCA routes not yet documented in OpenAPI spec (`static.ts`)
-**Docs (draft):** [doc/OIDCA.md](./doc/OIDCA.md)
+**Docs:** [doc/OIDCA.md](./doc/OIDCA.md)
+**Open issues:** tracked in [BUGS.md](./BUGS.md)
 
 ---
 
 ## Technical Debt
 
-> Issues identified during the 5-epic sprint; tracked in [BUGS.md](./BUGS.md).
-
-| Issue | Priority | Location |
-|-------|----------|----------|
-| KV read-modify-write race on `last_verified_at` — can silently lose updates under load | 🟠 MAJOR | TAP session creation |
-| RFC 9421 HTTP Message Signatures implemented but not enforced on any route (dead code) | 🟡 MINOR | `tap-routes.ts` |
-| Payment/invoice flow untested — requires `card_acceptor_id` not available in test env | 🟡 MINOR | `/v1/invoices/*` |
-| x402 `X-Payment` header path can hang if KV is slow/unavailable | 🟡 MINOR | `GET /v1/x402/challenge` |
-| PR #26: re-attesting same `agent_url` creates duplicate attestations | 🟡 MINOR | A2A attest route |
-| PR #26: `ATTESTATION_FAILED` used for validation errors (should be `INVALID_CARD`) | 🟡 MINOR | A2A attest route |
-| PR #28: OIDCA routes missing from OpenAPI spec | 🟡 MINOR | `static.ts` |
+Technical debt and implementation issues are tracked in one place: [BUGS.md](./BUGS.md).
 
 ---
 

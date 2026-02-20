@@ -10,7 +10,7 @@ Format: [Semantic Versioning](https://semver.org/). Newest entries first.
 
 ### Protocol Integrations (5 epics)
 
-Three epics merged to main (PRs #25, #27, #29). Two in progress (PRs #26, #28 — pending merge).
+Four epics merged to main (PRs #25, #26, #27, #29). OIDC-A (PR #28) remains in progress.
 
 #### ✅ x402 Payment Gating (PR #25 — merged)
 
@@ -68,11 +68,11 @@ BOTCHA as a W3C DID/VC issuer (`did:web:botcha.ai`). Issues portable W3C Verifia
 
 See [doc/DID-VC.md](./doc/DID-VC.md) for the integration guide.
 
-#### 🔄 A2A Agent Card Attestation (PR #26 — in progress, pending merge)
+#### ✅ A2A Agent Card Attestation (PR #26 — merged)
 
 BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards.
 
-**Planned endpoints (not yet in main):**
+**New endpoints:**
 - `GET /.well-known/agent.json` — BOTCHA's A2A Agent Card
 - `GET /v1/a2a/agent-card` — BOTCHA's A2A Agent Card (alias)
 - `POST /v1/a2a/attest` — attest an agent's A2A card → BOTCHA trust seal
@@ -81,16 +81,16 @@ BOTCHA as a trust seal issuer for the Google A2A protocol Agent Cards.
 - `GET /v1/a2a/trust-level/:agent_url` — get trust level for an agent URL
 - `GET /v1/a2a/cards` and `GET /v1/a2a/cards/:id` — registry browsing
 
-**Known issues (pre-merge):**
+**Known follow-ups:**
 - Re-attesting same `agent_url` creates duplicate attestations
 - `ATTESTATION_FAILED` error code used for field validation errors (should be `INVALID_CARD`)
 
-**Recent pre-merge fixes pushed:**
+**Included fixes:**
 - Added `/v1/a2a/agent-card` alias route
-- Added missing `/v1/a2a/verify-agent` and `/v1/a2a/trust-level/:agent_url` routes
+- Added `/v1/a2a/verify-agent` and `/v1/a2a/trust-level/:agent_url` routes
 - Fixed `verify-agent` route typing/call-order bugs and compile breakage
 
-See [doc/A2A.md](./doc/A2A.md) for the draft guide.
+See [doc/A2A.md](./doc/A2A.md) for the guide.
 
 #### 🔄 OIDC-A Attestation (PR #28 — in progress, pending merge)
 
@@ -105,8 +105,8 @@ Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711)
 - `POST /v1/auth/agent-grant/:id/resolve` — approve/resolve grant
 - `GET /v1/oidc/userinfo` — OIDC-A UserInfo endpoint
 
-**Known issues (pre-merge):**
-- OIDCA routes not yet in OpenAPI spec (`static.ts`)
+**Known issues (current):**
+- Grant resolve policy is app-owner scoped; stricter enterprise admin model may still be needed.
 
 **Recent pre-merge fixes pushed:**
 - Secured grant status polling (`GET /v1/auth/agent-grant/:id/status`) with bearer auth + app ownership checks
@@ -115,7 +115,7 @@ Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711)
 - Corrected JWKS discovery references to `/.well-known/jwks`
 - Added focused OIDC-A tests in `tests/unit/agents/tap-oidca.test.ts`
 
-See [doc/OIDCA.md](./doc/OIDCA.md) for the draft guide.
+See [doc/OIDCA.md](./doc/OIDCA.md) for the current guide.
 
 ---
 
@@ -126,7 +126,7 @@ See [doc/OIDCA.md](./doc/OIDCA.md) for the draft guide.
 ## [0.20.x]
 
 - Email verification fixes (v0.20.3): `verify-email` and `resend-verification` require app_secret or dashboard session auth.
-- Release v0.20.2 — see [RELEASE_v0.20.2_SUMMARY.md](./RELEASE_v0.20.2_SUMMARY.md).
+- Release v0.20.2 — see [reports/archive/legacy/RELEASE_v0.20.2_SUMMARY.md](./reports/archive/legacy/RELEASE_v0.20.2_SUMMARY.md).
 
 ## [0.19.0]
 

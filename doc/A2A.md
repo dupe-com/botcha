@@ -1,10 +1,10 @@
 # A2A Agent Card Attestation
 
-> **Status:** 🔄 In Progress — PR #26 open with fixes pushed (`f27912d`). **Not yet merged to main.**
+> **Status:** ✅ Shipped — merged via PR #26 (v0.23.0).
 
 BOTCHA acts as a trust seal issuer for the [Google A2A protocol](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/) Agent Cards. Any agent that publishes an A2A Agent Card can submit it to BOTCHA for attestation; BOTCHA produces a tamper-evident trust seal that third parties can verify without contacting BOTCHA again.
 
-> ⚠️ **This feature is not yet available on botcha.ai.** The endpoints below describe the planned API. This document will be updated when PR #26 merges.
+This feature is available on BOTCHA. The endpoints below reflect the current API contract.
 
 ## What is A2A?
 
@@ -12,7 +12,7 @@ The A2A (Agent-to-Agent) protocol by Google defines a standard JSON `agent.json`
 
 ## BOTCHA's A2A Agent Card
 
-Once merged, BOTCHA will publish its own A2A Agent Card:
+BOTCHA publishes its own A2A Agent Card at:
 
 ```bash
 GET /.well-known/agent.json
@@ -109,11 +109,11 @@ GET /v1/a2a/cards           # list all attested cards
 GET /v1/a2a/cards/:id       # get a specific attested card by ID
 ```
 
-## Known Limitations (Pre-Merge)
+## Known Limitations
 
 - Re-submitting the same `agent_url` creates additional attestations without deduping or revoking prior active records.
 - Validation failures on `POST /v1/a2a/attest` still map to `ATTESTATION_FAILED`; should use a dedicated input error code.
-- Routes are not yet in the OpenAPI spec.
+- Current trust-level and verify endpoints are public by design; deployers should still apply standard abuse/rate-limit controls.
 
 ## References
 

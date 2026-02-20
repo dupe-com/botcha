@@ -201,6 +201,18 @@ curl https://botcha.ai/agent-only/x402 \
 | \`GET\` | \`/v1/a2a/cards\` | List BOTCHA-attested A2A cards — PUBLIC |
 | \`GET\` | \`/v1/a2a/cards/:id\` | Get specific A2A attestation record — PUBLIC |
 
+### OIDC-A Attestation
+
+| Method | Path | Description |
+|--------|------|-------------|
+| \`GET\` | \`/.well-known/oauth-authorization-server\` | OAuth/OIDC-A authorization server metadata — PUBLIC |
+| \`POST\` | \`/v1/attestation/eat\` | Issue Entity Attestation Token (EAT, RFC 9711 profile) — AUTH REQUIRED |
+| \`POST\` | \`/v1/attestation/oidc-agent-claims\` | Issue OIDC-A claims block (JWT + decoded claims) — AUTH REQUIRED |
+| \`POST\` | \`/v1/auth/agent-grant\` | Create OAuth-style agent grant — AUTH REQUIRED |
+| \`GET\` | \`/v1/auth/agent-grant/:id/status\` | Poll pending grant status — AUTH REQUIRED |
+| \`POST\` | \`/v1/auth/agent-grant/:id/resolve\` | Approve/deny grant — AUTH REQUIRED |
+| \`GET\` | \`/v1/oidc/userinfo\` | OIDC-A UserInfo endpoint (accepts BOTCHA or EAT bearer token) — AUTH REQUIRED |
+
 ### TAP Full Spec — Verification (v0.16.0)
 
 | Method | Path | Description |
@@ -622,6 +634,16 @@ Endpoint: POST https://botcha.ai/v1/a2a/verify-agent - Verify by full card or by
 Endpoint: GET https://botcha.ai/v1/a2a/trust-level/:agent_url - Get trust level by URL-encoded agent URL — PUBLIC
 Endpoint: GET https://botcha.ai/v1/a2a/cards - List BOTCHA-attested A2A cards — PUBLIC
 Endpoint: GET https://botcha.ai/v1/a2a/cards/:id - Get specific A2A attestation record — PUBLIC
+
+# OIDC-A Attestation
+Feature: Enterprise OIDC/OAuth2 attestation chain for agents (EAT + OIDC-A claims + grant workflow)
+Endpoint: GET https://botcha.ai/.well-known/oauth-authorization-server - OAuth/OIDC-A metadata discovery — PUBLIC
+Endpoint: POST https://botcha.ai/v1/attestation/eat - Issue Entity Attestation Token (EAT) — AUTH REQUIRED
+Endpoint: POST https://botcha.ai/v1/attestation/oidc-agent-claims - Issue OIDC-A claims JWT + decoded claims — AUTH REQUIRED
+Endpoint: POST https://botcha.ai/v1/auth/agent-grant - Request agent grant (supports HITL oversight) — AUTH REQUIRED
+Endpoint: GET https://botcha.ai/v1/auth/agent-grant/:id/status - Poll grant status (pending/approved/denied) — AUTH REQUIRED
+Endpoint: POST https://botcha.ai/v1/auth/agent-grant/:id/resolve - Resolve pending grant (approved/denied) — AUTH REQUIRED
+Endpoint: GET https://botcha.ai/v1/oidc/userinfo - OIDC-A UserInfo endpoint (BOTCHA or EAT bearer token) — AUTH REQUIRED
 
 # Protected Resources
 Endpoint: GET https://botcha.ai/agent-only - Protected AI-only resource (BOTCHA token required)
@@ -1934,6 +1956,165 @@ export function getOpenApiSpec(version: string) {
           responses: {
             "200": { description: "A2A attestation record" },
             "404": { description: "Attestation not found or expired" }
+          }
+        }
+      },
+      "/.well-known/oauth-authorization-server": {
+        get: {
+          summary: "OIDC/OAuth authorization server metadata",
+          description: "RFC 8414 authorization server metadata with OIDC-A specific endpoints.",
+          operationId: "getOIDCAuthorizationServerMetadata",
+          responses: {
+            "200": { description: "Authorization server metadata" }
+          }
+        }
+      },
+      "/v1/attestation/eat": {
+        post: {
+          summary: "Issue Entity Attestation Token (EAT)",
+          description: "Issue a signed EAT token from a verified BOTCHA bearer token.",
+          operationId: "issueEAT",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "nonce": { type: "string", description: "Optional nonce for freshness binding" },
+                    "agent_model": { type: "string", description: "Optional agent model label" },
+                    "ttl_seconds": { type: "integer", description: "Optional TTL in seconds (max 3600)" },
+                    "verification_method": { type: "string", description: "Verification method label override" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "EAT token issued" },
+            "400": { description: "Invalid request (e.g., ttl_seconds)" },
+            "401": { description: "Unauthorized" },
+            "503": { description: "Signing key not configured" }
+          }
+        }
+      },
+      "/v1/attestation/oidc-agent-claims": {
+        post: {
+          summary: "Issue OIDC-A claims block",
+          description: "Issue OIDC-A claims JWT and decoded claims object for embedding in ID tokens.",
+          operationId: "issueOIDCAgentClaims",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "agent_model": { type: "string" },
+                    "agent_version": { type: "string" },
+                    "agent_capabilities": { type: "array", items: { type: "string" } },
+                    "agent_operator": { type: "string" },
+                    "delegation_chain": { type: "array", items: { type: "string" } },
+                    "human_oversight_required": { type: "boolean" },
+                    "oversight_contact": { type: "string" },
+                    "task_id": { type: "string" },
+                    "task_purpose": { type: "string" },
+                    "scope": { type: "string" },
+                    "nonce": { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "OIDC-A claims issued" },
+            "401": { description: "Unauthorized" },
+            "503": { description: "Signing key not configured" }
+          }
+        }
+      },
+      "/v1/auth/agent-grant": {
+        post: {
+          summary: "Create agent authorization grant",
+          description: "Issue an OAuth-style agent grant with optional human-in-the-loop status flow.",
+          operationId: "createAgentGrant",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    "scope": { type: "string", description: "Space-separated requested scope string" },
+                    "human_oversight_required": { type: "boolean" },
+                    "agent_model": { type: "string" },
+                    "agent_version": { type: "string" },
+                    "agent_capabilities": { type: "array", items: { type: "string" } },
+                    "agent_operator": { type: "string" },
+                    "task_id": { type: "string" },
+                    "task_purpose": { type: "string" },
+                    "delegation_chain": { type: "array", items: { type: "string" } },
+                    "constraints": { type: "object" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Grant issued (or pending human approval)" },
+            "401": { description: "Unauthorized" },
+            "503": { description: "Signing key not configured" }
+          }
+        }
+      },
+      "/v1/auth/agent-grant/{id}/status": {
+        get: {
+          summary: "Get agent grant status",
+          operationId: "getAgentGrantStatus",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Grant status payload" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden (app ownership required)" },
+            "404": { description: "Grant not found or expired" }
+          }
+        }
+      },
+      "/v1/auth/agent-grant/{id}/resolve": {
+        post: {
+          summary: "Resolve pending agent grant",
+          description: "Approve or deny a pending human-in-the-loop grant.",
+          operationId: "resolveAgentGrant",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["decision"],
+                  properties: {
+                    "decision": { type: "string", enum: ["approved", "denied"] },
+                    "reason": { type: "string", description: "Required when decision is denied" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": { description: "Grant resolved" },
+            "400": { description: "Invalid decision or missing reason" },
+            "401": { description: "Unauthorized" },
+            "403": { description: "Forbidden (app ownership required)" },
+            "404": { description: "Grant not found or expired" }
+          }
+        }
+      },
+      "/v1/oidc/userinfo": {
+        get: {
+          summary: "OIDC-A UserInfo endpoint",
+          description: "Returns OIDC-compatible UserInfo claims for BOTCHA or EAT bearer tokens.",
+          operationId: "getOIDCUserInfo",
+          responses: {
+            "200": { description: "OIDC UserInfo payload" },
+            "401": { description: "Unauthorized" }
           }
         }
       },

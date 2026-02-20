@@ -1,6 +1,6 @@
 # OIDC-A Attestation
 
-> **Status:** 🔄 In Progress — PR #28 open with security/test fixes pushed (`1e2ea84`). **Not yet merged to main.**
+> **Status:** 🔄 In Progress — PR #28 open with security/test fixes pushed. **Not yet merged to main.**
 
 BOTCHA implements OIDC-A (OpenID Connect for Agents) attestation for enterprise agent authentication chains. This covers Entity Attestation Tokens (EAT) and OIDC-A agent claims blocks, plus an OAuth-style agent grant flow.
 
@@ -103,9 +103,7 @@ Authorization: Bearer <botcha-token>
 
 Returns OIDC-A UserInfo claims for the authenticated agent.
 
-## Known Limitations (Pre-Merge)
-
-- OIDC-A routes are not yet documented in the OpenAPI spec (`static.ts`).
+## Known Limitations
 - `POST /v1/auth/agent-grant/:id/resolve` currently requires BOTCHA bearer auth and app ownership checks, but does not yet enforce a stricter admin role model.
 - Grant status/resolve is app-scoped: only the owning `app_id` can poll/resolve a grant.
 
