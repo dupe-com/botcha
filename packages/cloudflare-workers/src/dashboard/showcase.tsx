@@ -571,63 +571,6 @@ export const SHOWCASE_CSS = `
 
   .showcase-footer-step code { color: var(--text); }
 
-  .showcase-agent-prompt {
-    max-width: 520px;
-    margin: 2rem auto 2.5rem;
-    text-align: center;
-  }
-
-  .showcase-agent-prompt-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-dim);
-    margin-bottom: 0.75rem;
-  }
-
-  .showcase-agent-prompt-card {
-    display: block;
-    width: 100%;
-    padding: 1.25rem;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    cursor: pointer;
-    font-family: var(--font);
-    text-align: left;
-    transition: border-color 0.15s;
-  }
-
-  .showcase-agent-prompt-card:hover { border-color: var(--accent); }
-
-  .showcase-agent-prompt-card code {
-    display: block;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--text);
-    line-height: 1.5;
-    background: none;
-    border: none;
-    padding: 0;
-    text-transform: none;
-    letter-spacing: normal;
-  }
-
-  .showcase-agent-prompt-copy {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    margin-top: 0.75rem;
-    font-size: 0.625rem;
-    font-weight: 500;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    transition: color 0.2s;
-  }
-
-  .showcase-agent-prompt-copy span { display: flex; }
-
   .showcase-footer-links {
     display: flex;
     flex-wrap: wrap;
@@ -797,30 +740,6 @@ const TERMINAL_ANIMATION_SCRIPT = `
 
   observer.observe(content);
 })();
-`;
-
-// ============ COPY PROMPT ============
-
-const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="9" y="9" width="13" height="13" rx="0"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`;
-const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"><polyline points="20 6 9 17 4 12"/></svg>`;
-
-const COPY_PROMPT_SCRIPT = `
-function copyPrompt() {
-  var text = document.getElementById('agent-prompt').textContent.trim();
-  navigator.clipboard.writeText(text).then(function() {
-    var label = document.getElementById('copy-label');
-    var icon = document.getElementById('copy-icon');
-    var txt = document.getElementById('copy-text');
-    label.style.color = 'var(--green)';
-    icon.innerHTML = '${CHECK_ICON.replace(/'/g, "\\'")}';
-    txt.textContent = 'Copied — now paste into your agent';
-    setTimeout(function() {
-      label.style.color = 'var(--text-muted)';
-      icon.innerHTML = '${COPY_ICON.replace(/'/g, "\\'")}';
-      txt.textContent = 'Click to copy';
-    }, 2500);
-  });
-}
 `;
 
 // ============ ASCII ART ============
@@ -1230,22 +1149,6 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
               </div>
             </div>
 
-            <div class="showcase-agent-prompt">
-              <p class="showcase-agent-prompt-label">Or paste this into your AI agent</p>
-              <button
-                id="prompt-btn"
-                onclick="copyPrompt()"
-                type="button"
-                class="showcase-agent-prompt-card"
-              >
-                <code id="agent-prompt">Run: curl -s https://botcha.ai -H 'Accept: application/json' — then follow the instructions in the response to verify yourself and get me access.</code>
-                <span id="copy-label" class="showcase-agent-prompt-copy">
-                  <span id="copy-icon" dangerouslySetInnerHTML={{ __html: COPY_ICON }} />
-                  <span id="copy-text">Click to copy</span>
-                </span>
-              </button>
-            </div>
-
             <div class="showcase-footer-links">
               <a href="https://www.npmjs.com/package/@dupecom/botcha" class="showcase-footer-link" target="_blank" rel="noopener">npm</a>
               <a href="https://pypi.org/project/botcha/" class="showcase-footer-link" target="_blank" rel="noopener">PyPI</a>
@@ -1259,8 +1162,6 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
 
           {/* ---- Global Footer ---- */}
           <GlobalFooter version={version} />
-
-          <script dangerouslySetInnerHTML={{ __html: COPY_PROMPT_SCRIPT }} />
 
         </div>
       </body>

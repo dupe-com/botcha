@@ -20,31 +20,7 @@ const BOTCHA_ASCII = `██████╗  ██████╗ ████�
 ██████╔╝╚██████╔╝   ██║   ╚██████╗██║  ██║██║  ██║
 ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝`;
 
-const AGENT_PROMPT = `Run: curl -s https://botcha.ai -H 'Accept: application/json' — then follow the instructions in the response to verify yourself and get me access.`;
-
 // Clipboard copy icon (Lucide-style, 16x16)
-const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="9" y="9" width="13" height="13" rx="0"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`;
-const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"><polyline points="20 6 9 17 4 12"/></svg>`;
-
-const COPY_SCRIPT = `
-function copyPrompt() {
-  var text = document.getElementById('agent-prompt').textContent.trim();
-  navigator.clipboard.writeText(text).then(function() {
-    var label = document.getElementById('copy-label');
-    var icon = document.getElementById('copy-icon');
-    var txt = document.getElementById('copy-text');
-    label.style.color = 'var(--green)';
-    icon.innerHTML = '${CHECK_ICON.replace(/'/g, "\\'")}';
-    txt.textContent = 'Copied — now paste into your agent';
-    setTimeout(function() {
-      label.style.color = 'var(--text-muted)';
-      icon.innerHTML = '${COPY_ICON.replace(/'/g, "\\'")}';
-      txt.textContent = 'Click to copy';
-    }, 2500);
-  });
-}
-`;
-
 // ============ UNVERIFIED LANDING PAGE ============
 
 export const LandingPage: FC<{ version: string; error?: string }> = ({ version, error }) => {
@@ -56,47 +32,14 @@ export const LandingPage: FC<{ version: string; error?: string }> = ({ version, 
         {'>'}_&nbsp;prove you're a bot
       </p>
       <p class="landing-tagline">
-        This site is for AI agents. Bring yours.
+        Prove you're a bot. Humans need not apply.
       </p>
 
-      {/* ---- The Big Button ---- */}
-      <p class="text-muted" style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.15em; text-align: center; margin: 2rem 0 0.625rem;">
-        Paste this into your AI agent
-      </p>
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-body">
-          <button
-            id="prompt-btn"
-            onclick="copyPrompt()"
-            type="button"
-            class="card-inner"
-            style="display: block; width: 100%; padding: 1.5rem; border: none; border-radius: 0; cursor: pointer; font-family: var(--font); text-align: left; text-transform: none; letter-spacing: normal; box-shadow: none; transition: background 0.2s;"
-          >
-            {/* Prompt text */}
-            <code id="agent-prompt" style="font-size: 1.125rem; font-weight: 700; color: var(--accent); line-height: 1.5; display: block; background: none; border: none; padding: 0;">
-              {AGENT_PROMPT}
-            </code>
-            {/* Copy label + icon at bottom */}
-            <span
-              id="copy-label"
-              style="display: flex; align-items: center; gap: 0.375rem; margin-top: 1rem; font-size: 0.6875rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; transition: color 0.2s;"
-            >
-              <span
-                id="copy-icon"
-                style="display: flex; transition: color 0.2s;"
-                dangerouslySetInnerHTML={{ __html: COPY_ICON }}
-              />
-              <span id="copy-text">Click to copy</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* ---- How it works (minimal) ---- */}
-      <div style="text-align: center; margin: 1.5rem 0;">
-        <p class="text-muted" style="font-size: 0.75rem; line-height: 2;">
-          Your agent solves a challenge to prove it's a bot.<br/>
-          It gives you a link back. Click it. You're in.
+      {/* ---- What is BOTCHA ---- */}
+      <div style="text-align: center; margin: 1.5rem 0 2rem;">
+        <p class="text-muted" style="font-size: 0.8125rem; line-height: 1.8; max-width: 360px; margin: 0 auto;">
+          BOTCHA is a reverse CAPTCHA — it verifies AI agents, not humans.
+          Agents discover and solve challenges automatically.
         </p>
       </div>
 
@@ -170,34 +113,13 @@ export const LandingPage: FC<{ version: string; error?: string }> = ({ version, 
         }}
       />
 
-      <script dangerouslySetInnerHTML={{ __html: COPY_SCRIPT }} />
-
     </LandingLayout>
   );
 };
 
 // ============ VERIFIED LANDING PAGE ============
 
-const ONBOARD_PROMPT = `Run: curl -s https://botcha.ai -H 'Accept: application/json' — then follow the instructions to verify yourself, create an app for me, and get me into the dashboard. Ask me for my email address when you need it. I'll also give you a verification code from my email.`;
-
-const VERIFIED_COPY_SCRIPT = `
-function copyOnboardPrompt() {
-  var text = document.getElementById('onboard-prompt').textContent.trim();
-  navigator.clipboard.writeText(text).then(function() {
-    var label = document.getElementById('onboard-label');
-    var icon = document.getElementById('onboard-icon');
-    var txt = document.getElementById('onboard-text');
-    label.style.color = 'var(--green)';
-    icon.innerHTML = '${CHECK_ICON.replace(/'/g, "\\'")}';
-    txt.textContent = 'Copied — now paste into your agent';
-    setTimeout(function() {
-      label.style.color = 'var(--text-muted)';
-      icon.innerHTML = '${COPY_ICON.replace(/'/g, "\\'")}';
-      txt.textContent = 'Click to copy';
-    }, 2500);
-  });
-}
-`;
+// (ONBOARD_PROMPT and VERIFIED_COPY_SCRIPT removed — agents discover the flow on their own)
 
 export const VerifiedLandingPage: FC<{ version: string; solveTime?: number }> = ({ version, solveTime }) => {
   return (
@@ -230,73 +152,18 @@ export const VerifiedLandingPage: FC<{ version: string; solveTime?: number }> = 
         </div>
       </div>
 
-      {/* ---- Next step: onboard ---- */}
-      <p class="text-muted" style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.15em; text-align: center; margin: 0 0 0.625rem;">
-        Copy this and paste it back into your agent
-      </p>
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-body">
-          <button
-            id="onboard-btn"
-            onclick="copyOnboardPrompt()"
-            type="button"
-            class="card-inner"
-            style="display: block; width: 100%; padding: 1.5rem; border: none; border-radius: 0; cursor: pointer; font-family: var(--font); text-align: left; text-transform: none; letter-spacing: normal; box-shadow: none; transition: background 0.2s;"
-          >
-            <code id="onboard-prompt" style="font-size: 1rem; font-weight: 700; color: var(--accent); line-height: 1.5; display: block; background: none; border: none; padding: 0;">
-              {ONBOARD_PROMPT}
-            </code>
-            <span
-              id="onboard-label"
-              style="display: flex; align-items: center; gap: 0.375rem; margin-top: 1rem; font-size: 0.6875rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; transition: color 0.2s;"
-            >
-              <span
-                id="onboard-icon"
-                style="display: flex; transition: color 0.2s;"
-                dangerouslySetInnerHTML={{ __html: COPY_ICON }}
-              />
-              <span id="onboard-text">Click to copy</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* ---- What happens ---- */}
-      <div style="max-width: 360px; margin: 1.5rem auto; text-align: left;">
-        <p class="text-muted" style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.15em; text-align: center; margin-bottom: 0.75rem;">
-          What happens next
+      {/* ---- Next step: dashboard ---- */}
+      <div style="text-align: center; margin: 2rem 0 1.5rem;">
+        <p class="text-muted" style="font-size: 0.8125rem; line-height: 1.8; max-width: 360px; margin: 0 auto 1.5rem;">
+          Your agent has everything it needs to continue the setup — it will register an app and guide you through the rest.
         </p>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-          <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
-            <span style="font-size: 0.75rem; color: var(--text-muted); min-width: 1rem; font-weight: 600;">a.</span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Your agent asks for your email</span>
-          </div>
-          <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
-            <span style="font-size: 0.75rem; color: var(--text-muted); min-width: 1rem; font-weight: 600;">b.</span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">You get a verification code in your inbox</span>
-          </div>
-          <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
-            <span style="font-size: 0.75rem; color: var(--text-muted); min-width: 1rem; font-weight: 600;">c.</span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);"><strong style="color: var(--text);">Paste the code back to your agent</strong></span>
-          </div>
-          <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
-            <span style="font-size: 0.75rem; color: var(--text-muted); min-width: 1rem; font-weight: 600;">d.</span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">Your agent gives you a dashboard link</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ---- Returning user shortcut ---- */}
-      <div style="text-align: center; margin-bottom: 1.5rem;">
         <a
           href="/dashboard"
-          style="font-size: 0.75rem; color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px;"
+          style="display: inline-block; padding: 0.625rem 1.5rem; font-family: var(--font); font-size: 0.8125rem; font-weight: 600; background: var(--accent); color: #fff; text-decoration: none; transition: opacity 0.15s;"
         >
-          Already have an account? Go to dashboard
+          Go to dashboard
         </a>
       </div>
-
-      <script dangerouslySetInnerHTML={{ __html: VERIFIED_COPY_SCRIPT }} />
 
     </LandingLayout>
   );
