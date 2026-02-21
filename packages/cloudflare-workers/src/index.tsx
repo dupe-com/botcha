@@ -589,7 +589,7 @@ app.get('/', async (c) => {
     };
     const error = errorParam ? errorMessages[errorParam] || undefined : undefined;
 
-    return c.html(<ShowcasePage version={version} error={error} />);
+    return c.html(<LandingPage version={version} error={error} />);
   }
 
   // === UNVERIFIED: minimal teaser — just enough to get started ===
@@ -833,8 +833,13 @@ app.get('/og.png', (c) => {
 });
 
 // ============ SHOWCASE PAGE (legacy URL, redirect to home) ============
+app.get('/features', async (c) => {
+  const version = c.env.BOTCHA_VERSION || '0.16.0';
+  return c.html(<ShowcasePage version={version} />);
+});
+
 app.get('/showcase', (c) => {
-  return c.redirect('/', 301);
+  return c.redirect('/features', 301);
 });
 
 // ============ WHITEPAPER ============
