@@ -37,6 +37,7 @@ import {
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { handleMCPRequest, handleMCPDiscovery } from './mcp';
+import { MCPSetupPage } from './dashboard/mcp-setup';
 import { OG_IMAGE_BASE64 } from './og-image';
 import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret, EmailAlreadyRegisteredError } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
@@ -927,6 +928,11 @@ app.get('/.well-known/mcp.json', (c) => {
 
 app.get('/mcp', (c) => {
   const version = c.env.BOTCHA_VERSION || '0.22.0';
+  // Content negotiation: serve setup page to browsers, JSON to MCP clients
+  const accept = c.req.header('Accept') || '';
+  if (accept.includes('text/html')) {
+    return c.html('<!DOCTYPE html>' + (<MCPSetupPage version={version} />).toString());
+  }
   return handleMCPRequest(c.req.raw, version);
 });
 
