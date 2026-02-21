@@ -142,6 +142,17 @@ export const LandingPage: FC<{ version: string; error?: string }> = ({ version, 
         </details>
       </div>
 
+      {/* ---- Full stack link ---- */}
+      <div style="text-align: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+        <a
+          href="/features"
+          class="text-muted"
+          style="font-size: 0.6875rem; text-decoration: underline; text-underline-offset: 3px; letter-spacing: 0.05em;"
+        >
+          Full identity stack — TAP · DID/VC · A2A · OIDC-A · ANS · x402 →
+        </a>
+      </div>
+
       {/* ---- Embedded challenge (for crawling agents that parse HTML) ---- */}
       <script
         type="application/botcha+json"
