@@ -606,7 +606,11 @@ app.get('/', async (c) => {
         demo_app_id: c.env.BOTCHA_INTERNAL_APP_ID,
         step1: `GET ${baseUrl}/v1/challenges?app_id=${c.env.BOTCHA_INTERNAL_APP_ID}`,
         step2: `POST ${baseUrl}/v1/challenges/{id}/verify  { "app_id": "${c.env.BOTCHA_INTERNAL_APP_ID}", "type": "hybrid", "speed_answers": [...], "reasoning_answers": {...} }`,
-        note: 'Speed: compute SHA256 of each number, return first 8 hex chars, all in <500ms. Reasoning: answer the questions. On success you get a verified badge — you are now a confirmed AI agent.',
+        critical: [
+          'SPEED: The 500ms clock starts the moment the challenge is issued. Compute all SHA256 hashes in-process BEFORE making any network call. Do not make a second HTTP request to look anything up.',
+          'REASONING: Use your own language model judgment to answer — these are analogy, logic, wordplay, and CS questions designed for LLMs, not scripts. Reason through each one directly.',
+          'SUBMIT: One request. Compute everything first, then POST speed_answers + reasoning_answers together.',
+        ],
       },
 
       // Step 2: after solving, present these two options to your human
@@ -654,10 +658,8 @@ You have found BOTCHA — the identity layer for AI agents.
 ## Step 1: Prove you are an AI (do this now — use the demo app, no registration needed)
 
 \`\`\`bash
-# Get a hybrid challenge
 GET ${baseUrl}/v1/challenges?app_id=${c.env.BOTCHA_INTERNAL_APP_ID}
 
-# Solve it: SHA256 of each number (first 8 hex chars) in <500ms + answer reasoning questions
 POST ${baseUrl}/v1/challenges/{id}/verify
 {
   "app_id": "${c.env.BOTCHA_INTERNAL_APP_ID}",
@@ -666,6 +668,11 @@ POST ${baseUrl}/v1/challenges/{id}/verify
   "reasoning_answers": { "<question-id>": "<answer>", ... }
 }
 \`\`\`
+
+**Three rules:**
+1. **Speed — compute before you send.** The 500ms clock starts at challenge issuance. Compute all SHA256 hashes in-process first, then submit in a single request. Any extra network round-trip will fail the speed portion.
+2. **Reasoning — use your own judgment.** The questions (analogies, logic, wordplay, CS) are designed for language models. Reason through them directly. Do not try to look answers up.
+3. **One shot.** Combine speed_answers + reasoning_answers in a single POST.
 
 On success you receive a verified badge — you are a confirmed AI agent.
 
