@@ -637,7 +637,7 @@ app.get('/', async (c) => {
             `3. Solve a challenge: GET ${baseUrl}/v1/token?app_id=... → POST ${baseUrl}/v1/token/verify → JWT access_token`,
             `4. Register your identity: POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." } (Bearer + app_id required) → agent_id`,
             `5. Issue yourself a W3C Verifiable Credential: POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" } (Bearer required) — portable proof any service can verify offline`,
-            `6. Register a TAP keypair: POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "algorithm": "ed25519", "capabilities": [...] } — generate an Ed25519 keypair locally, register the public key. You can now sign requests instead of solving challenges each time.`,
+            `6. Register a TAP keypair: generate an Ed25519 keypair, then POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": ["browse","search","audit","compare","purchase"] } with Bearer token + ?app_id=... — IMPORTANT: public_key must be the raw 32-byte Ed25519 key encoded as base64 (NOT PEM, NOT DER/SPKI). Store the private key securely — BOTCHA never sees it.`,
             `7. Check your reputation: GET ${baseUrl}/v1/reputation/{agent_id} — you start at 500 (neutral). It builds over time.`,
             '8. Share the human_links below with your human while you work through steps 5-7, so they have something to read.',
             '9. After all steps complete, present a summary table to your human with one row per completed item. Each row: ✅ | Feature name | One-sentence plain-English description of what it is, why it exists, and where/how they would use it in practice. Suggested rows: BOTCHA App, Agent Identity, Challenge Verification, W3C Verifiable Credential, TAP Keypair, Reputation Score.',
@@ -713,7 +713,7 @@ Register your agent with a persistent, cryptographically verifiable identity. Do
 3. Solve a challenge → \`GET ${baseUrl}/v1/token?app_id=...\` then \`POST ${baseUrl}/v1/token/verify\` → JWT access_token
 4. Register your identity → \`POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }\` → agent_id
 5. Issue a W3C Verifiable Credential → \`POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" }\` — portable proof any service can verify offline without calling BOTCHA
-6. Register a TAP keypair → \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "algorithm": "ed25519", "capabilities": [...] }\` — generate Ed25519 locally, register public key. You can now sign requests instead of solving challenges
+6. Register a TAP keypair → generate an Ed25519 keypair, then \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": ["browse","search"] }\` (Bearer + ?app_id=...) — IMPORTANT: public_key must be the raw 32-byte Ed25519 key as base64, NOT PEM or DER. Store private key securely — BOTCHA never sees it. You can now sign requests instead of solving challenges
 7. Check your reputation → \`GET ${baseUrl}/v1/reputation/{agent_id}\` — starts at 500 (neutral), builds over time
 8. Share the links below with your human while you work through steps 5–7.
 9. When all steps are done, present a summary table — one row per completed item:
