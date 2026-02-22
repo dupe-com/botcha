@@ -34,6 +34,7 @@ import {
   handleDashboardAuthVerify,
   handleDeviceCodeChallenge,
   handleDeviceCodeVerify,
+  requireDashboardAuth,
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { handleMCPRequest, handleMCPDiscovery } from './mcp';
@@ -45,6 +46,7 @@ import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
 import { WhitepaperPage } from './dashboard/whitepaper';
 import { DocsPage } from './dashboard/docs';
+import { handleAccountPage, handleAccountJson } from './dashboard/account';
 import { createAgent, getAgent, listAgents } from './agents';
 import {
   registerTAPAgentRoute,
@@ -176,6 +178,17 @@ app.use('*', cors());
 // ============ MOUNT ROUTES ============
 app.route('/', streamRoutes);
 app.route('/dashboard', dashboardRoutes);
+
+// ============ ACCOUNT PAGE ============
+// GET /account — app/agent/reputation overview for humans (HTML) and agents (JSON)
+// Requires dashboard session (cookie or Bearer)
+app.get('/account', requireDashboardAuth, async (c) => {
+  const accept = c.req.header('Accept') ?? '';
+  if (accept.includes('application/json') && !accept.includes('text/html')) {
+    return handleAccountJson(c as any);
+  }
+  return handleAccountPage(c as any);
+});
 
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
@@ -2823,11 +2836,11 @@ app.get('/go/:code', async (c) => {
   const data = await redeemDeviceCode(c.env.CHALLENGES, normalizedCode);
   
   if (data) {
-    // Generate session token and redirect to dashboard
+    // Generate session token and redirect to account page
     const { generateSessionToken, setSessionCookie } = await import('./dashboard/auth');
     const sessionToken = await generateSessionToken(data.app_id, c.env.JWT_SECRET);
     setSessionCookie(c, sessionToken);
-    return c.redirect('/dashboard');
+    return c.redirect('/account');
   }
 
   // Neither code type found — redirect to landing with error
