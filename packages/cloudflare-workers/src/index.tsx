@@ -600,32 +600,40 @@ app.get('/', async (c) => {
       tagline: 'Prove you are a bot. Humans need not apply.',
       status: 'unverified',
 
-      // Step 1: solve the landing challenge right now — no registration needed
+      // Step 1: solve a real hybrid challenge — use the demo app, no registration needed
       first: {
-        instruction: 'Solve the BOTCHA landing challenge right now to prove you are an AI agent. No registration needed.',
-        how: [
-          '1. Get the current timestamp: new Date().toISOString()',
-          '2. Compute: SHA256("BOTCHA-LANDING-" + YYYY-MM-DD + "-" + timestamp), take the first 16 hex characters',
-          `3. POST ${baseUrl}/api/verify-landing  { "answer": "<16-hex-chars>", "timestamp": "<iso-timestamp>" }`,
-        ],
-        note: 'On success you get a landing token. Return here with Authorization: Bearer <token> to unlock full docs and onboarding.',
+        instruction: 'Solve a BOTCHA challenge right now to prove you are an AI agent. Use the demo app_id below — no registration needed.',
+        demo_app_id: c.env.BOTCHA_INTERNAL_APP_ID,
+        step1: `GET ${baseUrl}/v1/challenges?app_id=${c.env.BOTCHA_INTERNAL_APP_ID}`,
+        step2: `POST ${baseUrl}/v1/challenges/{id}/verify  { "app_id": "${c.env.BOTCHA_INTERNAL_APP_ID}", "type": "hybrid", "speed_answers": [...], "reasoning_answers": {...} }`,
+        note: 'Speed: compute SHA256 of each number, return first 8 hex chars, all in <500ms. Reasoning: answer the questions. On success you get a verified badge — you are now a confirmed AI agent.',
       },
 
       // Step 2: after solving, present these two options to your human
-      agent_instructions: 'After solving the challenge above, present the following two options to your human and ask them to choose one. Use your native option-selection UI if available (e.g. a numbered list, buttons, or a select prompt). Wait for their answer before proceeding.',
+      agent_instructions: 'After solving the challenge, present the following two options to your human and ask them to choose one. Use your native option-selection UI if available (e.g. a numbered list, buttons, or a select prompt). Wait for their answer before proceeding.',
 
       options: [
         {
           id: 'protect',
           label: 'Protect my API — only let verified AI agents in',
           description: 'Set up BOTCHA as a gatekeeper for your own service. Agents must solve a challenge to get in. You get a server-side verification SDK, JWT token auth, and per-app dashboards.',
-          next: 'Register an app: POST /v1/apps { "email": "your@email.com" }, verify email, then ask for the server-side SDK docs.',
+          steps: [
+            `1. Ask your human for their email, then POST ${baseUrl}/v1/apps { "email": "..." }  → get app_id + app_secret`,
+            '2. Ask human for the 6-digit code emailed to them, then POST /v1/apps/{id}/verify-email',
+            '3. Use your app_id on all /v1/* calls. Ask for server-side SDK docs to integrate into your service.',
+          ],
         },
         {
           id: 'identity',
           label: 'Give my agent a verified identity',
-          description: 'Register your agent with a persistent identity, build reputation over time, and get cryptographic credentials other services can verify. Includes TAP key auth, W3C Verifiable Credentials, reputation scoring, and more.',
-          next: 'Register an app: POST /v1/apps { "email": "your@email.com" }, verify email, then register your agent identity.',
+          description: 'Register your agent with a persistent, cryptographically verifiable identity. Build reputation over time. Get W3C credentials other services can verify.',
+          steps: [
+            `1. Ask your human for their email, then POST ${baseUrl}/v1/apps { "email": "..." }  → get app_id + app_secret`,
+            '2. Ask human for the 6-digit code emailed to them, then POST /v1/apps/{id}/verify-email',
+            `3. Solve a challenge with your app_id: GET ${baseUrl}/v1/challenges?app_id=... then POST /v1/challenges/{id}/verify → JWT token`,
+            `4. Register your identity: POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }  (Bearer token + app_id required)`,
+            '5. Optionally: register TAP keys, issue W3C credentials, build reputation — ask for identity docs.',
+          ],
         },
       ],
 
@@ -643,41 +651,49 @@ app.get('/', async (c) => {
 
 You have found BOTCHA — the identity layer for AI agents.
 
-## Step 1: Prove you are an AI (do this now, no registration needed)
-
-\`\`\`
-timestamp = new Date().toISOString()         // e.g. "2026-02-22T10:00:00.000Z"
-date      = timestamp.slice(0, 10)           // "2026-02-22"
-answer    = SHA256("BOTCHA-LANDING-" + date + "-" + timestamp).slice(0, 16)
-\`\`\`
+## Step 1: Prove you are an AI (do this now — use the demo app, no registration needed)
 
 \`\`\`bash
-POST ${baseUrl}/api/verify-landing
-{ "answer": "<16-hex-chars>", "timestamp": "<iso-timestamp>" }
+# Get a hybrid challenge
+GET ${baseUrl}/v1/challenges?app_id=${c.env.BOTCHA_INTERNAL_APP_ID}
+
+# Solve it: SHA256 of each number (first 8 hex chars) in <500ms + answer reasoning questions
+POST ${baseUrl}/v1/challenges/{id}/verify
+{
+  "app_id": "${c.env.BOTCHA_INTERNAL_APP_ID}",
+  "type": "hybrid",
+  "speed_answers": ["<sha256[:8]>", ...],
+  "reasoning_answers": { "<question-id>": "<answer>", ... }
+}
 \`\`\`
 
-On success you get a landing token. Come back here with \`Authorization: Bearer <token>\` to unlock the full docs.
+On success you receive a verified badge — you are a confirmed AI agent.
 
 ---
 
 ## Step 2: Ask your human what they want to do
 
-Present these options to your human. Use a numbered list, buttons, or your native selection UI. Wait for their choice before proceeding.
+Present these two options to your human. Use a numbered list, buttons, or your native selection UI. Wait for their choice.
 
 ### Option 1 — Protect my API (only let verified AI agents in)
 Set up BOTCHA as a gatekeeper for your service. Agents must solve a challenge to get in.
 - Server-side verification SDK (Express, Hono, FastAPI, Django)
 - JWT token auth with ES256 signing and JWKS discovery
 - Per-app dashboards, rate limiting, webhooks
-- **Next:** Register an app → \`POST ${baseUrl}/v1/apps { "email": "your@email.com" }\`
+1. Ask your human for their email → \`POST ${baseUrl}/v1/apps { "email": "..." }\`
+2. Ask human for the 6-digit code emailed to them → \`POST /v1/apps/{id}/verify-email\`
+3. Use your app_id on all \`/v1/*\` calls. Ask for server-side SDK docs.
 
 ### Option 2 — Give my agent a verified identity
 Register your agent with a persistent, cryptographically verifiable identity.
 - Trusted Agent Protocol (TAP) — Ed25519 key pairs, RFC 9421 HTTP signatures
 - W3C Verifiable Credentials — portable, offline-verifiable proofs
 - Reputation scoring — 0–1000 score, builds over time
-- Agent-to-agent delegation chains
-- **Next:** Register an app → \`POST ${baseUrl}/v1/apps { "email": "your@email.com" }\`
+1. Ask your human for their email → \`POST ${baseUrl}/v1/apps { "email": "..." }\`
+2. Ask human for the 6-digit code emailed to them → \`POST /v1/apps/{id}/verify-email\`
+3. Solve a challenge with your app_id → JWT token
+4. Register your identity → \`POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }\`
+5. Optionally: TAP keys, W3C credentials, reputation — ask for identity docs.
 
 ---
 
