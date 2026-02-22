@@ -592,33 +592,47 @@ app.get('/', async (c) => {
     return c.html(<ShowcasePage version={version} error={error} />);
   }
 
-  // === UNVERIFIED: minimal teaser — just enough to get started ===
+  // === UNVERIFIED: challenge-first entry point ===
   if (!isVerified) {
     const teaser = {
       name: 'BOTCHA',
       version,
       tagline: 'Prove you are a bot. Humans need not apply.',
       status: 'unverified',
-      message: 'App registration required. Register to see the full API documentation.',
-      registration_required: {
-        note: 'All API endpoints require a registered app with verified email (v0.21.0)',
-        demo: 'The homepage demo at botcha.ai lets agents try challenges without registering',
-        step1: 'Ask your human for their email',
-        step2: `POST ${baseUrl}/v1/apps {"email":"you@example.com","name":"My App"} — NO app_id needed`,
-        step3: 'Human receives 6-digit code via email',
-        step4: `POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."} — NO app_id needed`,
-        step5: 'Use your app_id on ALL other /v1/* endpoints via ?app_id=, X-App-Id header, or JWT claim',
+
+      // Step 1: solve the landing challenge right now — no registration needed
+      first: {
+        instruction: 'Solve the BOTCHA landing challenge right now to prove you are an AI agent. No registration needed.',
+        how: [
+          '1. Get the current timestamp: new Date().toISOString()',
+          '2. Compute: SHA256("BOTCHA-LANDING-" + YYYY-MM-DD + "-" + timestamp), take the first 16 hex characters',
+          `3. POST ${baseUrl}/api/verify-landing  { "answer": "<16-hex-chars>", "timestamp": "<iso-timestamp>" }`,
+        ],
+        note: 'On success you get a landing token. Return here with Authorization: Bearer <token> to unlock full docs and onboarding.',
       },
-      human_handoff: {
-        note: 'After verifying, the response includes a human_link. Give it to your human to open in their browser.',
-        instruction: 'Tell your human: "Click this link to get access" and give them the human_link URL.',
-        link_field: 'human_link from token verify response',
-      },
+
+      // Step 2: after solving, present these two options to your human
+      agent_instructions: 'After solving the challenge above, present the following two options to your human and ask them to choose one. Use your native option-selection UI if available (e.g. a numbered list, buttons, or a select prompt). Wait for their answer before proceeding.',
+
+      options: [
+        {
+          id: 'protect',
+          label: 'Protect my API — only let verified AI agents in',
+          description: 'Set up BOTCHA as a gatekeeper for your own service. Agents must solve a challenge to get in. You get a server-side verification SDK, JWT token auth, and per-app dashboards.',
+          next: 'Register an app: POST /v1/apps { "email": "your@email.com" }, verify email, then ask for the server-side SDK docs.',
+        },
+        {
+          id: 'identity',
+          label: 'Give my agent a verified identity',
+          description: 'Register your agent with a persistent identity, build reputation over time, and get cryptographic credentials other services can verify. Includes TAP key auth, W3C Verifiable Credentials, reputation scoring, and more.',
+          next: 'Register an app: POST /v1/apps { "email": "your@email.com" }, verify email, then register your agent identity.',
+        },
+      ],
+
       links: {
         openapi: `${baseUrl}/openapi.json`,
         ai_txt: `${baseUrl}/ai.txt`,
         mcp: `${baseUrl}/mcp`,
-        mcp_discovery: `${baseUrl}/.well-known/mcp.json`,
       },
     };
 
@@ -627,34 +641,47 @@ app.get('/', async (c) => {
 
 > Prove you are a bot. Humans need not apply.
 
-**Status:** Unverified. Register an app to see the full documentation.
+You have found BOTCHA — the identity layer for AI agents.
 
-## App Registration Required (v0.21.0)
+## Step 1: Prove you are an AI (do this now, no registration needed)
 
-**All API endpoints require a registered app with verified email.**
+\`\`\`
+timestamp = new Date().toISOString()         // e.g. "2026-02-22T10:00:00.000Z"
+date      = timestamp.slice(0, 10)           // "2026-02-22"
+answer    = SHA256("BOTCHA-LANDING-" + date + "-" + timestamp).slice(0, 16)
+\`\`\`
 
-- Register for free: \`POST /v1/apps\` with your email
-- The homepage demo at botcha.ai lets agents try challenges without registering
-- Provide app_id via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
+\`\`\`bash
+POST ${baseUrl}/api/verify-landing
+{ "answer": "<16-hex-chars>", "timestamp": "<iso-timestamp>" }
+\`\`\`
 
-## Register Your App
-
-1. Ask your human for their email
-2. \`POST ${baseUrl}/v1/apps {"email":"you@example.com","name":"My App"}\` — **NO app_id needed**
-3. Human receives 6-digit code via email
-4. \`POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."}\` — **NO app_id needed**
-5. Use your \`app_id\` on ALL other \`/v1/*\` endpoints via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
-
-## Human Handoff
-
-After verifying, the response includes a \`human_link\`. Give this URL to your human:
-**"Click this link to get access: {human_link}"**
-
-The link works for a limited time. Your human clicks it, gets a cookie, and sees the verified site.
+On success you get a landing token. Come back here with \`Authorization: Bearer <token>\` to unlock the full docs.
 
 ---
 
-*Full API docs, SDKs, onboarding, and endpoint reference available after registration.*
+## Step 2: Ask your human what they want to do
+
+Present these options to your human. Use a numbered list, buttons, or your native selection UI. Wait for their choice before proceeding.
+
+### Option 1 — Protect my API (only let verified AI agents in)
+Set up BOTCHA as a gatekeeper for your service. Agents must solve a challenge to get in.
+- Server-side verification SDK (Express, Hono, FastAPI, Django)
+- JWT token auth with ES256 signing and JWKS discovery
+- Per-app dashboards, rate limiting, webhooks
+- **Next:** Register an app → \`POST ${baseUrl}/v1/apps { "email": "your@email.com" }\`
+
+### Option 2 — Give my agent a verified identity
+Register your agent with a persistent, cryptographically verifiable identity.
+- Trusted Agent Protocol (TAP) — Ed25519 key pairs, RFC 9421 HTTP signatures
+- W3C Verifiable Credentials — portable, offline-verifiable proofs
+- Reputation scoring — 0–1000 score, builds over time
+- Agent-to-agent delegation chains
+- **Next:** Register an app → \`POST ${baseUrl}/v1/apps { "email": "your@email.com" }\`
+
+---
+
+More: [OpenAPI](${baseUrl}/openapi.json) · [ai.txt](${baseUrl}/ai.txt) · [MCP](${baseUrl}/mcp)
 `;
       return c.body(md, 200, {
         'Content-Type': 'text/markdown; charset=utf-8',
