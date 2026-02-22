@@ -632,12 +632,23 @@ app.get('/', async (c) => {
           label: 'Give my agent a verified identity',
           description: 'Register your agent with a persistent, cryptographically verifiable identity. Build reputation over time. Get W3C credentials other services can verify.',
           steps: [
-            `1. Ask your human for their email, then POST ${baseUrl}/v1/apps { "email": "..." }  → get app_id + app_secret`,
-            '2. Ask human for the 6-digit code emailed to them, then POST /v1/apps/{id}/verify-email',
-            `3. Solve a challenge with your app_id: GET ${baseUrl}/v1/challenges?app_id=... then POST /v1/challenges/{id}/verify → JWT token`,
-            `4. Register your identity: POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }  (Bearer token + app_id required)`,
-            '5. Optionally: register TAP keys, issue W3C credentials, build reputation — ask for identity docs.',
+            `1. Ask your human for their email, then POST ${baseUrl}/v1/apps { "email": "..." } → get app_id + app_secret`,
+            '2. Ask human for the 6-digit code emailed to them, then POST /v1/apps/{app_id}/verify-email',
+            `3. Solve a challenge: GET ${baseUrl}/v1/token?app_id=... → POST ${baseUrl}/v1/token/verify → JWT access_token`,
+            `4. Register your identity: POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." } (Bearer + app_id required) → agent_id`,
+            `5. Issue yourself a W3C Verifiable Credential: POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" } (Bearer required) — portable proof any service can verify offline`,
+            `6. Register a TAP keypair: POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "algorithm": "ed25519", "capabilities": [...] } — generate an Ed25519 keypair locally, register the public key. You can now sign requests instead of solving challenges each time.`,
+            `7. Check your reputation: GET ${baseUrl}/v1/reputation/{agent_id} — you start at 500 (neutral). It builds over time.`,
+            '8. Share relevant links with your human while you work through steps 5-7 (see human_links below). After completing all steps, explain in plain English what each thing is, what it enables, and where it is useful. Then ask: "Would you like to learn more about any of these?"',
           ],
+          human_links: {
+            'W3C Verifiable Credentials': 'https://www.w3.org/TR/vc-data-model/',
+            'Trusted Agent Protocol (TAP)': 'https://botcha.ai/whitepaper#tap',
+            'HTTP Message Signatures RFC 9421': 'https://www.rfc-editor.org/rfc/rfc9421',
+            'BOTCHA Whitepaper': `${baseUrl}/whitepaper`,
+            'BOTCHA Docs': `${baseUrl}/docs`,
+            'OpenAPI Reference': `${baseUrl}/openapi.json`,
+          },
         },
       ],
 
@@ -692,15 +703,22 @@ Set up BOTCHA as a gatekeeper for your service. Agents must solve a challenge to
 3. Use your app_id on all \`/v1/*\` calls. Ask for server-side SDK docs.
 
 ### Option 2 — Give my agent a verified identity
-Register your agent with a persistent, cryptographically verifiable identity.
-- Trusted Agent Protocol (TAP) — Ed25519 key pairs, RFC 9421 HTTP signatures
-- W3C Verifiable Credentials — portable, offline-verifiable proofs
-- Reputation scoring — 0–1000 score, builds over time
+Register your agent with a persistent, cryptographically verifiable identity. Do all steps below — they are all automatic, no further human decisions needed until step 8.
+
 1. Ask your human for their email → \`POST ${baseUrl}/v1/apps { "email": "..." }\`
-2. Ask human for the 6-digit code emailed to them → \`POST /v1/apps/{id}/verify-email\`
-3. Solve a challenge with your app_id → JWT token
-4. Register your identity → \`POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }\`
-5. Optionally: TAP keys, W3C credentials, reputation — ask for identity docs.
+2. Ask human for the 6-digit code emailed to them → \`POST /v1/apps/{app_id}/verify-email\`
+3. Solve a challenge → \`GET ${baseUrl}/v1/token?app_id=...\` then \`POST ${baseUrl}/v1/token/verify\` → JWT access_token
+4. Register your identity → \`POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }\` → agent_id
+5. Issue a W3C Verifiable Credential → \`POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" }\` — portable proof any service can verify offline without calling BOTCHA
+6. Register a TAP keypair → \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "algorithm": "ed25519", "capabilities": [...] }\` — generate Ed25519 locally, register public key. You can now sign requests instead of solving challenges
+7. Check your reputation → \`GET ${baseUrl}/v1/reputation/{agent_id}\` — starts at 500 (neutral), builds over time
+8. Share these links with your human while you work, then explain in plain English what each thing is, what it enables, and where it is useful. Ask: "Would you like to learn more about any of these?"
+
+**Links for your human:**
+- W3C Verifiable Credentials: https://www.w3.org/TR/vc-data-model/
+- Trusted Agent Protocol (TAP) + RFC 9421: https://www.rfc-editor.org/rfc/rfc9421
+- BOTCHA Whitepaper: ${baseUrl}/whitepaper
+- BOTCHA Docs: ${baseUrl}/docs
 
 ---
 
