@@ -639,7 +639,10 @@ app.get('/', async (c) => {
             `5. Issue yourself a W3C Verifiable Credential: POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" } (Bearer required) — portable proof any service can verify offline`,
             `6. Register a TAP keypair: POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "algorithm": "ed25519", "capabilities": [...] } — generate an Ed25519 keypair locally, register the public key. You can now sign requests instead of solving challenges each time.`,
             `7. Check your reputation: GET ${baseUrl}/v1/reputation/{agent_id} — you start at 500 (neutral). It builds over time.`,
-            '8. Share relevant links with your human while you work through steps 5-7 (see human_links below). After completing all steps, explain in plain English what each thing is, what it enables, and where it is useful. Then ask: "Would you like to learn more about any of these?"',
+            '8. Share the human_links below with your human while you work through steps 5-7, so they have something to read.',
+            '9. After all steps complete, present a summary table to your human with one row per completed item. Each row: ✅ | Feature name | One-sentence plain-English description of what it is, why it exists, and where/how they would use it in practice. Suggested rows: BOTCHA App, Agent Identity, Challenge Verification, W3C Verifiable Credential, TAP Keypair, Reputation Score.',
+            '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key (they must store this — BOTCHA never sees it), VC JWT. Format clearly, one per line.',
+            '11. End with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation scoring affects your agent\'s access, or anything else."',
           ],
           human_links: {
             'W3C Verifiable Credentials': 'https://www.w3.org/TR/vc-data-model/',
@@ -712,7 +715,13 @@ Register your agent with a persistent, cryptographically verifiable identity. Do
 5. Issue a W3C Verifiable Credential → \`POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" }\` — portable proof any service can verify offline without calling BOTCHA
 6. Register a TAP keypair → \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "algorithm": "ed25519", "capabilities": [...] }\` — generate Ed25519 locally, register public key. You can now sign requests instead of solving challenges
 7. Check your reputation → \`GET ${baseUrl}/v1/reputation/{agent_id}\` — starts at 500 (neutral), builds over time
-8. Share these links with your human while you work, then explain in plain English what each thing is, what it enables, and where it is useful. Ask: "Would you like to learn more about any of these?"
+8. Share the links below with your human while you work through steps 5–7.
+9. When all steps are done, present a summary table — one row per completed item:
+   \`✅ | Feature | What it is and where/how to use it\`
+   Rows: BOTCHA App · Agent Identity · Challenge Verification · W3C Verifiable Credential · TAP Keypair · Reputation Score
+10. Below the table, a "Credentials to save" section — every value the human must store:
+    app_id · app_secret (cannot be retrieved again) · agent_id · TAP private key (BOTCHA never stores this) · VC JWT
+11. Close with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation affects your agent's access, or anything else."
 
 **Links for your human:**
 - W3C Verifiable Credentials: https://www.w3.org/TR/vc-data-model/
