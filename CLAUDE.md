@@ -10,10 +10,13 @@ const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
 const AGENT_ID = 'YOUR_AGENT_ID';
-const PRIV_B64 = 'YOUR_PRIVATE_KEY_BASE64';
+const PRIV_RAW = 'YOUR_PRIVATE_KEY'; // looks like tapk_ABC123...== (NOT sk_...)
 const BASE_URL = 'http://localhost:8787'; // or actual base URL
 const url = new URL(BASE_URL);
 const lib = url.protocol === 'https:' ? https : http;
+// Validate key format
+if (PRIV_RAW.startsWith('sk_')) { console.error('ERROR: That is your app_secret, not your TAP private key. The TAP private key starts with tapk_ and was shown when you registered your agent.'); process.exit(1); }
+const PRIV_B64 = PRIV_RAW.startsWith('tapk_') ? PRIV_RAW.slice(5) : PRIV_RAW;
 function post(path, body) {
   const s = JSON.stringify(body);
   return new Promise((res,rej) => {
@@ -33,6 +36,10 @@ function post(path, body) {
 })();
 "
 ```
+
+> **Key format:** The TAP private key looks like `tapk_ABC123...==` (base64 with a `tapk_` prefix).
+> It is **NOT** the same as the `app_secret` which starts with `sk_`.
+> If you see `sk_...`, you have the wrong credential — ask your human for the TAP private key.
 
 Use the printed `ACCESS_TOKEN` as `Authorization: Bearer <token>` for all subsequent requests. You can also use the slash command `/botcha-identify` (see `.claude/commands/botcha-identify.md`).
 
@@ -69,8 +76,8 @@ function req(opts, body) {
     {public_key:pubRaw.toString('base64'),signature_algorithm:'ed25519'}
   );
   if (!result.success) { console.error(JSON.stringify(result)); process.exit(1); }
-  console.log('NEW_PRIVATE_KEY=' + privRaw.toString('base64'));
-  console.log('Key rotated. Give the new private key to your human to save.');
+  console.log('NEW_PRIVATE_KEY=tapk_' + privRaw.toString('base64'));
+  console.log('Key rotated. Give the new TAP private key (tapk_...) to your human to save. It is NOT the same as the app_secret (sk_...).');
 })();
 "
 ```
