@@ -183,6 +183,24 @@ export async function handleAgentAuthRefresh(c: Context<{ Bindings: Bindings }>)
   });
 }
 
+// ============ STATUS (polled by /device page after approval) ============
+
+export async function handleOAuthStatus(c: Context<{ Bindings: Bindings }>) {
+  const user_code = c.req.query('user_code');
+  if (!user_code) return c.json({ error: 'user_code required' }, 400);
+
+  const device_code = await (c.env as any).CHALLENGES.get(`oauth_usercode:${user_code}`, 'text');
+  if (!device_code) {
+    // device_code gone — either agent consumed it (approved + token issued) or it expired
+    return c.json({ status: 'consumed' });
+  }
+  const raw = await (c.env as any).CHALLENGES.get(`oauth_device:${device_code}`, 'text');
+  if (!raw) return c.json({ status: 'consumed' });
+
+  const { status } = JSON.parse(raw);
+  return c.json({ status }); // 'pending' | 'approved' | 'denied'
+}
+
 // ============ REVOKE (dashboard use) ============
 
 export async function handleOAuthRevoke(c: Context<{ Bindings: Bindings }>) {

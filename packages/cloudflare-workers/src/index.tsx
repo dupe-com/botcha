@@ -50,7 +50,7 @@ import { DocsPage } from './dashboard/docs';
 import { handleAccountPage, handleAccountJson } from './dashboard/account';
 import { createAgent, getAgent, listAgents, deleteAgent } from './agents';
 import { handleAgentAuthChallenge, handleAgentAuthVerify, handleAgentAuthProvider } from './agent-auth';
-import { handleOAuthDevice, handleOAuthToken, handleOAuthApprove, handleAgentAuthRefresh, handleOAuthRevoke } from './oauth-agent';
+import { handleOAuthDevice, handleOAuthToken, handleOAuthApprove, handleAgentAuthRefresh, handleOAuthRevoke, handleOAuthStatus } from './oauth-agent';
 import {
   registerTAPAgentRoute,
   getTAPAgentRoute,
@@ -611,7 +611,8 @@ app.get('/', async (c) => {
     };
     const error = errorParam ? errorMessages[errorParam] || undefined : undefined;
 
-    return c.html(<ShowcasePage version={version} error={error} />);
+    const baseUrl = `${url.protocol}//${url.host}`;
+    return c.html(<ShowcasePage version={version} error={error} baseUrl={baseUrl} />);
   }
 
   // === UNVERIFIED: challenge-first entry point ===
@@ -2500,6 +2501,7 @@ app.post('/v1/oauth/device', handleOAuthDevice);
 app.post('/v1/oauth/token', handleOAuthToken);
 app.post('/v1/oauth/approve', handleOAuthApprove);   // called from /device page (dashboard session required)
 app.post('/v1/oauth/revoke', handleOAuthRevoke);
+app.get('/v1/oauth/status', handleOAuthStatus);
 app.get('/v1/oauth/lookup', async (c) => {
   // Public — just returns agent name/operator for the approval page UI
   const user_code = c.req.query('user_code');
@@ -2901,14 +2903,38 @@ app.get('/device', requireDashboardAuth, async (c) => {
         });
         const d = await r.json();
         if (d.success) {
-          status.innerHTML = action === 'approve'
-            ? '<strong style="color:#22c55e;">✓ Approved.</strong> Your agent can now re-identify automatically.'
-            : '<strong style="color:#ef4444;">Denied.</strong> The agent was not authorized.';
           document.getElementById('code-input').disabled = true;
+          if (action === 'approve') {
+            status.innerHTML = '<strong style="color:#22c55e;">✓ Approved.</strong> Waiting for your agent to pick up the token…';
+            pollForPickup(document.getElementById('code-input').value);
+          } else {
+            status.innerHTML = '<strong style="color:#ef4444;">Denied.</strong> The agent was not authorized.';
+          }
         } else {
           status.textContent = 'Error: ' + (d.error || 'Unknown');
         }
       } catch(e) { status.textContent = 'Failed. Try again.'; }
+    }
+    function copyMsg(el) {
+      navigator.clipboard.writeText(el.textContent).then(function() {
+        document.getElementById('copy-hint').textContent = '✓ Copied';
+      });
+    }
+    var pickupTimer = null;
+    function pollForPickup(code) {
+      pickupTimer = setInterval(async function() {
+        try {
+          const r = await fetch('/v1/oauth/status?user_code=' + encodeURIComponent(code));
+          const d = await r.json();
+          if (d.status === 'consumed' || d.status === 'approved') {
+            clearInterval(pickupTimer);
+            document.getElementById('status').innerHTML =
+              '<strong style="color:#22c55e;">✓ Approved.</strong> Return to your agent and paste this:<br><br>' +
+              '<code id="paste-msg" style="display:block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;padding:10px;font-size:12px;cursor:pointer;text-align:left;line-height:1.6;" onclick="copyMsg(this)">I approved the BOTCHA authorization. The user code was: ' + code + '</code>' +
+              '<span id="copy-hint" style="font-size:11px;color:#9ca3af;">click to copy</span>';
+          }
+        } catch(e) {}
+      }, 2000);
     }
     // Auto-lookup if prefilled
     if (document.getElementById('code-input').value.length === 13) lookupCode(document.getElementById('code-input').value);

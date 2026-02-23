@@ -35,6 +35,7 @@ export const APP_GATE_OPEN_PATHS = [
   '/v1/oauth/approve',
   '/v1/oauth/revoke',
   '/v1/oauth/lookup',
+  '/v1/oauth/status',
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
