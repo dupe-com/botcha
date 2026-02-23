@@ -585,9 +585,8 @@ export async function renderLoginPage(c: Context<{ Bindings: Bindings }>) {
         </Card>
       </form>
 
-      <p class="text-muted" style="font-size: 0.75rem; text-align: center; margin-top: 1.5rem; line-height: 1.8;">
-        New here? Ask your AI agent to run:<br />
-        <code style="font-size: 0.75rem;">curl -s https://botcha.ai -H 'Accept: application/json'</code>
+      <p class="text-muted" style="font-size: 0.75rem; text-align: center; margin-top: 1.5rem;">
+        New here? <a href="/">Get started →</a>
       </p>
     </LoginLayout>
   );
