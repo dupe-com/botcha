@@ -269,7 +269,7 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
                 <span id="recover-status" style="font-size:11px;color:#6b7280;"></span>
               </div>
               <div id="recover-form" style="display:none;margin-top:6px;width:100%;">
-                <p style="font-size:12px;color:#6b7280;margin:0 0 6px;">Enter the 6-digit code from your email, then your agent will receive a new <code style="font-size:11px;">app_secret</code>:</p>
+                <p style="font-size:12px;color:#6b7280;margin:0 0 6px;">Enter the 6-digit code from your email:</p>
                 <div style="display:flex;gap:6px;align-items:center;">
                   <input id="recover-code" type="text" maxlength="6" placeholder="123456"
                     style="font-family:var(--font);font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;width:90px;background:var(--bg);" />
@@ -401,17 +401,34 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           if (!code) { result.textContent = 'Enter the 6-digit code.'; return; }
           result.textContent = 'Verifying…';
           try {
-            // Use device code login flow — code grants a session
-            const res = await fetch('/dashboard/code', {
+            // Step 1: exchange device code for session cookie
+            const loginRes = await fetch('/dashboard/code', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
               body: JSON.stringify({code})
             });
-            if (res.ok) {
-              result.innerHTML = '<strong style="color:#22c55e;">✓ Logged in.</strong> Now rotate your app_secret: ask your agent to call <code style="font-size:11px;">POST /v1/apps/${appId}/rotate-secret</code> with your dashboard session, or <a href="/account">refresh this page</a>.';
+            if (!loginRes.ok) {
+              const d = await loginRes.json();
+              result.textContent = 'Invalid code: ' + (d.message || d.error || loginRes.status);
+              return;
+            }
+            // Step 2: immediately rotate the secret — session cookie is now set
+            result.textContent = 'Rotating secret…';
+            const rotateRes = await fetch('/v1/apps/${appId}/rotate-secret', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({app_id: '${appId}'})
+            });
+            const rotateData = await rotateRes.json();
+            if (rotateRes.ok && rotateData.app_secret) {
+              result.innerHTML =
+                '<strong style="color:#22c55e;">✓ New app_secret issued.</strong> Save this now — it will not be shown again:<br>' +
+                '<code style="display:block;margin-top:8px;padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:3px;font-size:12px;word-break:break-all;color:#111827;">' +
+                rotateData.app_secret + '</code>' +
+                '<button onclick="navigator.clipboard.writeText(\'' + rotateData.app_secret + '\').then(()=>this.textContent=\'Copied!\')" ' +
+                'class="btn-action" style="margin-top:6px;border:1px solid var(--border);">Copy</button>';
             } else {
-              const data = await res.json();
-              result.textContent = 'Error: ' + (data.message || data.error || res.status);
+              result.textContent = 'Rotation failed: ' + (rotateData.message || rotateData.error || rotateRes.status);
             }
           } catch(e) {
             result.textContent = 'Failed. Try again.';
