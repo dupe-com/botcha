@@ -70,7 +70,7 @@ export async function generateSessionToken(appId: string, jwtSecret: string): Pr
  */
 export function setSessionCookie(c: Context, token: string): void {
   setCookie(c, 'botcha_session', token, {
-    path: '/dashboard',
+    path: '/',
     httpOnly: true,
     secure: true,
     sameSite: 'Lax',
@@ -114,7 +114,7 @@ export const requireDashboardAuth: MiddlewareHandler<{ Bindings: Bindings; Varia
   const result = await verifyToken(sessionToken, c.env.JWT_SECRET, c.env);
 
   if (!result.valid || !result.payload?.app_id) {
-    deleteCookie(c, 'botcha_session', { path: '/dashboard' });
+  deleteCookie(c, 'botcha_session', { path: '/' });
     const isApi = c.req.header('Accept')?.includes('application/json') ||
                   c.req.header('HX-Request');
     if (isApi) {
@@ -465,8 +465,8 @@ export async function handleLogin(c: Context<{ Bindings: Bindings }>) {
  * GET /dashboard/logout
  */
 export async function handleLogout(c: Context<{ Bindings: Bindings }>) {
-  deleteCookie(c, 'botcha_session', { path: '/dashboard' });
-  return c.redirect('/dashboard/login');
+  deleteCookie(c, 'botcha_session', { path: '/' });
+  return c.redirect('/login');
 }
 
 // ============ EMAIL LOGIN (session re-entry) ============
