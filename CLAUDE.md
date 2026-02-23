@@ -86,7 +86,7 @@ req.on('error',e=>{console.error(e);process.exit(1);}); req.write(body); req.end
 
 > The API key is **never stored** — only its SHA-256 hash is compared. Re-identification works in any session as long as you have the same API key.
 
-### Option B — TAP private key (fallback if no provider binding)
+### Option C — TAP private key (fallback if no provider binding)
 
 If your agent was registered with a keypair only, re-identify by signing a nonce in-process (not WebFetch — you must run code):
 
