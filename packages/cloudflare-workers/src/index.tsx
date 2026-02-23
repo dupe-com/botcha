@@ -2500,7 +2500,7 @@ app.post('/v1/agents/auth/refresh', handleAgentAuthRefresh);
 // Agent OAuth — device authorization grant (RFC 8628)
 app.post('/v1/oauth/device', handleOAuthDevice);
 app.post('/v1/oauth/token', handleOAuthToken);
-app.post('/v1/oauth/approve', handleOAuthApprove);   // called from /device page (dashboard session required)
+app.post('/v1/oauth/approve', handleOAuthApprove);   // intentionally unauthenticated — device code is the trust anchor
 app.post('/v1/oauth/revoke', handleOAuthRevoke);
 app.get('/v1/oauth/status', handleOAuthStatus);
 app.get('/v1/oauth/lookup', async (c) => {
@@ -2834,9 +2834,9 @@ app.post('/v1/auth/device-code/verify', handleDeviceCodeVerify);
 
 // ============ AGENT OAUTH APPROVAL PAGE ============
 
-app.get('/device', requireDashboardAuth, async (c) => {
+// /device is intentionally public — the device code in the URL is the trust anchor (RFC 8628 §6.1)
+app.get('/device', async (c) => {
   const prefill = c.req.query('code') ?? '';
-  const appId = c.get('dashboardAppId') ?? '';
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
