@@ -117,7 +117,10 @@ function validateTAPRegistration(body: any): {
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
     ans_name?: string;
-    did?: string;  };
+    did?: string;
+    provider?: string;
+    api_key?: string;
+  };
   error?: string;
 } {
   if (!body.name || typeof body.name !== 'string') {
@@ -182,6 +185,17 @@ function validateTAPRegistration(body: any): {
     }
   }
 
+  // Validate provider if provided
+  const SUPPORTED_PROVIDERS = ['anthropic', 'openai', 'google', 'mistral', 'cohere', 'other'];
+  if (body.provider !== undefined) {
+    if (!SUPPORTED_PROVIDERS.includes(body.provider)) {
+      return { valid: false, error: `Unsupported provider. Use one of: ${SUPPORTED_PROVIDERS.join(', ')}` };
+    }
+    if (!body.api_key || typeof body.api_key !== 'string') {
+      return { valid: false, error: 'api_key is required when provider is specified' };
+    }
+  }
+
   return {
     valid: true,
     data: {
@@ -195,6 +209,8 @@ function validateTAPRegistration(body: any): {
       issuer: body.issuer,
       ans_name: body.ans_name,
       did: body.did,
+      provider: body.provider,
+      api_key: body.api_key,  // plaintext — hashed in route handler, never persisted
     }
   };
 }
@@ -248,6 +264,12 @@ export async function registerTAPAgentRoute(c: Context) {
         }, 403);
       }
       const now = Date.now();
+      // Hash provider API key if provided — never store plaintext
+      let providerKeyHash = (existing.agent as any).provider_key_hash;
+      if (validation.data!.api_key) {
+        const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(validation.data!.api_key.trim()));
+        providerKeyHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
       agent = {
         ...existing.agent,
         public_key: validation.data!.public_key ?? existing.agent.public_key,
@@ -258,6 +280,8 @@ export async function registerTAPAgentRoute(c: Context) {
         key_created_at: validation.data!.public_key ? now : existing.agent.key_created_at,
         ans_name: validation.data!.ans_name ?? existing.agent.ans_name,
         did: validation.data!.did ?? existing.agent.did,
+        provider: (validation.data! as any).provider ?? (existing.agent as any).provider,
+        provider_key_hash: providerKeyHash,
       };
       await c.env.AGENTS.put(`agent:${agent.agent_id}`, JSON.stringify(agent));
     } else {

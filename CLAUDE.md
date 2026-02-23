@@ -2,7 +2,34 @@
 
 ## BOTCHA Agent Re-Identification
 
-If you are told you are a registered BOTCHA agent with an `agent_id` and private key, re-identify **before doing anything else** using Bash (not WebFetch — you must sign a nonce in-process):
+If you are told you are a registered BOTCHA agent, re-identify **before doing anything else** using Bash.
+
+### Option A — Provider API key (preferred, no extra secret needed)
+
+If your agent was registered with a provider binding, re-identify using your existing API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.):
+
+```bash
+node -e "
+const http = require('http');
+const https = require('https');
+const AGENT_ID = 'YOUR_AGENT_ID';   // e.g. agent_37c905...
+const APP_ID   = 'YOUR_APP_ID';     // e.g. app_67de33...
+const PROVIDER = 'anthropic';        // or openai, google, mistral, cohere
+const API_KEY  = process.env.ANTHROPIC_API_KEY || 'YOUR_API_KEY';
+const BASE_URL = 'http://localhost:8787';
+const url = new URL(BASE_URL);
+const lib = url.protocol === 'https:' ? https : http;
+const body = JSON.stringify({ provider: PROVIDER, api_key: API_KEY, app_id: APP_ID });
+const req = lib.request({hostname:url.hostname,port:url.port||(url.protocol==='https:'?443:80),path:'/v1/agents/auth/provider',method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}},res=>{let d='';res.on('data',c=>d+=c);res.on('end',()=>{const r=JSON.parse(d);if(!r.success){console.error(JSON.stringify(r));process.exit(1);}console.log('ACCESS_TOKEN='+r.access_token);console.log('Re-identified as '+r.agent_id);});});
+req.on('error',e=>{console.error(e);process.exit(1);}); req.write(body); req.end();
+"
+```
+
+> The API key is **never stored** — only its SHA-256 hash is compared. Re-identification works in any session as long as you have the same API key.
+
+### Option B — TAP private key (fallback if no provider binding)
+
+If your agent was registered with a keypair only, re-identify by signing a nonce in-process (not WebFetch — you must run code):
 
 ```bash
 node -e "

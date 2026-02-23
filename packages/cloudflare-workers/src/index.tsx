@@ -49,7 +49,7 @@ import { WhitepaperPage } from './dashboard/whitepaper';
 import { DocsPage } from './dashboard/docs';
 import { handleAccountPage, handleAccountJson } from './dashboard/account';
 import { createAgent, getAgent, listAgents, deleteAgent } from './agents';
-import { handleAgentAuthChallenge, handleAgentAuthVerify } from './agent-auth';
+import { handleAgentAuthChallenge, handleAgentAuthVerify, handleAgentAuthProvider } from './agent-auth';
 import {
   registerTAPAgentRoute,
   getTAPAgentRoute,
@@ -2491,6 +2491,7 @@ app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 // Agent identity auth — prove you are a specific registered agent
 app.post('/v1/agents/auth', handleAgentAuthChallenge);
 app.post('/v1/agents/auth/verify', handleAgentAuthVerify);
+app.post('/v1/agents/auth/provider', handleAgentAuthProvider);
 
 // TAP session management
 app.post('/v1/sessions/tap', createTAPSessionRoute);

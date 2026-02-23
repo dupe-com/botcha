@@ -40,7 +40,14 @@ export interface TAPAgent extends Agent {
   // W3C DID — optional self-sovereign identity for the agent
   // When set, this DID is embedded as credentialSubject.id in issued VCs.
   // Accepts any valid DID (e.g. did:web:example.com:agents:my-agent, did:key:z6Mk...).
-  did?: string;}
+  did?: string;
+
+  // Provider-based identity binding (alternative to tapk_ keypair)
+  // Agent registers by hashing its provider API key — re-identification
+  // is automatic in any future session since the key is always in env.
+  provider?: 'anthropic' | 'openai' | 'google' | 'mistral' | 'cohere' | 'other';
+  provider_key_hash?: string;  // SHA-256 hex of the raw API key (never stored in plaintext)
+}
 
 /** Valid TAP capability actions — single source of truth */
 export const TAP_VALID_ACTIONS = ['browse', 'compare', 'purchase', 'audit', 'search'] as const;

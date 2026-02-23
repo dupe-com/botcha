@@ -24,9 +24,10 @@ export const APP_GATE_OPEN_PATHS = [
   '/v1/a2a/verify-card',
   '/v1/a2a/verify-agent',
   '/v1/a2a/cards',
-  // Agent identity auth — agent proves identity with keypair, no app_id needed
+  // Agent identity auth — prove identity via keypair or provider API key
   '/v1/agents/auth',
   '/v1/agents/auth/verify',
+  '/v1/agents/auth/provider',
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)

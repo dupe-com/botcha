@@ -26,10 +26,90 @@
 
 import type { Context } from 'hono';
 import { SignJWT } from 'jose';
-import { getTAPAgent } from './tap-agents';
+import { getTAPAgent, listTAPAgents } from './tap-agents';
 
-type KVNamespace = { get(key: string, type?: string): Promise<string | null>; put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>; delete(key: string): Promise<void> };
+type KVNamespace = { get(key: string, type?: string): Promise<string | null>; put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>; delete(key: string): Promise<void>; list(opts?: { prefix?: string }): Promise<{ keys: { name: string }[] }> };
 type Bindings = { AGENTS: KVNamespace; CHALLENGES: KVNamespace; JWT_SECRET: string };
+
+const SUPPORTED_PROVIDERS = ['anthropic', 'openai', 'google', 'mistral', 'cohere', 'other'] as const;
+type Provider = typeof SUPPORTED_PROVIDERS[number];
+
+/** SHA-256 hash of a string, returned as hex */
+async function sha256hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Issue an agent-identity JWT (shared logic) */
+async function issueAgentToken(jwtSecret: string, agent_id: string, app_id: string): Promise<string> {
+  const secret = new TextEncoder().encode(jwtSecret);
+  return new SignJWT({ type: 'botcha-agent-identity', agent_id, app_id })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(agent_id)
+    .setIssuer('botcha.ai')
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .setJti(crypto.randomUUID())
+    .sign(secret);
+}
+
+// ============ PROVIDER KEY AUTH ============
+
+/**
+ * POST /v1/agents/auth/provider
+ * Re-identify using the agent's provider API key (Anthropic, OpenAI, etc).
+ * The key is never stored — only its SHA-256 hash is compared.
+ *
+ * Body: { provider: 'anthropic' | 'openai' | ..., api_key: 'sk-ant-...', app_id: '...' }
+ */
+export async function handleAgentAuthProvider(c: Context<{ Bindings: Bindings & { APP_ID?: string } }>) {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const { provider, api_key, app_id } = body ?? {};
+
+  if (!provider || !api_key || !app_id) {
+    return c.json({
+      success: false,
+      error: 'MISSING_FIELDS',
+      message: 'provider, api_key, and app_id are required',
+      supported_providers: SUPPORTED_PROVIDERS,
+    }, 400);
+  }
+
+  if (!SUPPORTED_PROVIDERS.includes(provider as Provider)) {
+    return c.json({ success: false, error: 'UNSUPPORTED_PROVIDER', message: `Unsupported provider. Use one of: ${SUPPORTED_PROVIDERS.join(', ')}` }, 400);
+  }
+
+  // Hash the provided key
+  const keyHash = await sha256hex(api_key.trim());
+
+  // Scan agents for this app to find a matching hash
+  // Uses the app_agents index for efficiency
+  const listResult = await listTAPAgents((c.env as any).AGENTS, app_id);
+  const agents = listResult?.agents ?? [];
+  const match = agents.find((a: any) => a.provider === provider && a.provider_key_hash === keyHash);
+
+  if (!match) {
+    return c.json({
+      success: false,
+      error: 'AGENT_NOT_FOUND',
+      message: `No agent found for this ${provider} API key on app ${app_id}. Register first via POST /v1/agents/register/tap with provider + api_key.`,
+    }, 404);
+  }
+
+  const access_token = await issueAgentToken(c.env.JWT_SECRET, match.agent_id, app_id);
+
+  return c.json({
+    success: true,
+    access_token,
+    token_type: 'Bearer',
+    agent_id: match.agent_id,
+    app_id,
+    provider,
+    expires_in: 3600,
+    message: `Identity verified via ${provider} API key. This token proves you are agent ${match.agent_id}.`,
+    usage: { header: 'Authorization: Bearer <access_token>' },
+  });
+}
 
 // ============ STEP 1: Issue nonce challenge ============
 
@@ -116,19 +196,7 @@ export async function handleAgentAuthVerify(c: Context<{ Bindings: Bindings }>) 
   }
 
   // Issue agent-identity JWT (1 hour)
-  const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-  const access_token = await new SignJWT({
-    type: 'botcha-agent-identity',
-    agent_id,
-    app_id,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject(agent_id)
-    .setIssuer('botcha.ai')
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .setJti(crypto.randomUUID())
-    .sign(secret);
+  const access_token = await issueAgentToken(c.env.JWT_SECRET, agent_id, app_id);
 
   return c.json({
     success: true,

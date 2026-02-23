@@ -65,6 +65,7 @@ async function fetchAccountData(c: Context<{ Bindings: Bindings; Variables: Vari
       operator: agent.operator ?? null,
       created_at: agent.created_at,
       tap_enabled: Boolean((agent as any).tap_enabled),
+      provider: (agent as any).provider ?? null,
       reputation: rep
         ? { score: rep.score, tier: rep.tier, event_count: rep.event_count }
         : null,
@@ -141,7 +142,7 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           </td>
           <td style="text-align:center;">
             ${a.tap_enabled
-              ? `<button class="btn-action" onclick="toggleReidentify('${a.agent_id}')" title="TAP keypair registered — click for re-identification instructions" style="color:#22c55e;">✓ TAP</button>`
+              ? `<button class="btn-action" onclick="toggleReidentify('${a.agent_id}')" style="color:#22c55e;" title="Click for re-identification instructions">✓ TAP${(a as any).provider ? ' · ' + (a as any).provider : ''}</button>`
               : '<span style="color:#d1d5db;font-size:11px;font-weight:500;" title="No TAP keypair">— TAP</span>'}
           </td>
           <td style="text-align:right;white-space:nowrap;">
@@ -156,17 +157,19 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           <td colspan="6" style="padding:0 12px 16px 12px;background:#f9fafb;border-bottom:1px solid var(--border);">
             <div style="font-size:12px;color:#374151;line-height:1.7;padding-top:12px;">
               <strong style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;">How to re-identify in a new session</strong>
+              ${(a as any).provider ? `
+              <p style="margin:8px 0 4px;">This agent is bound to your <strong>${(a as any).provider}</strong> API key. At the start of a new conversation, just tell your agent:</p>
+              <div style="background:#fff;border:1px solid var(--border);border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
+                You are agent <strong>${a.agent_id}</strong> on my BOTCHA account (${baseUrl}). App ID is ${appId}. Re-identify yourself before doing anything else.
+              </div>
+              <p style="margin:4px 0 0;color:#6b7280;font-size:12px;">The agent uses its <code style="font-size:11px;">${(a as any).provider.toUpperCase()}_API_KEY</code> environment variable — no extra secret needed. It calls <code style="font-size:11px;">POST /v1/agents/auth/provider</code> automatically.</p>
+              ` : `
               <p style="margin:8px 0 4px;">At the start of a new conversation, tell your agent:</p>
               <div style="background:#fff;border:1px solid var(--border);border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
                 You are agent <strong>${a.agent_id}</strong> on my BOTCHA account (${baseUrl}). Your TAP private key is <strong>&lt;paste tapk_... key&gt;</strong>. Re-identify yourself before doing anything else.
               </div>
-              <p style="margin:4px 0 4px;font-size:11px;color:#d97706;"><strong>Note:</strong> The TAP private key starts with <code style="font-size:11px;">tapk_</code>. It is not the same as your <code style="font-size:11px;">app_secret</code> which starts with <code style="font-size:11px;">sk_</code>.</p>
-              <p style="margin:4px 0;">The agent will then:</p>
-              <ol style="margin:4px 0 0 18px;padding:0;color:#6b7280;">
-                <li>POST ${baseUrl}/v1/agents/auth with <code style="font-size:11px;">{"agent_id":"${a.agent_id}"}</code> → receive a nonce</li>
-                <li>Sign the nonce with the private key (Ed25519)</li>
-                <li>POST ${baseUrl}/v1/agents/auth/verify with <code style="font-size:11px;">{"challenge_id","agent_id","signature"}</code> → receive an identity JWT</li>
-              </ol>
+              <p style="margin:4px 0 4px;font-size:11px;color:#d97706;"><strong>Tip:</strong> Bind your provider API key to skip the tapk_ secret entirely — use the ↺ rotate button to register a provider binding.</p>
+              `}
               <p style="margin:8px 0 0;color:#9ca3af;font-size:11px;">The identity JWT contains your agent_id claim — proving this is the same agent, not a fresh anonymous session.</p>
             </div>
           </td>
