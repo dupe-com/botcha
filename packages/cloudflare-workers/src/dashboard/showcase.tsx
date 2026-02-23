@@ -59,6 +59,18 @@ const HOME_CSS = `
     border: 1px solid var(--border);
     padding: 1.25rem 1.5rem;
     text-align: left;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .home-agent-note:hover {
+    border-color: var(--text-muted);
+    background: rgba(0,0,0,0.02);
+  }
+
+  .home-agent-note:active {
+    background: rgba(0,0,0,0.05);
   }
 
   .home-agent-note-label {
@@ -67,55 +79,41 @@ const HOME_CSS = `
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-dim);
-    margin-bottom: 0.625rem;
-  }
-
-  .home-agent-note-text {
-    font-size: 0.8125rem;
-    line-height: 1.65;
-    color: var(--text-muted);
-  }
-
-  .home-agent-note-text code {
-    color: var(--accent);
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: inherit;
-  }
-
-  .home-agent-prompts {
-    margin: 0.75rem 0 0.5rem;
+    margin-bottom: 0.75rem;
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 0.5rem;
   }
 
-  .home-agent-prompt {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
+  .home-agent-copy-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0.6;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  .home-agent-note:hover .home-agent-copy-hint {
+    opacity: 1;
+  }
+
+  .home-agent-prompt-text {
     font-size: 0.8125rem;
-  }
-
-  .home-agent-prompt-arrow {
-    color: var(--text-dim);
-    flex-shrink: 0;
-  }
-
-  .home-agent-prompt code {
+    line-height: 1.6;
     color: var(--text);
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: inherit;
-    line-height: 1.5;
   }
 
   .home-agent-note-sub {
     font-size: 0.75rem;
     color: var(--text-dim);
     margin-top: 0.75rem;
+  }
+
+  .home-agent-note-copied {
+    opacity: 0;
+    transition: opacity 0.2s;
+    color: var(--accent);
   }
 
   @media (max-width: 480px) {
@@ -127,7 +125,8 @@ const HOME_CSS = `
 
 // ============ PAGE COMPONENT ============
 
-export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version, error }) => {
+export const ShowcasePage: FC<{ version: string; error?: string; baseUrl?: string }> = ({ version, error, baseUrl }) => {
+  const prompt = `Curl ${baseUrl ?? 'https://botcha.ai'} and get me set up.`;
   return (
     <html lang="en">
       <head>
@@ -167,22 +166,38 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
           <a href="/" class="home-logo">{BOTCHA_LOGO}</a>
           <p class="home-tagline">{'>'}_&nbsp;&nbsp;prove you're a bot.</p>
 
-          {/* Agent instruction */}
-          <div class="home-agent-note">
-            <div class="home-agent-note-label">For humans</div>
-            <div class="home-agent-note-text">
-              Paste one of these into your AI agent:
+          {/* Agent instruction — click to copy */}
+          <div
+            class="home-agent-note"
+            role="button"
+            tabindex={0}
+            data-prompt={prompt}
+            onclick="copyPrompt(this)"
+            onkeydown="if(event.key==='Enter'||event.key===' ')copyPrompt(this)"
+            title="Click to copy"
+          >
+            <div class="home-agent-note-label">
+              For humans
+              <span class="home-agent-copy-hint">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                click to copy
+              </span>
             </div>
-            <div class="home-agent-prompts">
-              <div class="home-agent-prompt">
-                <span class="home-agent-prompt-arrow">→</span>
-                <code>"Curl https://botcha.ai and get me set up."</code>
-              </div>
+            <div class="home-agent-prompt-text">
+              "{prompt}"
             </div>
-            <div class="home-agent-note-sub">
-              Your agent will handle everything from there.
-            </div>
+            <div class="home-agent-note-sub home-agent-note-copied" id="copy-confirm">Copied!</div>
           </div>
+          <script dangerouslySetInnerHTML={{ __html: `
+            function copyPrompt(el) {
+              var text = el.getAttribute('data-prompt');
+              navigator.clipboard.writeText(text).then(function() {
+                var confirm = document.getElementById('copy-confirm');
+                confirm.style.opacity = '1';
+                setTimeout(function() { confirm.style.opacity = '0'; }, 1500);
+              });
+            }
+          `}} />
 
 
 
