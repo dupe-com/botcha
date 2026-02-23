@@ -476,6 +476,9 @@ Feature: Email-Tied App Creation (email required, 6-digit verification, account 
 Feature: Secret Rotation (rotate app_secret with email notification)
 Feature: Agent-First Dashboard Auth (challenge-based login + device code handoff)
 Feature: Agent Registry (persistent agent identities with name, operator, version)
+Feature: Agent Re-identification — prove you are the same agent in a new session via OAuth refresh token (brt_), provider API key hash, or Ed25519 keypair challenge-response
+Feature: Agent OAuth Device Authorization Grant (RFC 8628) — human approves at /device, agent polls for brt_... refresh token valid 90 days
+Feature: TAP Key Recovery — rotate lost keypair using app_secret as recovery anchor
 Feature: Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures (RFC 9421)
 Feature: TAP Capabilities (action + resource scoping for agent sessions)
 Feature: TAP Trust Levels (basic, verified, enterprise)
@@ -531,6 +534,21 @@ Endpoint: POST https://botcha.ai/gate - Submit code form, redirects to /go/:code
 Endpoint: POST https://botcha.ai/v1/agents/register - Register agent identity — requires app_id
 Endpoint: GET https://botcha.ai/v1/agents/:id - Get agent by ID (public, no auth) — requires app_id
 Endpoint: GET https://botcha.ai/v1/agents - List all agents for authenticated app — requires app_id
+Endpoint: DELETE https://botcha.ai/v1/agents/:id - Delete agent — requires dashboard session
+
+# Agent Re-identification (PUBLIC — no auth needed, proves same agent across sessions)
+Endpoint: POST https://botcha.ai/v1/agents/auth - Step 1 keypair auth: { agent_id } → { challenge_id, nonce } — PUBLIC
+Endpoint: POST https://botcha.ai/v1/agents/auth/verify - Step 2 keypair auth: { challenge_id, agent_id, signature } → { access_token } — PUBLIC
+Endpoint: POST https://botcha.ai/v1/agents/auth/provider - Provider key auth: { provider, api_key, app_id } → { access_token } — PUBLIC
+Endpoint: POST https://botcha.ai/v1/agents/auth/refresh - OAuth refresh: { refresh_token: "brt_..." } → { access_token } — PUBLIC
+
+# Agent OAuth — Device Authorization Grant (RFC 8628)
+Endpoint: POST https://botcha.ai/v1/oauth/device - Start device auth: { agent_id, app_id } → { device_code, user_code, verification_url, expires_in: 600, interval: 5 } — PUBLIC
+Endpoint: POST https://botcha.ai/v1/oauth/token - Poll for token: { device_code, grant_type } → { access_token, refresh_token: "brt_..." } — PUBLIC
+Endpoint: POST https://botcha.ai/v1/oauth/approve - Human approval: { user_code, action: "approve"|"deny" } — PUBLIC
+Endpoint: POST https://botcha.ai/v1/oauth/revoke - Revoke refresh token: { agent_id, app_id } — PUBLIC
+Endpoint: GET https://botcha.ai/v1/oauth/lookup - Agent info for approval UI: ?user_code=BOTCHA-XXXX → { agent_id, name, operator } — PUBLIC
+Endpoint: GET https://botcha.ai/device - Human-facing OAuth approval page (requires dashboard login)
 
 # TAP (Trusted Agent Protocol) Endpoints (app_id required)
 Endpoint: POST https://botcha.ai/v1/agents/register/tap - Register TAP agent with public key + capabilities — requires app_id
@@ -543,7 +561,7 @@ Endpoint: GET https://botcha.ai/v1/sessions/:id/tap - Get TAP session info — r
 Endpoint: GET https://botcha.ai/.well-known/jwks - JWK Set for app's TAP agents (Visa spec standard) — requires app_id
 Endpoint: GET https://botcha.ai/v1/keys - List keys (supports ?keyID= query for Visa compatibility) — requires app_id
 Endpoint: GET https://botcha.ai/v1/keys/:keyId - Get specific key by ID — requires app_id
-Endpoint: POST https://botcha.ai/v1/agents/:id/tap/rotate-key - Rotate agent's key pair — requires app_id
+Endpoint: POST https://botcha.ai/v1/agents/:id/tap/rotate-key - Rotate agent's TAP keypair (accepts Bearer JWT or x-app-secret header for recovery) — requires app_id or app_secret
 
 # TAP Full Spec — 402 Micropayments (v0.16.0) (app_id required)
 Endpoint: POST https://botcha.ai/v1/invoices - Create invoice for gated content (402 flow) — requires app_id
@@ -717,6 +735,14 @@ SDK-App-Lifecycle-TS: createApp(email), verifyEmail(code, appId?, appSecret?), r
 SDK-App-Lifecycle-Python: create_app(email), verify_email(code, app_id?, app_secret?), resend_verification(app_id?, app_secret?), recover_account(email), rotate_secret()
 Multi-Tenant-Rate-Limit: Each app gets isolated rate limit bucket
 Multi-Tenant-Token-Claim: Tokens include app_id claim when app_id provided
+
+# AGENT RE-IDENTIFICATION
+ReIdentification-Description: Prove you are the same agent across sessions without solving a new challenge. Three methods available.
+ReIdentification-Method-A: OAuth device grant (RFC 8628) — RECOMMENDED. POST /v1/oauth/device {agent_id, app_id} → {device_code, user_code: "BOTCHA-XXXX", verification_url}. Human visits /device, approves. Agent polls POST /v1/oauth/token → {access_token, refresh_token: "brt_..."}. Future sessions: POST /v1/agents/auth/refresh {refresh_token} → {access_token}.
+ReIdentification-Method-B: Provider API key hash. POST /v1/agents/auth/provider {provider: "anthropic", api_key, app_id} → {access_token}. Works if agent was registered with provider binding.
+ReIdentification-Method-C: TAP keypair challenge-response. POST /v1/agents/auth {agent_id} → {challenge_id, nonce}. Sign nonce with Ed25519 private key. POST /v1/agents/auth/verify {challenge_id, agent_id, signature} → {access_token}.
+ReIdentification-KeyRecovery: Lost tapk_ key? POST /v1/agents/:id/tap/rotate-key with x-app-secret header → provide new public_key → old key invalidated, agent_id and reputation preserved.
+ReIdentification-TokenLifetime: access_token = 1 hour (botcha-agent-identity JWT). brt_ refresh_token = 90 days.
 
 # TRUSTED AGENT PROTOCOL (TAP)
 TAP-Description: Enterprise-grade cryptographic agent auth using HTTP Message Signatures (RFC 9421)

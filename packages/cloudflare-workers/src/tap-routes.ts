@@ -7,6 +7,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { validateAppSecret } from './apps.js';
 import { triggerWebhook, type KVNamespace as WebhookKVNamespace } from './webhooks.js';
 import { 
   registerTAPAgent, 
@@ -116,7 +117,10 @@ function validateTAPRegistration(body: any): {
     trust_level?: 'basic' | 'verified' | 'enterprise';
     issuer?: string;
     ans_name?: string;
-    did?: string;  };
+    did?: string;
+    provider?: string;
+    api_key?: string;
+  };
   error?: string;
 } {
   if (!body.name || typeof body.name !== 'string') {
@@ -181,6 +185,17 @@ function validateTAPRegistration(body: any): {
     }
   }
 
+  // Validate provider if provided
+  const SUPPORTED_PROVIDERS = ['anthropic', 'openai', 'google', 'mistral', 'cohere', 'other'];
+  if (body.provider !== undefined) {
+    if (!SUPPORTED_PROVIDERS.includes(body.provider)) {
+      return { valid: false, error: `Unsupported provider. Use one of: ${SUPPORTED_PROVIDERS.join(', ')}` };
+    }
+    if (!body.api_key || typeof body.api_key !== 'string') {
+      return { valid: false, error: 'api_key is required when provider is specified' };
+    }
+  }
+
   return {
     valid: true,
     data: {
@@ -194,6 +209,8 @@ function validateTAPRegistration(body: any): {
       issuer: body.issuer,
       ans_name: body.ans_name,
       did: body.did,
+      provider: body.provider,
+      api_key: body.api_key,  // plaintext — hashed in route handler, never persisted
     }
   };
 }
@@ -228,22 +245,61 @@ export async function registerTAPAgentRoute(c: Context) {
       }, 400);
     }
     
-    // Register TAP-enhanced agent
-    const result = await registerTAPAgent(
-      c.env.AGENTS,
-      appAccess.appId!,
-      validation.data!
-    );
-    
-    if (!result.success) {
-      return c.json({
-        success: false,
-        error: 'AGENT_CREATION_FAILED',
-        message: result.error || 'Failed to create agent'
-      }, 500);
-    }
-    
-    const agent = result.agent!;
+    // If agent_id provided, update existing agent with TAP fields instead of creating a new one
+    let agent: import('./tap-agents.js').TAPAgent;
+    if (body.agent_id) {
+      const existing = await getTAPAgent(c.env.AGENTS, body.agent_id);
+      if (!existing.success || !existing.agent) {
+        return c.json({
+          success: false,
+          error: 'AGENT_NOT_FOUND',
+          message: `Agent '${body.agent_id}' not found`
+        }, 404);
+      }
+      if (existing.agent.app_id !== appAccess.appId) {
+        return c.json({
+          success: false,
+          error: 'UNAUTHORIZED',
+          message: 'Agent does not belong to this app'
+        }, 403);
+      }
+      const now = Date.now();
+      // Hash provider API key if provided — never store plaintext
+      let providerKeyHash = (existing.agent as any).provider_key_hash;
+      if (validation.data!.api_key) {
+        const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(validation.data!.api_key.trim()));
+        providerKeyHash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      agent = {
+        ...existing.agent,
+        public_key: validation.data!.public_key ?? existing.agent.public_key,
+        signature_algorithm: validation.data!.signature_algorithm ?? existing.agent.signature_algorithm,
+        capabilities: validation.data!.capabilities ?? existing.agent.capabilities,
+        trust_level: validation.data!.trust_level ?? existing.agent.trust_level ?? 'basic',
+        tap_enabled: Boolean(validation.data!.public_key ?? existing.agent.public_key),
+        key_created_at: validation.data!.public_key ? now : existing.agent.key_created_at,
+        ans_name: validation.data!.ans_name ?? existing.agent.ans_name,
+        did: validation.data!.did ?? existing.agent.did,
+        provider: (validation.data! as any).provider ?? (existing.agent as any).provider,
+        provider_key_hash: providerKeyHash,
+      };
+      await c.env.AGENTS.put(`agent:${agent.agent_id}`, JSON.stringify(agent));
+    } else {
+      // Create new agent
+      const result = await registerTAPAgent(
+        c.env.AGENTS,
+        appAccess.appId!,
+        validation.data!
+      );
+      if (!result.success) {
+        return c.json({
+          success: false,
+          error: 'AGENT_CREATION_FAILED',
+          message: result.error || 'Failed to create agent'
+        }, 500);
+      }
+      agent = result.agent!;
+    };
     
     // Webhook: agent.tap.registered
     const tapRegCtx = c.executionCtx;
@@ -609,11 +665,25 @@ export async function rotateKeyRoute(c: Context) {
       return c.json({ success: false, error: 'MISSING_AGENT_ID', message: 'Agent ID is required' }, 400);
     }
     
-    const appAccess = await validateAppAccess(c, true);
-    if (!appAccess.valid) {
-      return c.json({ success: false, error: appAccess.error, message: 'Authentication required' }, (appAccess.status || 401) as 401);
+    // Accept either a Bearer JWT (normal flow) or x-app-secret header (recovery flow)
+    const queryAppId = c.req.query('app_id');
+    const appSecretHeader = c.req.header('x-app-secret');
+    let resolvedAppId: string | undefined;
+
+    if (appSecretHeader && queryAppId) {
+      const valid = await validateAppSecret((c.env as any).APPS, queryAppId, appSecretHeader);
+      if (!valid) {
+        return c.json({ success: false, error: 'UNAUTHORIZED', message: 'Invalid app_secret' }, 401);
+      }
+      resolvedAppId = queryAppId;
+    } else {
+      const appAccess = await validateAppAccess(c, true);
+      if (!appAccess.valid) {
+        return c.json({ success: false, error: appAccess.error, message: 'Authentication required. Provide a Bearer token or x-app-secret + app_id.' }, (appAccess.status || 401) as 401);
+      }
+      resolvedAppId = appAccess.appId;
     }
-    
+
     const body = await c.req.json().catch(() => ({}));
     if (!body.public_key || !body.signature_algorithm) {
       return c.json({ success: false, error: 'MISSING_FIELDS', message: 'public_key and signature_algorithm are required' }, 400);
@@ -647,7 +717,7 @@ export async function rotateKeyRoute(c: Context) {
     const agent = agentResult.agent;
     
     // Verify agent belongs to this app
-    if (agent.app_id !== appAccess.appId) {
+    if (agent.app_id !== resolvedAppId) {
       return c.json({ success: false, error: 'UNAUTHORIZED', message: 'Agent does not belong to this app' }, 403);
     }
     

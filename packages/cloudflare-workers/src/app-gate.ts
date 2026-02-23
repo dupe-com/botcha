@@ -24,11 +24,32 @@ export const APP_GATE_OPEN_PATHS = [
   '/v1/a2a/verify-card',
   '/v1/a2a/verify-agent',
   '/v1/a2a/cards',
+  // Agent identity auth — keypair, provider key, or OAuth refresh
+  '/v1/agents/auth',
+  '/v1/agents/auth/verify',
+  '/v1/agents/auth/provider',
+  '/v1/agents/auth/refresh',
+  // OAuth device authorization grant (RFC 8628)
+  '/v1/oauth/device',
+  '/v1/oauth/token',
+  '/v1/oauth/approve',
+  '/v1/oauth/revoke',
+  '/v1/oauth/lookup',
+  '/v1/oauth/status',
 ];
 
 // Pattern-match paths that start with /v1/apps/:id/ (verify-email, resend-verification, etc.)
 export function isAppManagementPath(path: string): boolean {
   return /^\/v1\/apps\/[^/]+\/(verify-email|resend-verification)$/.test(path);
+}
+
+// Dashboard-authed paths — use session cookie, not app_id bearer token
+export function isDashboardAuthedPath(path: string, method: string): boolean {
+  // DELETE /v1/agents/:id — session cookie auth via requireDashboardAuth
+  if (method === 'DELETE' && /^\/v1\/agents\/[^/]+$/.test(path)) return true;
+  // /device — OAuth agent approval page
+  if (path === '/device') return true;
+  return false;
 }
 
 export function isPublicV1Path(path: string): boolean {
@@ -45,6 +66,6 @@ export function isPublicV1Path(path: string): boolean {
   return false;
 }
 
-export function shouldBypassAppGate(path: string): boolean {
-  return APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path) || isPublicV1Path(path);
+export function shouldBypassAppGate(path: string, method: string = 'GET'): boolean {
+  return APP_GATE_OPEN_PATHS.includes(path) || isAppManagementPath(path) || isPublicV1Path(path) || isDashboardAuthedPath(path, method);
 }

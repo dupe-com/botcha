@@ -93,7 +93,7 @@ export const GlobalFooter: FC<{ version?: string }> = ({ version = '0.15.0' }) =
   return (
     <footer class="global-footer">
       <div class="global-footer-inner">
-        <a href="/dashboard" class="global-footer-dashboard">Dashboard</a>
+        <a href="/account" class="global-footer-dashboard">Account</a>
         <div class="global-footer-links">
           <span>v{version}</span>
           <span class="global-footer-sep">&middot;</span>
@@ -161,6 +161,7 @@ export const DashboardLayout: FC<PropsWithChildren<{ title?: string; appId?: str
             {appId && (
               <>
                 <span class="nav-app-id">{appId}</span>
+                <a href="/account" class="nav-link">Account</a>
                 <a href="/dashboard/logout" class="nav-link">
                   Logout
                 </a>

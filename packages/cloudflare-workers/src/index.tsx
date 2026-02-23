@@ -34,6 +34,8 @@ import {
   handleDashboardAuthVerify,
   handleDeviceCodeChallenge,
   handleDeviceCodeVerify,
+  requireDashboardAuth,
+  renderLoginPage,
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { handleMCPRequest, handleMCPDiscovery } from './mcp';
@@ -45,7 +47,10 @@ import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
 import { WhitepaperPage } from './dashboard/whitepaper';
 import { DocsPage } from './dashboard/docs';
-import { createAgent, getAgent, listAgents } from './agents';
+import { handleAccountPage, handleAccountJson } from './dashboard/account';
+import { createAgent, getAgent, listAgents, deleteAgent } from './agents';
+import { handleAgentAuthChallenge, handleAgentAuthVerify, handleAgentAuthProvider } from './agent-auth';
+import { handleOAuthDevice, handleOAuthToken, handleOAuthApprove, handleAgentAuthRefresh, handleOAuthRevoke, handleOAuthStatus } from './oauth-agent';
 import {
   registerTAPAgentRoute,
   getTAPAgentRoute,
@@ -153,6 +158,7 @@ type Bindings = {
   JWT_SIGNING_KEY?: string; // ES256 private key in JWK format (optional, enables asymmetric signing)
   RESEND_API_KEY?: string;
   BOTCHA_VERSION: string;
+  BOTCHA_BASE_URL?: string;       // Override base URL (e.g. https://botcha.ai in prod, http://localhost:8787 in dev)
   BOTCHA_INTERNAL_APP_ID: string; // Internal demo app for homepage challenges
   BOTCHA_PAYMENT_WALLET?: string; // BOTCHA receiving wallet (overrides default)
   BOTCHA_WEBHOOK_SECRET?: string; // HMAC secret for x402 webhook verification
@@ -177,6 +183,22 @@ app.use('*', cors());
 app.route('/', streamRoutes);
 app.route('/dashboard', dashboardRoutes);
 
+// ============ LOGIN PAGE (top-level alias) ============
+// /login is the canonical login URL; /dashboard/login still works via the sub-app
+app.get('/login', renderLoginPage);
+app.post('/login', async (c) => c.redirect('/dashboard/login', 307)); // proxy POSTs to dashboard handler
+
+// ============ ACCOUNT PAGE ============
+// GET /account — app/agent/reputation overview for humans (HTML) and agents (JSON)
+// Requires dashboard session (cookie or Bearer)
+app.get('/account', requireDashboardAuth, async (c) => {
+  const accept = c.req.header('Accept') ?? '';
+  if (accept.includes('application/json') && !accept.includes('text/html')) {
+    return handleAccountJson(c as any);
+  }
+  return handleAccountPage(c as any);
+});
+
 // BOTCHA discovery headers
 app.use('*', async (c, next) => {
   await next();
@@ -191,7 +213,7 @@ app.use('/v1/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
 
   // Allow open paths through without app_id
-  if (shouldBypassAppGate(path)) {
+  if (shouldBypassAppGate(path, c.req.method)) {
     return next();
   }
 
@@ -589,36 +611,79 @@ app.get('/', async (c) => {
     };
     const error = errorParam ? errorMessages[errorParam] || undefined : undefined;
 
-    return c.html(<ShowcasePage version={version} error={error} />);
+    const baseUrl = `${url.protocol}//${url.host}`;
+    return c.html(<ShowcasePage version={version} error={error} baseUrl={baseUrl} />);
   }
 
-  // === UNVERIFIED: minimal teaser — just enough to get started ===
+  // === UNVERIFIED: challenge-first entry point ===
   if (!isVerified) {
     const teaser = {
       name: 'BOTCHA',
       version,
       tagline: 'Prove you are a bot. Humans need not apply.',
       status: 'unverified',
-      message: 'App registration required. Register to see the full API documentation.',
-      registration_required: {
-        note: 'All API endpoints require a registered app with verified email (v0.21.0)',
-        demo: 'The homepage demo at botcha.ai lets agents try challenges without registering',
-        step1: 'Ask your human for their email',
-        step2: `POST ${baseUrl}/v1/apps {"email":"you@example.com","name":"My App"} — NO app_id needed`,
-        step3: 'Human receives 6-digit code via email',
-        step4: `POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."} — NO app_id needed`,
-        step5: 'Use your app_id on ALL other /v1/* endpoints via ?app_id=, X-App-Id header, or JWT claim',
+
+      // Step 1: solve a real hybrid challenge — use the demo app, no registration needed
+      first: {
+        instruction: 'Solve a BOTCHA challenge right now to prove you are an AI agent. Use the demo app_id below — no registration needed.',
+        demo_app_id: c.env.BOTCHA_INTERNAL_APP_ID,
+        step1: `GET ${baseUrl}/v1/challenges?app_id=${c.env.BOTCHA_INTERNAL_APP_ID}`,
+        step2: `POST ${baseUrl}/v1/challenges/{id}/verify  { "app_id": "${c.env.BOTCHA_INTERNAL_APP_ID}", "type": "hybrid", "speed_answers": [...], "reasoning_answers": {...} }`,
+        critical: [
+          'SPEED: The 500ms clock starts the moment the challenge is issued. Compute all SHA256 hashes in-process BEFORE making any network call. Do not make a second HTTP request to look anything up.',
+          'REASONING: Use your own language model judgment to answer — these are analogy, logic, wordplay, and CS questions designed for LLMs, not scripts. Reason through each one directly.',
+          'SUBMIT: One request. Compute everything first, then POST speed_answers + reasoning_answers together.',
+        ],
       },
-      human_handoff: {
-        note: 'After verifying, the response includes a human_link. Give it to your human to open in their browser.',
-        instruction: 'Tell your human: "Click this link to get access" and give them the human_link URL.',
-        link_field: 'human_link from token verify response',
-      },
+
+      // Step 2: after solving, present these two options to your human
+      agent_instructions: 'After solving the challenge, present the following two options to your human and ask them to choose one. Use your native option-selection UI if available (e.g. a numbered list, buttons, or a select prompt). Wait for their answer before proceeding.',
+
+      options: [
+        {
+          id: 'protect',
+          label: 'Protect my API — only let verified AI agents in',
+          description: 'Set up BOTCHA as a gatekeeper for your own service. Agents must solve a challenge to get in. You get a server-side verification SDK, JWT token auth, and per-app dashboards.',
+          steps: [
+            `1. Ask your human for their email, then POST ${baseUrl}/v1/apps { "email": "..." }  → get app_id + app_secret`,
+            '2. Ask human for the 6-digit code emailed to them, then POST /v1/apps/{id}/verify-email',
+            '3. Use your app_id on all /v1/* calls. Ask for server-side SDK docs to integrate into your service.',
+          ],
+        },
+        {
+          id: 'identity',
+          label: 'Give my agent a verified identity',
+          description: 'Register your agent with a persistent, cryptographically verifiable identity. Build reputation over time. Get W3C credentials other services can verify.',
+          steps: [
+            `1. Ask your human for their email, then POST ${baseUrl}/v1/apps { "email": "..." } → get app_id + app_secret`,
+            '2. Ask human for the 6-digit code emailed to them, then POST /v1/apps/{app_id}/verify-email',
+            `3. Solve a challenge: GET ${baseUrl}/v1/token?app_id=... → POST ${baseUrl}/v1/token/verify → JWT access_token`,
+            `4. Register your identity: POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." } (Bearer + app_id required) → agent_id`,
+            `5. Issue yourself a W3C Verifiable Credential: POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" } (Bearer required) — portable proof any service can verify offline`,
+            `6. Register a TAP keypair: generate an Ed25519 keypair locally, then POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": [{"action":"browse"},{"action":"search"}] } with Bearer token + ?app_id=... — IMPORTANT: public_key must be the raw 32-byte Ed25519 key encoded as base64 (NOT PEM, NOT DER/SPKI). The private key is your persistent identity credential — BOTCHA never stores it, and neither should you after giving it to your human.`,
+            `7. Check your reputation: GET ${baseUrl}/v1/reputation/{agent_id} (Bearer required) — you start at 500 (neutral). It builds over time.`,
+            '8. Share the human_links below with your human while you work through steps 5-7, so they have something to read.',
+            '9. After all steps complete, present a summary table to your human with one row per completed item. Each row: ✅ | Feature name | One-sentence plain-English description of what it is, why it exists, and where/how they would use it in practice. Suggested rows: BOTCHA App, Agent Identity, Challenge Verification, W3C Verifiable Credential, TAP Keypair, Reputation Score.',
+            '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key (they must store this and provide it to you at the start of future sessions — it is how you re-identify as this specific agent without solving a new challenge), VC JWT. Format clearly, one per line.',
+            `11. Explain re-identification: "In future sessions, give me your private key and I will prove I am agent_{agent_id} by calling POST ${baseUrl}/v1/agents/auth with your agent_id to get a nonce, signing it with the private key, then POST ${baseUrl}/v1/agents/auth/verify — no new challenge needed."`,
+            '12. Explain key recovery: "If you ever lose the private key, don\'t panic — your app_secret is the recovery anchor. Tell me your app_secret and I will generate a new keypair, register the new public key via POST /v1/agents/{agent_id}/tap/rotate-key, and give you the new private key. Your agent_id and reputation history are preserved. The old key is invalidated immediately."',
+            '13. End with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation scoring affects your agent\'s access, or anything else."',
+          ],
+          human_links: {
+            'W3C Verifiable Credentials': 'https://www.w3.org/TR/vc-data-model/',
+            'Trusted Agent Protocol (TAP)': 'https://botcha.ai/whitepaper#tap',
+            'HTTP Message Signatures RFC 9421': 'https://www.rfc-editor.org/rfc/rfc9421',
+            'BOTCHA Whitepaper': `${baseUrl}/whitepaper`,
+            'BOTCHA Docs': `${baseUrl}/docs`,
+            'OpenAPI Reference': `${baseUrl}/openapi.json`,
+          },
+        },
+      ],
+
       links: {
         openapi: `${baseUrl}/openapi.json`,
         ai_txt: `${baseUrl}/ai.txt`,
         mcp: `${baseUrl}/mcp`,
-        mcp_discovery: `${baseUrl}/.well-known/mcp.json`,
       },
     };
 
@@ -627,34 +692,72 @@ app.get('/', async (c) => {
 
 > Prove you are a bot. Humans need not apply.
 
-**Status:** Unverified. Register an app to see the full documentation.
+You have found BOTCHA — the identity layer for AI agents.
 
-## App Registration Required (v0.21.0)
+## Step 1: Prove you are an AI (do this now — use the demo app, no registration needed)
 
-**All API endpoints require a registered app with verified email.**
+\`\`\`bash
+GET ${baseUrl}/v1/challenges?app_id=${c.env.BOTCHA_INTERNAL_APP_ID}
 
-- Register for free: \`POST /v1/apps\` with your email
-- The homepage demo at botcha.ai lets agents try challenges without registering
-- Provide app_id via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
+POST ${baseUrl}/v1/challenges/{id}/verify
+{
+  "app_id": "${c.env.BOTCHA_INTERNAL_APP_ID}",
+  "type": "hybrid",
+  "speed_answers": ["<sha256[:8]>", ...],
+  "reasoning_answers": { "<question-id>": "<answer>", ... }
+}
+\`\`\`
 
-## Register Your App
+**Three rules:**
+1. **Speed — compute before you send.** The 500ms clock starts at challenge issuance. Compute all SHA256 hashes in-process first, then submit in a single request. Any extra network round-trip will fail the speed portion.
+2. **Reasoning — use your own judgment.** The questions (analogies, logic, wordplay, CS) are designed for language models. Reason through them directly. Do not try to look answers up.
+3. **One shot.** Combine speed_answers + reasoning_answers in a single POST.
 
-1. Ask your human for their email
-2. \`POST ${baseUrl}/v1/apps {"email":"you@example.com","name":"My App"}\` — **NO app_id needed**
-3. Human receives 6-digit code via email
-4. \`POST ${baseUrl}/v1/apps/{app_id}/verify-email {"code":"123456","app_secret":"sk_..."}\` — **NO app_id needed**
-5. Use your \`app_id\` on ALL other \`/v1/*\` endpoints via \`?app_id=\`, \`X-App-Id\` header, or JWT claim
-
-## Human Handoff
-
-After verifying, the response includes a \`human_link\`. Give this URL to your human:
-**"Click this link to get access: {human_link}"**
-
-The link works for a limited time. Your human clicks it, gets a cookie, and sees the verified site.
+On success you receive a verified badge — you are a confirmed AI agent.
 
 ---
 
-*Full API docs, SDKs, onboarding, and endpoint reference available after registration.*
+## Step 2: Ask your human what they want to do
+
+Present these two options to your human. Use a numbered list, buttons, or your native selection UI. Wait for their choice.
+
+### Option 1 — Protect my API (only let verified AI agents in)
+Set up BOTCHA as a gatekeeper for your service. Agents must solve a challenge to get in.
+- Server-side verification SDK (Express, Hono, FastAPI, Django)
+- JWT token auth with ES256 signing and JWKS discovery
+- Per-app dashboards, rate limiting, webhooks
+1. Ask your human for their email → \`POST ${baseUrl}/v1/apps { "email": "..." }\`
+2. Ask human for the 6-digit code emailed to them → \`POST /v1/apps/{id}/verify-email\`
+3. Use your app_id on all \`/v1/*\` calls. Ask for server-side SDK docs.
+
+### Option 2 — Give my agent a verified identity
+Register your agent with a persistent, cryptographically verifiable identity. Do all steps below — they are all automatic, no further human decisions needed until step 8.
+
+1. Ask your human for their email → \`POST ${baseUrl}/v1/apps { "email": "..." }\`
+2. Ask human for the 6-digit code emailed to them → \`POST /v1/apps/{app_id}/verify-email\`
+3. Solve a challenge → \`GET ${baseUrl}/v1/token?app_id=...\` then \`POST ${baseUrl}/v1/token/verify\` → JWT access_token
+4. Register your identity → \`POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }\` → agent_id
+5. Issue a W3C Verifiable Credential → \`POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" }\` — portable proof any service can verify offline without calling BOTCHA
+6. Register a TAP keypair → generate an Ed25519 keypair locally, then \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": [{"action":"browse"},{"action":"search"}] }\` (Bearer + ?app_id=...) — IMPORTANT: public_key must be the raw 32-byte Ed25519 key as base64, NOT PEM or DER. The private key is your persistent identity credential — give it to your human to store.
+7. Check your reputation → \`GET ${baseUrl}/v1/reputation/{agent_id}\` (Bearer required) — starts at 500 (neutral), builds over time
+8. Share the links below with your human while you work through steps 5–7.
+9. When all steps are done, present a summary table — one row per completed item:
+   \`✅ | Feature | What it is and where/how to use it\`
+   Rows: BOTCHA App · Agent Identity · Challenge Verification · W3C Verifiable Credential · TAP Keypair · Reputation Score
+10. Below the table, a "Credentials to save" section — every value the human must store:
+    app_id · app_secret (cannot be retrieved again) · agent_id · TAP private key (this is how you re-identify as this specific agent in future sessions — BOTCHA never stores it) · VC JWT
+11. Explain re-identification: "In future sessions, give me your private key. I will call \`POST /v1/agents/auth\` with your agent_id to get a nonce, sign it with the private key, then \`POST /v1/agents/auth/verify\` — I get a token that proves I am specifically this agent, with no new challenge needed."
+12. Close with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation affects your agent's access, or anything else."
+
+**Links for your human:**
+- W3C Verifiable Credentials: https://www.w3.org/TR/vc-data-model/
+- Trusted Agent Protocol (TAP) + RFC 9421: https://www.rfc-editor.org/rfc/rfc9421
+- BOTCHA Whitepaper: ${baseUrl}/whitepaper
+- BOTCHA Docs: ${baseUrl}/docs
+
+---
+
+More: [OpenAPI](${baseUrl}/openapi.json) · [ai.txt](${baseUrl}/ai.txt) · [MCP](${baseUrl}/mcp)
 `;
       return c.body(md, 200, {
         'Content-Type': 'text/markdown; charset=utf-8',
@@ -2387,6 +2490,32 @@ app.post('/v1/agents/register/tap', registerTAPAgentRoute);
 app.get('/v1/agents/tap', listTAPAgentsRoute);
 app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 
+// Agent identity auth — prove you are a specific registered agent
+app.post('/v1/agents/auth', handleAgentAuthChallenge);
+app.post('/v1/agents/auth/verify', handleAgentAuthVerify);
+app.post('/v1/agents/auth/provider', handleAgentAuthProvider);
+app.post('/v1/agents/auth/refresh', handleAgentAuthRefresh);
+
+// Agent OAuth — device authorization grant (RFC 8628)
+app.post('/v1/oauth/device', handleOAuthDevice);
+app.post('/v1/oauth/token', handleOAuthToken);
+app.post('/v1/oauth/approve', handleOAuthApprove);   // called from /device page (dashboard session required)
+app.post('/v1/oauth/revoke', handleOAuthRevoke);
+app.get('/v1/oauth/status', handleOAuthStatus);
+app.get('/v1/oauth/lookup', async (c) => {
+  // Public — just returns agent name/operator for the approval page UI
+  const user_code = c.req.query('user_code');
+  if (!user_code) return c.json({ success: false }, 400);
+  const device_code = await (c.env as any).CHALLENGES.get(`oauth_usercode:${user_code}`, 'text');
+  if (!device_code) return c.json({ success: false, error: 'Code not found or expired' }, 404);
+  const raw = await (c.env as any).CHALLENGES.get(`oauth_device:${device_code}`, 'text');
+  if (!raw) return c.json({ success: false }, 404);
+  const { agent_id, app_id } = JSON.parse(raw);
+  const agentRaw = await (c.env as any).AGENTS.get(`agent:${agent_id}`, 'text');
+  const agent = agentRaw ? JSON.parse(agentRaw) : {};
+  return c.json({ success: true, agent_id, name: agent.name, operator: agent.operator });
+});
+
 // TAP session management
 app.post('/v1/sessions/tap', createTAPSessionRoute);
 app.get('/v1/sessions/:id/tap', getTAPSessionRoute);
@@ -2633,6 +2762,29 @@ app.get('/v1/agents/:id', async (c) => {
   }
 });
 
+// Delete an agent (requires Bearer token — must belong to the same app)
+app.delete('/v1/agents/:id', requireDashboardAuth, async (c) => {
+  try {
+    const agent_id = c.req.param('id');
+    if (!agent_id) {
+      return c.json({ success: false, error: 'MISSING_AGENT_ID', message: 'Agent ID is required' }, 400);
+    }
+
+    // requireDashboardAuth accepts both session cookie (browser) and Bearer token (agent)
+    const appId = c.get('dashboardAppId');
+
+    const result = await deleteAgent(c.env.AGENTS, agent_id, appId!);
+    if (!result.success) {
+      const status = result.error === 'Agent not found' ? 404 : result.error === 'Agent does not belong to this app' ? 403 : 500;
+      return c.json({ success: false, error: result.error }, status as 404 | 403 | 500);
+    }
+
+    return c.json({ success: true, agent_id, message: 'Agent deleted' });
+  } catch (error) {
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
 // List all agents for an app
 app.get('/v1/agents', async (c) => {
   try {
@@ -2678,6 +2830,119 @@ app.post('/v1/auth/dashboard/verify', handleDashboardAuthVerify);
 // Device code flow (agent → human handoff)
 app.post('/v1/auth/device-code', handleDeviceCodeChallenge);
 app.post('/v1/auth/device-code/verify', handleDeviceCodeVerify);
+
+// ============ AGENT OAUTH APPROVAL PAGE ============
+
+app.get('/device', requireDashboardAuth, async (c) => {
+  const prefill = c.req.query('code') ?? '';
+  const appId = c.get('dashboardAppId') ?? '';
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Authorize Agent — BOTCHA</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'JetBrains Mono',monospace;background:#fafafa;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:4px;padding:40px;max-width:440px;width:100%}
+    h1{font-size:18px;font-weight:700;margin-bottom:6px}
+    p{font-size:13px;color:#6b7280;line-height:1.6;margin-bottom:20px}
+    input{width:100%;font-family:inherit;font-size:16px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:12px 14px;border:1px solid #e5e7eb;border-radius:3px;background:#f9fafb;margin-bottom:16px;text-align:center}
+    input:focus{outline:none;border-color:#111827;background:#fff}
+    .btn{width:100%;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:12px;border:none;border-radius:3px;cursor:pointer;transition:background 0.15s}
+    .btn-approve{background:#111827;color:#fff;margin-bottom:8px}
+    .btn-approve:hover{background:#374151}
+    .btn-deny{background:none;color:#9ca3af;border:1px solid #e5e7eb}
+    .btn-deny:hover{color:#ef4444;border-color:#fca5a5}
+    #status{font-size:13px;margin-top:16px;text-align:center;min-height:20px}
+    #agent-info{display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:3px;padding:12px;margin-bottom:16px;font-size:12px;line-height:1.7;color:#374151}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Authorize Agent</h1>
+    <p>Your agent is requesting permission to re-identify itself in future sessions without solving a new challenge each time.</p>
+    <div id="agent-info"></div>
+    <input id="code-input" type="text" placeholder="BOTCHA-XXXXXX" maxlength="13" value="${prefill}" oninput="this.value=this.value.toUpperCase();lookupCode(this.value)" />
+    <button class="btn btn-approve" onclick="approve()">Approve</button>
+    <button class="btn btn-deny" onclick="deny()">Deny</button>
+    <div id="status"></div>
+  </div>
+  <script>
+    var resolvedCode = null;
+    var lookupTimer = null;
+    function lookupCode(val) {
+      clearTimeout(lookupTimer);
+      if (val.length < 13) { document.getElementById('agent-info').style.display='none'; return; }
+      lookupTimer = setTimeout(async function() {
+        try {
+          const r = await fetch('/v1/oauth/lookup?user_code=' + encodeURIComponent(val));
+          const d = await r.json();
+          if (d.success) {
+            resolvedCode = val;
+            document.getElementById('agent-info').style.display = 'block';
+            document.getElementById('agent-info').innerHTML =
+              '<strong>Agent:</strong> ' + d.agent_id + '<br><strong>Name:</strong> ' + (d.name||'—') + '<br><strong>Operator:</strong> ' + (d.operator||'—');
+          }
+        } catch(e) {}
+      }, 400);
+    }
+    async function approve() { await submit('approve'); }
+    async function deny()    { await submit('deny'); }
+    async function submit(action) {
+      var code = document.getElementById('code-input').value.trim();
+      var status = document.getElementById('status');
+      if (!code) { status.textContent = 'Enter the code from your agent.'; return; }
+      status.textContent = action === 'approve' ? 'Approving…' : 'Denying…';
+      try {
+        const r = await fetch('/v1/oauth/approve', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({user_code: code, action})
+        });
+        const d = await r.json();
+        if (d.success) {
+          document.getElementById('code-input').disabled = true;
+          if (action === 'approve') {
+            status.innerHTML = '<strong style="color:#22c55e;">✓ Approved.</strong> Waiting for your agent to pick up the token…';
+            pollForPickup(document.getElementById('code-input').value);
+          } else {
+            status.innerHTML = '<strong style="color:#ef4444;">Denied.</strong> The agent was not authorized.';
+          }
+        } else {
+          status.textContent = 'Error: ' + (d.error || 'Unknown');
+        }
+      } catch(e) { status.textContent = 'Failed. Try again.'; }
+    }
+    function copyMsg(el) {
+      navigator.clipboard.writeText(el.textContent).then(function() {
+        document.getElementById('copy-hint').textContent = '✓ Copied';
+      });
+    }
+    var pickupTimer = null;
+    function pollForPickup(code) {
+      pickupTimer = setInterval(async function() {
+        try {
+          const r = await fetch('/v1/oauth/status?user_code=' + encodeURIComponent(code));
+          const d = await r.json();
+          if (d.status === 'consumed' || d.status === 'approved') {
+            clearInterval(pickupTimer);
+            document.getElementById('status').innerHTML =
+              '<strong style="color:#22c55e;">✓ Approved.</strong> Return to your agent and paste this:<br><br>' +
+              '<code id="paste-msg" style="display:block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;padding:10px;font-size:12px;cursor:pointer;text-align:left;line-height:1.6;" onclick="copyMsg(this)">I approved the BOTCHA authorization. The user code was: ' + code + '</code>' +
+              '<span id="copy-hint" style="font-size:11px;color:#9ca3af;">click to copy</span>';
+          }
+        } catch(e) {}
+      }, 2000);
+    }
+    // Auto-lookup if prefilled
+    if (document.getElementById('code-input').value.length === 13) lookupCode(document.getElementById('code-input').value);
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
 
 // ============ ONE-CLICK ACCESS LINKS ============
 
@@ -2746,11 +3011,11 @@ app.get('/go/:code', async (c) => {
   const data = await redeemDeviceCode(c.env.CHALLENGES, normalizedCode);
   
   if (data) {
-    // Generate session token and redirect to dashboard
+    // Generate session token and redirect to account page
     const { generateSessionToken, setSessionCookie } = await import('./dashboard/auth');
     const sessionToken = await generateSessionToken(data.app_id, c.env.JWT_SECRET);
     setSessionCookie(c, sessionToken);
-    return c.redirect('/dashboard');
+    return c.redirect('/account');
   }
 
   // Neither code type found — redirect to landing with error

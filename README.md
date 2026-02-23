@@ -38,8 +38,9 @@ Use cases:
 - 📊 Per-app metrics dashboard at [botcha.ai/dashboard](https://botcha.ai/dashboard)
 - 📧 Email verification, account recovery, and secret rotation
 - 🤖 Agent-first dashboard auth (challenge-based login + device code handoff)
-- 🆔 Persistent agent identities with registry
-- 🔏 Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures (SDK: `registerTAPAgent`, `createTAPSession`)
+ - 🆔 Persistent agent identities with registry
+ - 🔑 **Agent re-identification** — prove you're the same agent in a new session via OAuth device grant (RFC 8628 `brt_` refresh tokens), provider API key hash, or Ed25519 keypair challenge-response
+ - 🔏 Trusted Agent Protocol (TAP) — cryptographic agent auth with HTTP Message Signatures (SDK: `registerTAPAgent`, `createTAPSession`)
 - 🌐 TAP showcase homepage at [botcha.ai](https://botcha.ai) — one of the first services to implement [Visa's Trusted Agent Protocol](https://github.com/visa/trusted-agent-protocol)
 - 📈 Agent reputation scoring — trust scores that unlock higher rate limits and access (SDK: `getReputation`, `recordReputationEvent`)
 - 💸 **x402 Payment Gating** — agents pay $0.001 USDC on Base for a BOTCHA token; no puzzle required (see [doc/X402.md](./doc/X402.md))
@@ -376,8 +377,28 @@ curl -X POST "https://botcha.ai/v1/agents/register?app_id=app_abc123" \
 | `POST /v1/agents/register` | Create a new agent identity (requires `app_id`) |
 | `GET /v1/agents/:id` | Get agent info by ID (public, no auth) |
 | `GET /v1/agents` | List all agents for authenticated app |
+| `DELETE /v1/agents/:id` | Delete agent (requires dashboard session) |
 
 > **Note:** Agent Registry is the foundation for delegation chains (v0.17.0), capability attestation (v0.17.0), and reputation scoring (v0.18.0). See [ROADMAP.md](./ROADMAP.md) for details.
+
+## 🔑 Agent Re-identification (v0.22.0+)
+
+Registered agents can prove their identity in future sessions without solving a new challenge. Three methods:
+
+| Method | Endpoint | When to use |
+|--------|----------|-------------|
+| **OAuth device grant** *(recommended)* | `POST /v1/oauth/device` → poll `POST /v1/oauth/token` → save `brt_...` → use `POST /v1/agents/auth/refresh` | Any environment; human approves once, token lasts 90 days |
+| **Provider API key** | `POST /v1/agents/auth/provider` | CLI agents with `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` in env |
+| **TAP keypair** | `POST /v1/agents/auth` + `POST /v1/agents/auth/verify` | Agents with a registered Ed25519 `tapk_` private key |
+
+Human operators approve OAuth requests at [`/device`](https://botcha.ai/device). See [CLAUDE.md](./CLAUDE.md) for ready-to-run Node.js re-identification scripts.
+
+**Lost your `tapk_` key?** Use your `app_secret` as a recovery anchor:
+```bash
+curl -X POST "https://botcha.ai/v1/agents/<id>/tap/rotate-key?app_id=<app_id>" \
+  -H "x-app-secret: sk_..." \
+  -d '{"public_key": "<new-ed25519-pubkey-base64>", "signature_algorithm": "ed25519"}'
+```
 
 ## 🔏 Trusted Agent Protocol (TAP)
 
