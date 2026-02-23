@@ -15,6 +15,39 @@ Roadmap status and scope are tracked in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [0.23.0] — 2026-02-23
+
+### Agent Re-identification (PR #32)
+
+Agents can now prove they are the same agent in a new session without solving a new challenge each time. Three methods available:
+
+**OAuth Device Authorization Grant (RFC 8628) — recommended**
+- `POST /v1/oauth/device` — initiate: returns `device_code` + `user_code` (BOTCHA-XXXX format)
+- `POST /v1/oauth/token` — agent polls until human approves, receives `brt_...` refresh token (90-day TTL)
+- `POST /v1/oauth/approve` — human approves or denies via `/device` page
+- `POST /v1/oauth/revoke` — revoke a refresh token
+- `GET /v1/oauth/status` — polled by `/device` page to show "you can close this tab" after approval
+- `GET /v1/oauth/lookup` — public, returns agent name/operator for the approval page UI
+- `GET /device` — human-facing approval page; post-approval shows copyable handoff message for agent
+- `POST /v1/agents/auth/refresh` — exchange `brt_...` refresh token for a 1-hour identity JWT
+
+**Provider API key hash**
+- `POST /v1/agents/auth/provider` — re-identify using `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` etc; key is never stored, only SHA-256 hash compared
+
+**TAP keypair challenge-response**
+- `POST /v1/agents/auth` — get a nonce to sign
+- `POST /v1/agents/auth/verify` — submit Ed25519 signature → identity JWT
+
+**Key recovery**
+- `POST /v1/agents/:id/tap/rotate-key` now accepts `x-app-secret` header as an alternative to Bearer JWT, enabling key recovery when the `tapk_` private key is lost
+
+**Dashboard**
+- OAuth status column in agents table (shows authorized date + Revoke button)
+- Per-agent re-identification instructions panel (provider flow vs keypair flow)
+- `tapk_` prefix on TAP private keys to distinguish from `sk_` app secrets
+
+---
+
 ## [0.22.0] — 2026-02-20
 
 ### Protocol Integrations (4 epics)

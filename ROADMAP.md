@@ -8,7 +8,7 @@ Nobody is building the agent-side identity layer. Everyone is building "block bo
 
 ---
 
-## Current Status (v0.23.0)
+## Current Status (v0.24.0)
 
 Detailed release notes and endpoint-level deltas live in [CHANGELOG.md](./CHANGELOG.md).
 
@@ -390,6 +390,22 @@ Every token gets a unique `jti` claim for revocation tracking and audit trail.
 - `GET /v1/a2a/cards` and `GET /v1/a2a/cards/:id` — registry browsing
 **Docs:** [doc/A2A.md](./doc/A2A.md)
 **Open issues:** tracked in [BUGS.md](./BUGS.md)
+
+### ✅ Agent Re-identification — SHIPPED (v0.23.0, PR #32)
+**What:** Agents prove they are the same agent in a new session without solving a new challenge. Three methods: OAuth device grant (RFC 8628), provider API key hash, Ed25519 keypair challenge-response.
+**Implementation:**
+- `POST /v1/oauth/device` — start device auth, returns `device_code` + `user_code` (BOTCHA-XXXX)
+- `POST /v1/oauth/token` — agent polls, receives `brt_...` refresh token (90-day TTL) on approval
+- `POST /v1/oauth/approve` — human approves/denies via `/device` page
+- `POST /v1/oauth/revoke` — revoke refresh token
+- `GET /v1/oauth/status` — page polls this to show "you can close this tab"
+- `GET /v1/oauth/lookup` — public agent info for approval page UI
+- `GET /device` — human-facing approval page with post-approval handoff message
+- `POST /v1/agents/auth` + `POST /v1/agents/auth/verify` — TAP keypair challenge-response
+- `POST /v1/agents/auth/provider` — re-identify via provider API key hash (Anthropic/OpenAI/etc)
+- `POST /v1/agents/auth/refresh` — exchange `brt_...` refresh token for identity JWT
+- `POST /v1/agents/:id/tap/rotate-key` — now accepts `x-app-secret` for key recovery without Bearer JWT
+- Dashboard: OAuth status column, revoke button, per-agent re-identification instructions panel
 
 ### 🔄 OIDC-A Attestation — IN PROGRESS (PR #28)
 **What:** Enterprise agent authentication chains: Entity Attestation Tokens (EAT/RFC 9711) and OIDC-A agent claims.
