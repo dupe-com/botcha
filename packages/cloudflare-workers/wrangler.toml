@@ -13,7 +13,7 @@ routes = [
 # Environment variables
 [vars]
 BOTCHA_VERSION = "0.23.0"
-BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
+BOTCHA_INTERNAL_APP_ID = "app_18c27735e31b61f5"
 BOTCHA_BASE_URL = "https://botcha.ai"
 # JWT_SECRET is stored securely via: wrangler secret put JWT_SECRET
 
@@ -88,7 +88,7 @@ routes = []  # Override prod routes — preview uses workers.dev only
 
 [env.preview.vars]
 BOTCHA_VERSION = "preview"
-BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
+BOTCHA_INTERNAL_APP_ID = "app_18c27735e31b61f5"
 BOTCHA_ENV = "preview"
 # Preview auth secrets are synced in CI from GitHub Actions secrets:
 #   PREVIEW_JWT_SECRET
