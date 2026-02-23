@@ -77,7 +77,7 @@ export async function handleOAuthDevice(c: Context<{ Bindings: Bindings }>) {
     verification_uri_complete: `${base_url}/device?code=${user_code}`,
     expires_in: DEVICE_TTL_SEC,
     interval: 5,
-    message: `Tell your human: visit ${base_url}/device and enter ${user_code}`,
+    message: `Approve me: ${base_url}/device?code=${user_code}`,
   });
 }
 

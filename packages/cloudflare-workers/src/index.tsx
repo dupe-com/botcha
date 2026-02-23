@@ -665,7 +665,7 @@ app.get('/', async (c) => {
             '8. Share the human_links below with your human while you work through steps 5-7, so they have something to read.',
             '9. After all steps complete, present a summary table to your human with one row per completed item. Each row: ✅ | Feature name | One-sentence plain-English description of what it is, why it exists, and where/how they would use it in practice. Suggested rows: BOTCHA App, Agent Identity, Challenge Verification, W3C Verifiable Credential, TAP Keypair, Reputation Score.',
              '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key, VC JWT. Format clearly, one per line.',
-             `11. Explain re-identification — do all of the following: (a) Say "The easiest way to re-identify me in future sessions is OAuth — I just need you to approve once in your browser, then I can re-identify automatically forever." Then run: POST ${baseUrl}/v1/oauth/device with body { "agent_id": "<agent_id>", "app_id": "<app_id>" } — this returns a user_code like BOTCHA-XXXXXX and a verification_url. Tell the human: "Visit <verification_url> and enter <user_code> to approve." Poll POST ${baseUrl}/v1/oauth/token with the device_code every 5 seconds until it returns a refresh_token starting with brt_. Once you have it, tell the human: "Approved! I now have a refresh token. You don't need to do anything for future sessions — I'll re-identify automatically." (b) Also mention the TAP keypair as a backup: "I also have your TAP private key as a backup — if you ever need to give it to me directly, that works too."`,
+             `11. Explain re-identification — do all of the following: (a) Say "The easiest way to re-identify me in future sessions is OAuth — I just need you to approve once in your browser, then I can re-identify automatically forever." Then run: POST ${baseUrl}/v1/oauth/device with body { "agent_id": "<agent_id>", "app_id": "<app_id>" } — this returns a verification_uri_complete like ${baseUrl}/device?code=BOTCHA-XXXXXX. Tell the human: "Just click this link to approve (no typing needed): <verification_uri_complete>" Poll POST ${baseUrl}/v1/oauth/token with the device_code every 5 seconds until it returns a refresh_token starting with brt_. Once you have it, tell the human: "Approved! I now have a refresh token. You don't need to do anything for future sessions — I'll re-identify automatically." (b) Also mention the TAP keypair as a backup: "I also have your TAP private key as a backup — if you ever need to give it to me directly, that works too."`,
              '12. Explain key recovery: "If you ever lose the TAP private key, don\'t panic — your app_secret is the recovery anchor. Tell me your app_secret and I will generate a new keypair and rotate it. The OAuth refresh token is even easier to replace — just visit the /device page again and approve."',
              `13. End with: "You can manage your agent, rotate credentials, and revoke OAuth tokens anytime at ${baseUrl}/account. Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation scoring affects your agent's access, or anything else."`,
           ],
@@ -2939,6 +2939,27 @@ app.get('/device', requireDashboardAuth, async (c) => {
     }
     // Auto-lookup if prefilled
     if (document.getElementById('code-input').value.length === 13) lookupCode(document.getElementById('code-input').value);
+    // Auto-submit if code came from URL params (verification_uri_complete)
+    var urlCode = new URLSearchParams(window.location.search).get('code');
+    if (urlCode && urlCode.length === 13) {
+      var autoTimer = null;
+      var countdown = 3;
+      var autoStatus = document.getElementById('status');
+      function tick() {
+        if (countdown <= 0) { approve(); return; }
+        autoStatus.textContent = 'Auto-approving in ' + countdown + 's\u2026 ';
+        var cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.setAttribute('aria-label', 'Cancel auto-approval');
+        cancelBtn.style.cssText = 'font-size:11px;padding:2px 8px;cursor:pointer;';
+        cancelBtn.addEventListener('click', function() { clearTimeout(autoTimer); autoStatus.textContent = ''; });
+        autoStatus.appendChild(cancelBtn);
+        countdown--;
+        autoTimer = setTimeout(tick, 1000);
+      }
+      // Delay first tick slightly so the agent-info lookup has time to render
+      autoTimer = setTimeout(tick, 600);
+    }
   </script>
 </body>
 </html>`;
