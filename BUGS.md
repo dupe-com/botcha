@@ -34,6 +34,22 @@ Closed/merged work is tracked in `CHANGELOG.md`. This file tracks only open issu
 
 ---
 
+## 🐛 OPEN BUGS (filed 2026-02-23)
+
+### Issue #33 — OAuth device flow: use verification_uri_complete
+**URL:** https://github.com/dupe-com/botcha/issues/33
+**Problem:** Agent instructions tell humans to visit bare URL + manually enter code. `verification_uri_complete` (with code embedded) is already in the response — just not being used.
+**Fix:** API message copy + ~3 lines of JS on `/device` page to auto-populate `?code=` param.
+**Priority:** 🔴 HIGH — affects every agent using the device flow
+
+### Issue #34 — Device approval page requires login (wrong UX)
+**URL:** https://github.com/dupe-com/botcha/issues/34
+**Problem:** Humans tapping the device approval link hit a login/email page before seeing the approval screen. This is backwards — the device code is the trust anchor, no login should be required.
+**Fix:** Make `/device` approval frictionless — show agent info + Approve/Deny without requiring authentication. Device code (short-lived secret) is sufficient trust.
+**Priority:** 🔴 HIGH — device flow UX is effectively broken for real-world use
+
+---
+
 ## 🔮 TECHNICAL DEBT (post-merge, existing in main)
 
 These were identified during TAP feature testing but deprioritized in favor of the 5 epics:
