@@ -423,7 +423,7 @@ export async function handleDeviceCodeRedeem(c: Context<{ Bindings: Bindings }>)
 
   const sessionToken = await generateSessionToken(data.app_id, c.env.JWT_SECRET);
   setSessionCookie(c, sessionToken);
-  return c.redirect('/dashboard');
+  return c.redirect('/account');
 }
 
 // ============ LEGACY LOGIN (app_id + app_secret) ============
@@ -454,7 +454,7 @@ export async function handleLogin(c: Context<{ Bindings: Bindings }>) {
 
     const sessionToken = await generateSessionToken(trimmedAppId, c.env.JWT_SECRET);
     setSessionCookie(c, sessionToken);
-    return c.redirect('/dashboard');
+    return c.redirect('/account');
   } catch (error) {
     console.error('Login error:', error);
     return c.redirect('/dashboard/login?error=server');
@@ -515,7 +515,7 @@ export async function handleEmailLogin(c: Context<{ Bindings: Bindings }>) {
 
 // ============ LOGIN PAGE ============
 
-const DASHBOARD_PROMPT = `Run: curl -s https://botcha.ai -H 'Accept: application/json' — then follow the instructions to verify yourself and get me a dashboard login code for botcha.ai.`;
+const DASHBOARD_PROMPT = `Run: curl -s https://botcha.ai -H 'Accept: application/json' — then follow the instructions to verify yourself and get me a login code for botcha.ai.`;
 
 const COPY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><rect x="9" y="9" width="13" height="13" rx="0"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`;
 const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"><polyline points="20 6 9 17 4 12"/></svg>`;
@@ -555,7 +555,7 @@ export async function renderLoginPage(c: Context<{ Bindings: Bindings }>) {
   };
 
   return c.html(
-    <LoginLayout title="Dashboard Login - BOTCHA">
+    <LoginLayout title="Login - BOTCHA">
       <a href="/" class="ascii-logo">{
 `██████╗  ██████╗ ████████╗ ██████╗██╗  ██╗ █████╗
 ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║  ██║██╔══██╗
@@ -565,7 +565,7 @@ export async function renderLoginPage(c: Context<{ Bindings: Bindings }>) {
 ╚═════╝  ╚═════╝    ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝`
       }</a>
       <p class="text-muted" style="text-align: center; font-size: 0.75rem; margin: -1rem 0 2rem;">
-        {'>'}_&nbsp;dashboard login
+        {'>'}_&nbsp;login
       </p>
 
       {/* Primary: Agent prompt */}
