@@ -10,7 +10,7 @@
  *   1. Agent:  POST /v1/oauth/device   { agent_id, app_id }
  *              ← { device_code, user_code: "BOTCHA-XXXX", verification_url, expires_in: 600, interval: 5 }
  *
- *   2. Agent tells human: "Visit <verification_url> and enter <user_code>"
+ *   2. Agent sends human: <verification_uri_complete> (one-click link, no typing needed)
  *
  *   3. Human logs into dashboard, sees pending authorization, clicks Approve.
  *

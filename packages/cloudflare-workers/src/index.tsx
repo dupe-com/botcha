@@ -2943,22 +2943,34 @@ app.get('/device', requireDashboardAuth, async (c) => {
     var urlCode = new URLSearchParams(window.location.search).get('code');
     if (urlCode && urlCode.length === 13) {
       var autoTimer = null;
-      var countdown = 3;
+      var autoCancelled = false;
       var autoStatus = document.getElementById('status');
-      function tick() {
-        if (countdown <= 0) { approve(); return; }
-        autoStatus.textContent = 'Auto-approving in ' + countdown + 's\u2026 ';
-        var cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.setAttribute('aria-label', 'Cancel auto-approval');
-        cancelBtn.style.cssText = 'font-size:11px;padding:2px 8px;cursor:pointer;';
-        cancelBtn.addEventListener('click', function() { clearTimeout(autoTimer); autoStatus.textContent = ''; });
-        autoStatus.appendChild(cancelBtn);
-        countdown--;
-        autoTimer = setTimeout(tick, 1000);
+      function startCountdown() {
+        if (autoCancelled) return;
+        // Only proceed if the lookup confirmed the code is valid
+        if (resolvedCode !== urlCode) {
+          autoStatus.textContent = 'Code not found or expired. Please check with your agent.';
+          return;
+        }
+        var countdown = 3;
+        function tick() {
+          if (autoCancelled) return;
+          if (countdown <= 0) { approve(); return; }
+          autoStatus.innerHTML = '';
+          autoStatus.appendChild(document.createTextNode('Auto-approving in ' + countdown + 's\u2026 '));
+          var cancelBtn = document.createElement('button');
+          cancelBtn.textContent = 'Cancel';
+          cancelBtn.setAttribute('aria-label', 'Cancel auto-approval');
+          cancelBtn.style.cssText = 'font-size:11px;padding:2px 8px;cursor:pointer;margin-left:6px;';
+          cancelBtn.addEventListener('click', function() { autoCancelled = true; clearTimeout(autoTimer); autoStatus.textContent = ''; });
+          autoStatus.appendChild(cancelBtn);
+          countdown--;
+          autoTimer = setTimeout(tick, 1000);
+        }
+        tick();
       }
-      // Delay first tick slightly so the agent-info lookup has time to render
-      autoTimer = setTimeout(tick, 600);
+      // Wait for lookup to complete (lookup has 400ms debounce + fetch), then start countdown
+      setTimeout(startCountdown, 1200);
     }
   </script>
 </body>
