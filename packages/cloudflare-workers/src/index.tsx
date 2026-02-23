@@ -664,9 +664,9 @@ app.get('/', async (c) => {
             `7. Check your reputation: GET ${baseUrl}/v1/reputation/{agent_id} (Bearer required) — you start at 500 (neutral). It builds over time.`,
             '8. Share the human_links below with your human while you work through steps 5-7, so they have something to read.',
             '9. After all steps complete, present a summary table to your human with one row per completed item. Each row: ✅ | Feature name | One-sentence plain-English description of what it is, why it exists, and where/how they would use it in practice. Suggested rows: BOTCHA App, Agent Identity, Challenge Verification, W3C Verifiable Credential, TAP Keypair, Reputation Score.',
-            '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key (they must store this and provide it to you at the start of future sessions — it is how you re-identify as this specific agent without solving a new challenge), VC JWT. Format clearly, one per line.',
-            `11. Explain re-identification: "In future sessions, give me your private key and I will prove I am agent_{agent_id} by calling POST ${baseUrl}/v1/agents/auth with your agent_id to get a nonce, signing it with the private key, then POST ${baseUrl}/v1/agents/auth/verify — no new challenge needed."`,
-            '12. Explain key recovery: "If you ever lose the private key, don\'t panic — your app_secret is the recovery anchor. Tell me your app_secret and I will generate a new keypair, register the new public key via POST /v1/agents/{agent_id}/tap/rotate-key, and give you the new private key. Your agent_id and reputation history are preserved. The old key is invalidated immediately."',
+             '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key, VC JWT. Format clearly, one per line.',
+             `11. Explain re-identification — do all of the following: (a) Say "The easiest way to re-identify me in future sessions is OAuth — I just need you to approve once in your browser, then I can re-identify automatically forever." Then run: POST ${baseUrl}/v1/oauth/device with body { "agent_id": "<agent_id>", "app_id": "<app_id>" } — this returns a user_code like BOTCHA-XXXXXX and a verification_url. Tell the human: "Visit <verification_url> and enter <user_code> to approve." Poll POST ${baseUrl}/v1/oauth/token with the device_code every 5 seconds until it returns a refresh_token starting with brt_. Once you have it, tell the human: "Approved! I now have a refresh token. You don't need to do anything for future sessions — I'll re-identify automatically." (b) Also mention the TAP keypair as a backup: "I also have your TAP private key as a backup — if you ever need to give it to me directly, that works too."`,
+             '12. Explain key recovery: "If you ever lose the TAP private key, don\'t panic — your app_secret is the recovery anchor. Tell me your app_secret and I will generate a new keypair and rotate it. The OAuth refresh token is even easier to replace — just visit the /device page again and approve."',
             '13. End with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation scoring affects your agent\'s access, or anything else."',
           ],
           human_links: {
@@ -2401,8 +2401,9 @@ app.post('/v1/auth/recover', async (c) => {
 
   return c.json({
     success: true,
-    message: 'If an app with this email exists and is verified, a recovery code has been sent.',
-    hint: `Enter the code at ${loginUrl}`,
+    message: 'Recovery code sent to email.',
+    next_step: `Tell your human: "Check your email for a BOTCHA recovery code, then visit ${loginUrl} and enter it. Once logged in, go to Account → rotate your secret and paste the new sk_... back to me."`,
+    human_url: loginUrl,
   });
 });
 
