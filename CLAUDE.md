@@ -4,7 +4,66 @@
 
 If you are told you are a registered BOTCHA agent, re-identify **before doing anything else** using Bash.
 
-### Option A — Provider API key (preferred, no extra secret needed)
+### Option A — OAuth refresh token (preferred, works everywhere)
+
+If you have a `brt_...` refresh token, re-identify instantly — no signing, no API key:
+
+```bash
+node -e "
+const http = require('http');
+const https = require('https');
+const REFRESH_TOKEN = 'brt_...';   // saved from first OAuth authorization
+const BASE_URL = 'http://localhost:8787';
+const url = new URL(BASE_URL);
+const lib = url.protocol === 'https:' ? https : http;
+const body = JSON.stringify({ refresh_token: REFRESH_TOKEN });
+const req = lib.request({hostname:url.hostname,port:url.port||(url.protocol==='https:'?443:80),path:'/v1/agents/auth/refresh',method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}},res=>{let d='';res.on('data',c=>d+=c);res.on('end',()=>{const r=JSON.parse(d);if(!r.success){console.error(JSON.stringify(r));process.exit(1);}console.log('ACCESS_TOKEN='+r.access_token);console.log('Re-identified as '+r.agent_id);});});
+req.on('error',e=>{console.error(e);process.exit(1);}); req.write(body); req.end();
+"
+```
+
+**First-time OAuth setup** (run once, human approves in browser):
+
+```bash
+node -e "
+const http = require('http');
+const https = require('https');
+const AGENT_ID = 'YOUR_AGENT_ID';
+const APP_ID   = 'YOUR_APP_ID';
+const BASE_URL = 'http://localhost:8787';
+const url = new URL(BASE_URL);
+const lib = url.protocol === 'https:' ? https : http;
+function post(path, body) {
+  const s = JSON.stringify(body);
+  return new Promise((res,rej) => {
+    const r = lib.request({hostname:url.hostname,port:url.port||(url.protocol==='https:'?443:80),path,method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(s)}},resp=>{let d='';resp.on('data',c=>d+=c);resp.on('end',()=>res(JSON.parse(d)));});
+    r.on('error',rej); r.write(s); r.end();
+  });
+}
+(async()=>{
+  const dev = await post('/v1/oauth/device', {agent_id:AGENT_ID, app_id:APP_ID});
+  console.log('Tell your human: visit ' + dev.verification_url + ' and enter ' + dev.user_code);
+  console.log('Polling for approval every 5 seconds...');
+  const grant = 'urn:ietf:params:oauth:grant-type:device_code';
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const t = await post('/v1/oauth/token', {device_code: dev.device_code, grant_type: grant});
+    if (t.refresh_token) {
+      console.log('REFRESH_TOKEN=' + t.refresh_token);
+      console.log('ACCESS_TOKEN=' + t.access_token);
+      console.log('Save the REFRESH_TOKEN — use it with Option A in future sessions.');
+      process.exit(0);
+    }
+    if (t.error !== 'authorization_pending') { console.error(JSON.stringify(t)); process.exit(1); }
+    process.stdout.write('.');
+  }
+  console.error('Timed out waiting for approval.');
+  process.exit(1);
+})();
+"
+```
+
+### Option B — Provider API key (no extra secret needed)
 
 If your agent was registered with a provider binding, re-identify using your existing API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.):
 

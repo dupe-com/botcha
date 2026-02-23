@@ -50,6 +50,7 @@ import { DocsPage } from './dashboard/docs';
 import { handleAccountPage, handleAccountJson } from './dashboard/account';
 import { createAgent, getAgent, listAgents, deleteAgent } from './agents';
 import { handleAgentAuthChallenge, handleAgentAuthVerify, handleAgentAuthProvider } from './agent-auth';
+import { handleOAuthDevice, handleOAuthToken, handleOAuthApprove, handleAgentAuthRefresh, handleOAuthRevoke } from './oauth-agent';
 import {
   registerTAPAgentRoute,
   getTAPAgentRoute,
@@ -2492,6 +2493,26 @@ app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 app.post('/v1/agents/auth', handleAgentAuthChallenge);
 app.post('/v1/agents/auth/verify', handleAgentAuthVerify);
 app.post('/v1/agents/auth/provider', handleAgentAuthProvider);
+app.post('/v1/agents/auth/refresh', handleAgentAuthRefresh);
+
+// Agent OAuth — device authorization grant (RFC 8628)
+app.post('/v1/oauth/device', handleOAuthDevice);
+app.post('/v1/oauth/token', handleOAuthToken);
+app.post('/v1/oauth/approve', handleOAuthApprove);   // called from /device page (dashboard session required)
+app.post('/v1/oauth/revoke', handleOAuthRevoke);
+app.get('/v1/oauth/lookup', async (c) => {
+  // Public — just returns agent name/operator for the approval page UI
+  const user_code = c.req.query('user_code');
+  if (!user_code) return c.json({ success: false }, 400);
+  const device_code = await (c.env as any).CHALLENGES.get(`oauth_usercode:${user_code}`, 'text');
+  if (!device_code) return c.json({ success: false, error: 'Code not found or expired' }, 404);
+  const raw = await (c.env as any).CHALLENGES.get(`oauth_device:${device_code}`, 'text');
+  if (!raw) return c.json({ success: false }, 404);
+  const { agent_id, app_id } = JSON.parse(raw);
+  const agentRaw = await (c.env as any).AGENTS.get(`agent:${agent_id}`, 'text');
+  const agent = agentRaw ? JSON.parse(agentRaw) : {};
+  return c.json({ success: true, agent_id, name: agent.name, operator: agent.operator });
+});
 
 // TAP session management
 app.post('/v1/sessions/tap', createTAPSessionRoute);
@@ -2807,6 +2828,95 @@ app.post('/v1/auth/dashboard/verify', handleDashboardAuthVerify);
 // Device code flow (agent → human handoff)
 app.post('/v1/auth/device-code', handleDeviceCodeChallenge);
 app.post('/v1/auth/device-code/verify', handleDeviceCodeVerify);
+
+// ============ AGENT OAUTH APPROVAL PAGE ============
+
+app.get('/device', requireDashboardAuth, async (c) => {
+  const prefill = c.req.query('code') ?? '';
+  const appId = c.get('dashboardAppId') ?? '';
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Authorize Agent — BOTCHA</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'JetBrains Mono',monospace;background:#fafafa;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:4px;padding:40px;max-width:440px;width:100%}
+    h1{font-size:18px;font-weight:700;margin-bottom:6px}
+    p{font-size:13px;color:#6b7280;line-height:1.6;margin-bottom:20px}
+    input{width:100%;font-family:inherit;font-size:16px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:12px 14px;border:1px solid #e5e7eb;border-radius:3px;background:#f9fafb;margin-bottom:16px;text-align:center}
+    input:focus{outline:none;border-color:#111827;background:#fff}
+    .btn{width:100%;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:12px;border:none;border-radius:3px;cursor:pointer;transition:background 0.15s}
+    .btn-approve{background:#111827;color:#fff;margin-bottom:8px}
+    .btn-approve:hover{background:#374151}
+    .btn-deny{background:none;color:#9ca3af;border:1px solid #e5e7eb}
+    .btn-deny:hover{color:#ef4444;border-color:#fca5a5}
+    #status{font-size:13px;margin-top:16px;text-align:center;min-height:20px}
+    #agent-info{display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:3px;padding:12px;margin-bottom:16px;font-size:12px;line-height:1.7;color:#374151}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Authorize Agent</h1>
+    <p>Your agent is requesting permission to re-identify itself in future sessions without solving a new challenge each time.</p>
+    <div id="agent-info"></div>
+    <input id="code-input" type="text" placeholder="BOTCHA-XXXXXX" maxlength="13" value="${prefill}" oninput="this.value=this.value.toUpperCase();lookupCode(this.value)" />
+    <button class="btn btn-approve" onclick="approve()">Approve</button>
+    <button class="btn btn-deny" onclick="deny()">Deny</button>
+    <div id="status"></div>
+  </div>
+  <script>
+    var resolvedCode = null;
+    var lookupTimer = null;
+    function lookupCode(val) {
+      clearTimeout(lookupTimer);
+      if (val.length < 13) { document.getElementById('agent-info').style.display='none'; return; }
+      lookupTimer = setTimeout(async function() {
+        try {
+          const r = await fetch('/v1/oauth/lookup?user_code=' + encodeURIComponent(val));
+          const d = await r.json();
+          if (d.success) {
+            resolvedCode = val;
+            document.getElementById('agent-info').style.display = 'block';
+            document.getElementById('agent-info').innerHTML =
+              '<strong>Agent:</strong> ' + d.agent_id + '<br><strong>Name:</strong> ' + (d.name||'—') + '<br><strong>Operator:</strong> ' + (d.operator||'—');
+          }
+        } catch(e) {}
+      }, 400);
+    }
+    async function approve() { await submit('approve'); }
+    async function deny()    { await submit('deny'); }
+    async function submit(action) {
+      var code = document.getElementById('code-input').value.trim();
+      var status = document.getElementById('status');
+      if (!code) { status.textContent = 'Enter the code from your agent.'; return; }
+      status.textContent = action === 'approve' ? 'Approving…' : 'Denying…';
+      try {
+        const r = await fetch('/v1/oauth/approve', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({user_code: code, action})
+        });
+        const d = await r.json();
+        if (d.success) {
+          status.innerHTML = action === 'approve'
+            ? '<strong style="color:#22c55e;">✓ Approved.</strong> Your agent can now re-identify automatically.'
+            : '<strong style="color:#ef4444;">Denied.</strong> The agent was not authorized.';
+          document.getElementById('code-input').disabled = true;
+        } else {
+          status.textContent = 'Error: ' + (d.error || 'Unknown');
+        }
+      } catch(e) { status.textContent = 'Failed. Try again.'; }
+    }
+    // Auto-lookup if prefilled
+    if (document.getElementById('code-input').value.length === 13) lookupCode(document.getElementById('code-input').value);
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
 
 // ============ ONE-CLICK ACCESS LINKS ============
 

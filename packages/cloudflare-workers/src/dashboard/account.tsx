@@ -66,6 +66,7 @@ async function fetchAccountData(c: Context<{ Bindings: Bindings; Variables: Vari
       created_at: agent.created_at,
       tap_enabled: Boolean((agent as any).tap_enabled),
       provider: (agent as any).provider ?? null,
+      oauth_authorized: Boolean((agent as any).oauth_authorized_at),
       reputation: rep
         ? { score: rep.score, tier: rep.tier, event_count: rep.event_count }
         : null,
@@ -141,9 +142,9 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
               : '<span style="color:#9ca3af;font-size:12px;">no data</span>'}
           </td>
           <td style="text-align:center;">
-            ${a.tap_enabled
-              ? `<button class="btn-action" onclick="toggleReidentify('${a.agent_id}')" style="color:#22c55e;" title="Click for re-identification instructions">✓ TAP${(a as any).provider ? ' · ' + (a as any).provider : ''}</button>`
-              : '<span style="color:#d1d5db;font-size:11px;font-weight:500;" title="No TAP keypair">— TAP</span>'}
+            <button class="btn-action" onclick="toggleReidentify('${a.agent_id}')" style="color:${(a as any).oauth_authorized ? '#22c55e' : a.tap_enabled ? '#22c55e' : '#d1d5db'};" title="Click for re-identification instructions">
+              ${(a as any).oauth_authorized ? '✓ OAuth' : a.tap_enabled ? '✓ TAP' + ((a as any).provider ? ' · ' + (a as any).provider : '') : '— no auth'}
+            </button>
           </td>
           <td style="text-align:right;white-space:nowrap;">
             ${a.tap_enabled
@@ -157,13 +158,20 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           <td colspan="6" style="padding:0 12px 16px 12px;background:#f9fafb;border-bottom:1px solid var(--border);">
             <div style="font-size:12px;color:#374151;line-height:1.7;padding-top:12px;">
               <strong style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;">How to re-identify in a new session</strong>
-              ${(a as any).provider ? `
+              ${(a as any).oauth_authorized ? `
+              <p style="margin:8px 0 4px;">This agent is OAuth-authorized. At the start of a new conversation, tell your agent:</p>
+              <div style="background:#fff;border:1px solid var(--border);border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
+                You are agent <strong>${a.agent_id}</strong> on my BOTCHA account (${baseUrl}). Your refresh token is <strong>&lt;paste brt_... token&gt;</strong>. Re-identify yourself before doing anything else.
+              </div>
+              <p style="margin:4px 0 0;color:#6b7280;font-size:12px;">The agent calls <code style="font-size:11px;">POST /v1/agents/auth/refresh</code> — no challenge, no signing, instant.</p>
+              <button onclick="revokeOAuth('${a.agent_id}')" class="btn-action danger" style="margin-top:8px;">Revoke OAuth</button>
+              ` : (a as any).provider ? `
               <p style="margin:8px 0 4px;">This agent is bound to your <strong>${(a as any).provider}</strong> API key. At the start of a new conversation, just tell your agent:</p>
               <div style="background:#fff;border:1px solid var(--border);border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
                 You are agent <strong>${a.agent_id}</strong> on my BOTCHA account (${baseUrl}). App ID is ${appId}. Re-identify yourself before doing anything else.
               </div>
               <p style="margin:4px 0 0;color:#6b7280;font-size:12px;">The agent uses its <code style="font-size:11px;">${(a as any).provider.toUpperCase()}_API_KEY</code> environment variable — no extra secret needed. It calls <code style="font-size:11px;">POST /v1/agents/auth/provider</code> automatically.</p>
-              ` : `
+              ` : (a as any).oauth_authorized ? '' : `
               <p style="margin:8px 0 4px;">At the start of a new conversation, tell your agent:</p>
               <div style="background:#fff;border:1px solid var(--border);border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
                 You are agent <strong>${a.agent_id}</strong> on my BOTCHA account (${baseUrl}). Your TAP private key is <strong>&lt;paste tapk_... key&gt;</strong>. Re-identify yourself before doing anything else.
@@ -448,6 +456,15 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
         function toggleReidentify(agentId) {
           var row = document.getElementById('reidentify-' + agentId);
           if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        }
+        async function revokeOAuth(agentId) {
+          if (!confirm('Revoke OAuth for ' + agentId + '? The agent will need to re-authorize.')) return;
+          const res = await fetch('/v1/oauth/revoke', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({agent_id: agentId, app_id: '${appId}'})
+          });
+          if (res.ok) { location.reload(); }
+          else { const d = await res.json(); alert('Failed: ' + (d.error || res.status)); }
         }
         function toggleRotateKey(agentId) {
           var row = document.getElementById('rotatekey-' + agentId);

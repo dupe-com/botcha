@@ -84,6 +84,40 @@ const HOME_CSS = `
     font-size: inherit;
   }
 
+  .home-agent-prompts {
+    margin: 0.75rem 0 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .home-agent-prompt {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .home-agent-prompt-arrow {
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .home-agent-prompt code {
+    color: var(--text);
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    line-height: 1.5;
+  }
+
+  .home-agent-note-sub {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 0.75rem;
+  }
+
   @media (max-width: 480px) {
     .home-page { padding: 3rem 1.25rem 2rem; justify-content: flex-start; }
     .home-logo { font-size: 0.3rem; }
@@ -137,9 +171,16 @@ export const ShowcasePage: FC<{ version: string; error?: string }> = ({ version,
           <div class="home-agent-note">
             <div class="home-agent-note-label">For humans</div>
             <div class="home-agent-note-text">
-              Point your agent at <code>https://botcha.ai</code> and ask it to get you set up.
-              Your agent will auto-discover everything — challenges, endpoints, SDKs, MCP server,
-              and docs — and guide you from there.
+              Paste one of these into your AI agent:
+            </div>
+            <div class="home-agent-prompts">
+              <div class="home-agent-prompt">
+                <span class="home-agent-prompt-arrow">→</span>
+                <code>"Curl https://botcha.ai and get me set up."</code>
+              </div>
+            </div>
+            <div class="home-agent-note-sub">
+              Your agent will handle everything from there.
             </div>
           </div>
 
