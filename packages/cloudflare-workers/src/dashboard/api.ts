@@ -582,91 +582,37 @@ function formatTimeBucket(timestamp: string, period: Period): string {
   }
 }
 
-// ============ MOCK DATA (when CF_API_TOKEN not configured) ============
+// ============ EMPTY STATES (when CF_API_TOKEN not configured or no data yet) ============
 
-function renderSampleBanner(): string {
-  return `<div class="sample-banner">Sample data — analytics will appear here once production traffic flows</div>`;
-}
+const EMPTY_MSG = `<div style="color:var(--text-muted);font-size:0.75rem;padding:1.5rem 0;text-align:center;">No data yet — analytics will appear here once traffic flows.</div>`;
 
-function renderSampleLegend(title: string, period: string): string {
-  return `${title} (${period})<span class="sample-tag">SAMPLE</span>`;
-}
-
-function renderMockOverview(period: Period): string {
-  return `${renderSampleBanner()}
-  <div class="dashboard-grid">
-    ${renderStatCard('1,247', 'Challenges Generated')}
-    ${renderStatCard('1,089', 'Verifications')}
-    ${renderStatCard('94%', 'Success Rate', 'text-success')}
-    ${renderStatCard('127ms', 'Avg Solve Time')}
-    ${renderStatCard('3', 'Rate Limits Hit', 'text-warning')}
-    ${renderStatCard('0', 'Errors')}
+function renderMockOverview(_period: Period): string {
+  return `<div class="dashboard-grid">
+    ${renderStatCard('—', 'Challenges Generated')}
+    ${renderStatCard('—', 'Verifications')}
+    ${renderStatCard('—', 'Success Rate')}
+    ${renderStatCard('—', 'Avg Solve Time')}
+    ${renderStatCard('—', 'Rate Limits Hit')}
+    ${renderStatCard('—', 'Errors')}
   </div>`;
 }
 
 function renderMockVolume(period: Period): string {
-  const items = [
-    { name: '00:00', value: 42, maxValue: 89 },
-    { name: '04:00', value: 15, maxValue: 89 },
-    { name: '08:00', value: 67, maxValue: 89 },
-    { name: '12:00', value: 89, maxValue: 89 },
-    { name: '16:00', value: 73, maxValue: 89 },
-    { name: '20:00', value: 55, maxValue: 89 },
-  ];
-  return `<fieldset>
-    <legend>${renderSampleLegend('Request Volume', period)}</legend>
-    ${renderBarChart(items)}
-  </fieldset>`;
+  return `<fieldset><legend>Request Volume (${period})</legend>${EMPTY_MSG}</fieldset>`;
 }
 
 function renderMockTypes(period: Period): string {
-  const items = [
-    { name: 'hybrid (412 ok / 18 fail)', value: 430, maxValue: 430 },
-    { name: 'speed (389 ok / 12 fail)', value: 401, maxValue: 430 },
-    { name: 'reasoning (256 ok / 45 fail)', value: 301, maxValue: 430 },
-    { name: 'standard (22 ok / 5 fail)', value: 27, maxValue: 430 },
-  ];
-  return `<fieldset>
-    <legend>${renderSampleLegend('Challenge Types', period)}</legend>
-    ${renderBarChart(items)}
-  </fieldset>`;
+  return `<fieldset><legend>Challenge Types (${period})</legend>${EMPTY_MSG}</fieldset>`;
 }
 
 function renderMockPerformance(period: Period): string {
-  return `<fieldset>
-    <legend>${renderSampleLegend('Performance', period)}</legend>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th><th>Count</th><th>Avg Solve</th><th>p50</th><th>p95</th><th>Min</th><th>Max</th><th>Avg Response</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td><span class="badge badge-info">speed</span></td><td>389</td><td>127ms</td><td>112ms</td><td>289ms</td><td>45ms</td><td>498ms</td><td>12ms</td></tr>
-        <tr><td><span class="badge badge-info">hybrid</span></td><td>412</td><td>1,845ms</td><td>1,620ms</td><td>4,200ms</td><td>890ms</td><td>8,500ms</td><td>15ms</td></tr>
-        <tr><td><span class="badge badge-info">reasoning</span></td><td>256</td><td>4,230ms</td><td>3,800ms</td><td>8,900ms</td><td>1,200ms</td><td>28,000ms</td><td>18ms</td></tr>
-      </tbody>
-    </table>
-  </fieldset>`;
+  return `<fieldset><legend>Performance (${period})</legend>${EMPTY_MSG}</fieldset>`;
 }
 
 function renderMockErrors(period: Period): string {
-  return `<fieldset>
-    <legend>${renderSampleLegend('Errors & Rate Limits', period)}</legend>
-    <div class="alert alert-success">No errors or rate limits</div>
-  </fieldset>`;
+  return `<fieldset><legend>Errors & Rate Limits (${period})</legend>${EMPTY_MSG}</fieldset>`;
 }
 
 function renderMockGeo(period: Period): string {
-  const items = [
-    { name: 'US', value: 523, maxValue: 523 },
-    { name: 'DE', value: 189, maxValue: 523 },
-    { name: 'JP', value: 134, maxValue: 523 },
-    { name: 'GB', value: 98, maxValue: 523 },
-    { name: 'FR', value: 67, maxValue: 523 },
-  ];
-  return `<fieldset>
-    <legend>${renderSampleLegend('Top Countries', period)}</legend>
-    ${renderBarChart(items)}
-  </fieldset>`;
+  return `<fieldset><legend>Top Countries (${period})</legend>${EMPTY_MSG}</fieldset>`;
 }
