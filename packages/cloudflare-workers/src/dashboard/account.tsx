@@ -251,6 +251,33 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
               <span class="kv-label">rate limit</span>
               <span class="kv-value">${app?.rate_limit ?? '—'} req/min</span>
             </div>
+            <div class="kv-row" style="align-items:flex-start;flex-direction:column;gap:6px;padding-top:12px;border-top:1px solid #f3f4f6;margin-top:4px;">
+              <span class="kv-label">app_secret</span>
+              <span style="font-size:12px;color:#6b7280;line-height:1.6;">
+                Your <code style="font-size:11px;">app_secret</code> was shown once when you created this app.
+                It's the master credential for your account — store it in a password manager.<br>
+                <strong style="color:#374151;">Lost it?</strong>
+                ${app?.email_verified
+                  ? `Send a recovery code to <strong>${app?.email}</strong>:`
+                  : 'Verify your email first, then you can recover via email.'}
+              </span>
+              ${app?.email_verified ? `
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button class="btn-action" onclick="recoverSecret()" style="border:1px solid var(--border);">
+                  Email recovery code →
+                </button>
+                <span id="recover-status" style="font-size:11px;color:#6b7280;"></span>
+              </div>
+              <div id="recover-form" style="display:none;margin-top:6px;width:100%;">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 6px;">Enter the 6-digit code from your email, then your agent will receive a new <code style="font-size:11px;">app_secret</code>:</p>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <input id="recover-code" type="text" maxlength="6" placeholder="123456"
+                    style="font-family:var(--font);font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;width:90px;background:var(--bg);" />
+                  <button class="btn-action" onclick="submitRecovery()" style="border:1px solid var(--border);">Rotate secret</button>
+                </div>
+                <p id="recover-result" style="font-size:12px;margin:8px 0 0;word-break:break-all;"></p>
+              </div>` : ''}
+            </div>
           </div></div>
         </div>
 
@@ -349,6 +376,47 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
       </div>
 
       <script>
+        async function recoverSecret() {
+          var btn = event.target;
+          var status = document.getElementById('recover-status');
+          btn.disabled = true;
+          status.textContent = 'Sending…';
+          try {
+            const res = await fetch('/v1/auth/recover', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({email: '${app?.email ?? ''}'})
+            });
+            const data = await res.json();
+            status.textContent = 'Code sent — check your email.';
+            document.getElementById('recover-form').style.display = 'block';
+          } catch(e) {
+            status.textContent = 'Failed to send. Try again.';
+            btn.disabled = false;
+          }
+        }
+        async function submitRecovery() {
+          var code = document.getElementById('recover-code').value.trim();
+          var result = document.getElementById('recover-result');
+          if (!code) { result.textContent = 'Enter the 6-digit code.'; return; }
+          result.textContent = 'Verifying…';
+          try {
+            // Use device code login flow — code grants a session
+            const res = await fetch('/dashboard/code', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({code})
+            });
+            if (res.ok) {
+              result.innerHTML = '<strong style="color:#22c55e;">✓ Logged in.</strong> Now rotate your app_secret: ask your agent to call <code style="font-size:11px;">POST /v1/apps/${appId}/rotate-secret</code> with your dashboard session, or <a href="/account">refresh this page</a>.';
+            } else {
+              const data = await res.json();
+              result.textContent = 'Error: ' + (data.message || data.error || res.status);
+            }
+          } catch(e) {
+            result.textContent = 'Failed. Try again.';
+          }
+        }
         function toggleAddAgent() {
           var panel = document.getElementById('add-agent-panel');
           panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
