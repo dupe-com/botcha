@@ -228,22 +228,53 @@ export async function registerTAPAgentRoute(c: Context) {
       }, 400);
     }
     
-    // Register TAP-enhanced agent
-    const result = await registerTAPAgent(
-      c.env.AGENTS,
-      appAccess.appId!,
-      validation.data!
-    );
-    
-    if (!result.success) {
-      return c.json({
-        success: false,
-        error: 'AGENT_CREATION_FAILED',
-        message: result.error || 'Failed to create agent'
-      }, 500);
-    }
-    
-    const agent = result.agent!;
+    // If agent_id provided, update existing agent with TAP fields instead of creating a new one
+    let agent: import('./tap-agents.js').TAPAgent;
+    if (body.agent_id) {
+      const existing = await getTAPAgent(c.env.AGENTS, body.agent_id);
+      if (!existing.success || !existing.agent) {
+        return c.json({
+          success: false,
+          error: 'AGENT_NOT_FOUND',
+          message: `Agent '${body.agent_id}' not found`
+        }, 404);
+      }
+      if (existing.agent.app_id !== appAccess.appId) {
+        return c.json({
+          success: false,
+          error: 'UNAUTHORIZED',
+          message: 'Agent does not belong to this app'
+        }, 403);
+      }
+      const now = Date.now();
+      agent = {
+        ...existing.agent,
+        public_key: validation.data!.public_key ?? existing.agent.public_key,
+        signature_algorithm: validation.data!.signature_algorithm ?? existing.agent.signature_algorithm,
+        capabilities: validation.data!.capabilities ?? existing.agent.capabilities,
+        trust_level: validation.data!.trust_level ?? existing.agent.trust_level ?? 'basic',
+        tap_enabled: Boolean(validation.data!.public_key ?? existing.agent.public_key),
+        key_created_at: validation.data!.public_key ? now : existing.agent.key_created_at,
+        ans_name: validation.data!.ans_name ?? existing.agent.ans_name,
+        did: validation.data!.did ?? existing.agent.did,
+      };
+      await c.env.AGENTS.put(`agent:${agent.agent_id}`, JSON.stringify(agent));
+    } else {
+      // Create new agent
+      const result = await registerTAPAgent(
+        c.env.AGENTS,
+        appAccess.appId!,
+        validation.data!
+      );
+      if (!result.success) {
+        return c.json({
+          success: false,
+          error: 'AGENT_CREATION_FAILED',
+          message: result.error || 'Failed to create agent'
+        }, 500);
+      }
+      agent = result.agent!;
+    };
     
     // Webhook: agent.tap.registered
     const tapRegCtx = c.executionCtx;

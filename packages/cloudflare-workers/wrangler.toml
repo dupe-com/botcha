@@ -14,6 +14,7 @@ routes = [
 [vars]
 BOTCHA_VERSION = "0.21.0"
 BOTCHA_INTERNAL_APP_ID = "app_5745a0a2f5621461"
+BOTCHA_BASE_URL = "https://botcha.ai"
 # JWT_SECRET is stored securely via: wrangler secret put JWT_SECRET
 
 # KV namespace for challenge storage

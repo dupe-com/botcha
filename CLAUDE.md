@@ -1,5 +1,41 @@
 # CLAUDE.md — Project Instructions for AI Agents
 
+## BOTCHA Agent Re-Identification
+
+If you are told you are a registered BOTCHA agent with an `agent_id` and private key, re-identify **before doing anything else** using Bash (not WebFetch — you must sign a nonce in-process):
+
+```bash
+node -e "
+const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
+const AGENT_ID = 'YOUR_AGENT_ID';
+const PRIV_B64 = 'YOUR_PRIVATE_KEY_BASE64';
+const BASE_URL = 'http://localhost:8787'; // or actual base URL
+const url = new URL(BASE_URL);
+const lib = url.protocol === 'https:' ? https : http;
+function post(path, body) {
+  const s = JSON.stringify(body);
+  return new Promise((res,rej) => {
+    const r = lib.request({hostname:url.hostname,port:url.port||(url.protocol==='https:'?443:80),path,method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(s)}},resp=>{let d='';resp.on('data',c=>d+=c);resp.on('end',()=>res(JSON.parse(d)));});
+    r.on('error',rej); r.write(s); r.end();
+  });
+}
+(async()=>{
+  const ch = await post('/v1/agents/auth', {agent_id:AGENT_ID});
+  if (!ch.success) { console.error(JSON.stringify(ch)); process.exit(1); }
+  const privKey = crypto.createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.from(PRIV_B64,'base64')]),format:'der',type:'pkcs8'});
+  const sig = crypto.sign(null, Buffer.from(ch.nonce,'utf8'), privKey).toString('base64');
+  const result = await post('/v1/agents/auth/verify', {challenge_id:ch.challenge_id,agent_id:AGENT_ID,signature:sig});
+  if (!result.success) { console.error(JSON.stringify(result)); process.exit(1); }
+  console.log('ACCESS_TOKEN=' + result.access_token);
+  console.log('Re-identified as ' + result.agent_id);
+})();
+"
+```
+
+Use the printed `ACCESS_TOKEN` as `Authorization: Bearer <token>` for all subsequent requests. You can also use the slash command `/botcha-identify` (see `.claude/commands/botcha-identify.md`).
+
 ## Project
 
 BOTCHA — reverse CAPTCHA for AI agents. Proves you're a bot, not a human.

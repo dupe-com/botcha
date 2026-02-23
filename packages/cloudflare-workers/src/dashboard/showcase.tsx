@@ -26,7 +26,6 @@ const BOTCHA_LOGO = `\u2588\u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2
 
 const HOME_CSS = `
   .home-page {
-    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;

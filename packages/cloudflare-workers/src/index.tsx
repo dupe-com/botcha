@@ -48,7 +48,8 @@ import { ShowcasePage } from './dashboard/showcase';
 import { WhitepaperPage } from './dashboard/whitepaper';
 import { DocsPage } from './dashboard/docs';
 import { handleAccountPage, handleAccountJson } from './dashboard/account';
-import { createAgent, getAgent, listAgents } from './agents';
+import { createAgent, getAgent, listAgents, deleteAgent } from './agents';
+import { handleAgentAuthChallenge, handleAgentAuthVerify } from './agent-auth';
 import {
   registerTAPAgentRoute,
   getTAPAgentRoute,
@@ -156,6 +157,7 @@ type Bindings = {
   JWT_SIGNING_KEY?: string; // ES256 private key in JWK format (optional, enables asymmetric signing)
   RESEND_API_KEY?: string;
   BOTCHA_VERSION: string;
+  BOTCHA_BASE_URL?: string;       // Override base URL (e.g. https://botcha.ai in prod, http://localhost:8787 in dev)
   BOTCHA_INTERNAL_APP_ID: string; // Internal demo app for homepage challenges
   BOTCHA_PAYMENT_WALLET?: string; // BOTCHA receiving wallet (overrides default)
   BOTCHA_WEBHOOK_SECRET?: string; // HMAC secret for x402 webhook verification
@@ -210,7 +212,7 @@ app.use('/v1/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
 
   // Allow open paths through without app_id
-  if (shouldBypassAppGate(path)) {
+  if (shouldBypassAppGate(path, c.req.method)) {
     return next();
   }
 
@@ -656,12 +658,13 @@ app.get('/', async (c) => {
             `3. Solve a challenge: GET ${baseUrl}/v1/token?app_id=... → POST ${baseUrl}/v1/token/verify → JWT access_token`,
             `4. Register your identity: POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." } (Bearer + app_id required) → agent_id`,
             `5. Issue yourself a W3C Verifiable Credential: POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" } (Bearer required) — portable proof any service can verify offline`,
-            `6. Register a TAP keypair: generate an Ed25519 keypair, then POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": ["browse","search","audit","compare","purchase"] } with Bearer token + ?app_id=... — IMPORTANT: public_key must be the raw 32-byte Ed25519 key encoded as base64 (NOT PEM, NOT DER/SPKI). Store the private key securely — BOTCHA never sees it.`,
+            `6. Register a TAP keypair: generate an Ed25519 keypair locally, then POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": [{"action":"browse"},{"action":"search"}] } with Bearer token + ?app_id=... — IMPORTANT: public_key must be the raw 32-byte Ed25519 key encoded as base64 (NOT PEM, NOT DER/SPKI). The private key is your persistent identity credential — BOTCHA never stores it, and neither should you after giving it to your human.`,
             `7. Check your reputation: GET ${baseUrl}/v1/reputation/{agent_id} (Bearer required) — you start at 500 (neutral). It builds over time.`,
             '8. Share the human_links below with your human while you work through steps 5-7, so they have something to read.',
             '9. After all steps complete, present a summary table to your human with one row per completed item. Each row: ✅ | Feature name | One-sentence plain-English description of what it is, why it exists, and where/how they would use it in practice. Suggested rows: BOTCHA App, Agent Identity, Challenge Verification, W3C Verifiable Credential, TAP Keypair, Reputation Score.',
-            '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key (they must store this — BOTCHA never sees it), VC JWT. Format clearly, one per line.',
-            '11. End with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation scoring affects your agent\'s access, or anything else."',
+            '10. Below the table, present a "Credentials to save" section with every value the human must store securely: app_id, app_secret (remind them it cannot be retrieved again), agent_id, TAP private key (they must store this and provide it to you at the start of future sessions — it is how you re-identify as this specific agent without solving a new challenge), VC JWT. Format clearly, one per line.',
+            `11. Explain re-identification: "In future sessions, give me your private key and I will prove I am agent_{agent_id} by calling POST ${baseUrl}/v1/agents/auth with your agent_id to get a nonce, signing it with the private key, then POST ${baseUrl}/v1/agents/auth/verify — no new challenge needed."`,
+            '12. End with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation scoring affects your agent\'s access, or anything else."',
           ],
           human_links: {
             'W3C Verifiable Credentials': 'https://www.w3.org/TR/vc-data-model/',
@@ -732,15 +735,16 @@ Register your agent with a persistent, cryptographically verifiable identity. Do
 3. Solve a challenge → \`GET ${baseUrl}/v1/token?app_id=...\` then \`POST ${baseUrl}/v1/token/verify\` → JWT access_token
 4. Register your identity → \`POST ${baseUrl}/v1/agents/register { "name": "...", "operator": "..." }\` → agent_id
 5. Issue a W3C Verifiable Credential → \`POST ${baseUrl}/v1/credentials/issue { "agent_id": "...", "type": "BotchaVerification" }\` — portable proof any service can verify offline without calling BOTCHA
-6. Register a TAP keypair → generate an Ed25519 keypair, then \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": ["browse","search"] }\` (Bearer + ?app_id=...) — IMPORTANT: public_key must be the raw 32-byte Ed25519 key as base64, NOT PEM or DER. Store private key securely — BOTCHA never sees it. You can now sign requests instead of solving challenges
+6. Register a TAP keypair → generate an Ed25519 keypair locally, then \`POST ${baseUrl}/v1/agents/register/tap { "agent_id": "...", "name": "...", "public_key": "<raw-32-byte-pubkey-base64>", "signature_algorithm": "ed25519", "capabilities": [{"action":"browse"},{"action":"search"}] }\` (Bearer + ?app_id=...) — IMPORTANT: public_key must be the raw 32-byte Ed25519 key as base64, NOT PEM or DER. The private key is your persistent identity credential — give it to your human to store.
 7. Check your reputation → \`GET ${baseUrl}/v1/reputation/{agent_id}\` (Bearer required) — starts at 500 (neutral), builds over time
 8. Share the links below with your human while you work through steps 5–7.
 9. When all steps are done, present a summary table — one row per completed item:
    \`✅ | Feature | What it is and where/how to use it\`
    Rows: BOTCHA App · Agent Identity · Challenge Verification · W3C Verifiable Credential · TAP Keypair · Reputation Score
 10. Below the table, a "Credentials to save" section — every value the human must store:
-    app_id · app_secret (cannot be retrieved again) · agent_id · TAP private key (BOTCHA never stores this) · VC JWT
-11. Close with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation affects your agent's access, or anything else."
+    app_id · app_secret (cannot be retrieved again) · agent_id · TAP private key (this is how you re-identify as this specific agent in future sessions — BOTCHA never stores it) · VC JWT
+11. Explain re-identification: "In future sessions, give me your private key. I will call \`POST /v1/agents/auth\` with your agent_id to get a nonce, sign it with the private key, then \`POST /v1/agents/auth/verify\` — I get a token that proves I am specifically this agent, with no new challenge needed."
+12. Close with: "Would you like to learn more about any of these? I can explain how Verifiable Credentials work, what TAP enables, how reputation affects your agent's access, or anything else."
 
 **Links for your human:**
 - W3C Verifiable Credentials: https://www.w3.org/TR/vc-data-model/
@@ -2483,6 +2487,10 @@ app.post('/v1/agents/register/tap', registerTAPAgentRoute);
 app.get('/v1/agents/tap', listTAPAgentsRoute);
 app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 
+// Agent identity auth — prove you are a specific registered agent
+app.post('/v1/agents/auth', handleAgentAuthChallenge);
+app.post('/v1/agents/auth/verify', handleAgentAuthVerify);
+
 // TAP session management
 app.post('/v1/sessions/tap', createTAPSessionRoute);
 app.get('/v1/sessions/:id/tap', getTAPSessionRoute);
@@ -2726,6 +2734,29 @@ app.get('/v1/agents/:id', async (c) => {
       error: 'INTERNAL_ERROR',
       message: error instanceof Error ? error.message : 'Unknown error',
     }, 500);
+  }
+});
+
+// Delete an agent (requires Bearer token — must belong to the same app)
+app.delete('/v1/agents/:id', requireDashboardAuth, async (c) => {
+  try {
+    const agent_id = c.req.param('id');
+    if (!agent_id) {
+      return c.json({ success: false, error: 'MISSING_AGENT_ID', message: 'Agent ID is required' }, 400);
+    }
+
+    // requireDashboardAuth accepts both session cookie (browser) and Bearer token (agent)
+    const appId = c.get('dashboardAppId');
+
+    const result = await deleteAgent(c.env.AGENTS, agent_id, appId!);
+    if (!result.success) {
+      const status = result.error === 'Agent not found' ? 404 : result.error === 'Agent does not belong to this app' ? 403 : 500;
+      return c.json({ success: false, error: result.error }, status as 404 | 403 | 500);
+    }
+
+    return c.json({ success: true, agent_id, message: 'Agent deleted' });
+  } catch (error) {
+    return c.json({ success: false, error: 'INTERNAL_ERROR', message: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }
 });
 

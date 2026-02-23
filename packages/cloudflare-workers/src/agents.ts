@@ -92,10 +92,19 @@ export async function createAgent(
     // Add new agent_id to the list
     agentIds.push(agent_id);
 
-    // Store agent record and updated list in parallel
+    // Read tap-agents index too, keep both in sync
+    let tapAgentIds: string[] = [];
+    try {
+      const tapList = await kv.get(`app_agents:${app_id}`, 'text');
+      if (tapList) tapAgentIds = JSON.parse(tapList);
+    } catch {}
+    if (!tapAgentIds.includes(agent_id)) tapAgentIds.push(agent_id);
+
+    // Store agent record and update both index keys
     await Promise.all([
       kv.put(`agent:${agent_id}`, JSON.stringify(agent)),
       kv.put(`agents:${app_id}`, JSON.stringify(agentIds)),
+      kv.put(`app_agents:${app_id}`, JSON.stringify(tapAgentIds)),
     ]);
 
     return agent;
@@ -129,6 +138,53 @@ export async function getAgent(
     console.error(`Failed to get agent ${agent_id}:`, error);
     // Fail-open: Return null instead of throwing
     return null;
+  }
+}
+
+/**
+ * Delete an agent and remove it from the app's agent index.
+ * Also removes from the tap-agents app_agents:{appId} index if present.
+ *
+ * @returns true if deleted, false if not found, null on error
+ */
+export async function deleteAgent(
+  kv: KVNamespace,
+  agent_id: string,
+  app_id: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Verify agent exists and belongs to the app
+    const existing = await kv.get(`agent:${agent_id}`, 'text');
+    if (!existing) {
+      return { success: false, error: 'Agent not found' };
+    }
+    const agent = JSON.parse(existing) as Agent;
+    if (agent.app_id !== app_id) {
+      return { success: false, error: 'Agent does not belong to this app' };
+    }
+
+    // Remove agent record and update both index keys in parallel
+    const [agentsRaw, appAgentsRaw] = await Promise.all([
+      kv.get(`agents:${app_id}`, 'text'),
+      kv.get(`app_agents:${app_id}`, 'text'),
+    ]);
+
+    const ops: Promise<void>[] = [kv.delete(`agent:${agent_id}`)];
+
+    if (agentsRaw) {
+      const ids: string[] = JSON.parse(agentsRaw).filter((id: string) => id !== agent_id);
+      ops.push(kv.put(`agents:${app_id}`, JSON.stringify(ids)));
+    }
+    if (appAgentsRaw) {
+      const ids: string[] = JSON.parse(appAgentsRaw).filter((id: string) => id !== agent_id);
+      ops.push(kv.put(`app_agents:${app_id}`, JSON.stringify(ids)));
+    }
+
+    await Promise.all(ops);
+    return { success: true };
+  } catch (error) {
+    console.error(`Failed to delete agent ${agent_id}:`, error);
+    return { success: false, error: 'Internal server error' };
   }
 }
 

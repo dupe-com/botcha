@@ -32,20 +32,18 @@ type Variables = {
 async function fetchAccountData(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
   const appId = c.get('dashboardAppId')!;
   const env = c.env as any;
-  const baseUrl = new URL(c.req.url).origin;
+  // BOTCHA_BASE_URL is set in .dev.vars for local dev (http://localhost:8787)
+  // and in wrangler.toml [vars] for production (https://botcha.ai).
+  const baseUrl = (c.env as any).BOTCHA_BASE_URL ?? new URL(c.req.url).origin;
 
   // Parallel fetches
-  const [appRaw, agentsRaw, tapAgentsRaw] = await Promise.allSettled([
+  const [appRaw, agentsRaw] = await Promise.allSettled([
     import('../apps').then(m => m.getApp(env.APPS, appId)),
     import('../agents').then(m => m.listAgents(env.AGENTS, appId)),
-    import('../tap-agents').then(m => m.listTAPAgents(env.AGENTS, appId)),
   ]);
 
   const app = appRaw.status === 'fulfilled' ? appRaw.value : null;
   const agents = agentsRaw.status === 'fulfilled' ? (agentsRaw.value ?? []) : [];
-  const tapAgents = tapAgentsRaw.status === 'fulfilled' ? (tapAgentsRaw.value?.agents ?? []) : [];
-
-  const tapAgentIds = new Set(tapAgents.map((a: any) => a.agent_id));
 
   // Fetch reputation for each agent (parallel, fail-open)
   // getReputationScore requires (sessions, agents, agentId, appId)
@@ -66,7 +64,7 @@ async function fetchAccountData(c: Context<{ Bindings: Bindings; Variables: Vari
       name: agent.name,
       operator: agent.operator ?? null,
       created_at: agent.created_at,
-      tap_enabled: tapAgentIds.has(agent.agent_id),
+      tap_enabled: Boolean((agent as any).tap_enabled),
       reputation: rep
         ? { score: rep.score, tier: rep.tier, event_count: rep.event_count }
         : null,
@@ -126,13 +124,13 @@ function tierBadge(tier: string): string {
 }
 
 export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variables: Variables }>) {
-  const { appId, app, agents } = await fetchAccountData(c);
+  const { appId, app, agents, baseUrl } = await fetchAccountData(c);
   const version = (c.env as any).BOTCHA_VERSION ?? '0.15.0';
 
   const agentRows = agents.length === 0
-    ? `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px;">No agents registered yet. Your agent can register via <code>POST /v1/agents/register</code>.</td></tr>`
+    ? `<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:32px 24px;">No agents yet. Click <strong style="color:#6b7280;">+ Add Agent</strong> above to get a prompt you can paste into your AI agent.</td></tr>`
     : agents.map(a => `
-        <tr>
+        <tr id="row-${a.agent_id}">
           <td style="font-family:monospace;font-size:12px;color:#6b7280;">${a.agent_id}</td>
           <td>${a.name ?? '—'}</td>
           <td>${a.operator ?? '—'}</td>
@@ -143,10 +141,33 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           </td>
           <td style="text-align:center;">
             ${a.tap_enabled
-              ? '<span style="color:#22c55e;font-size:13px;" title="TAP keypair registered">✓ TAP</span>'
+              ? `<button onclick="toggleReidentify('${a.agent_id}')" style="background:none;border:none;cursor:pointer;font-family:var(--font);font-size:13px;color:#22c55e;padding:0;" title="TAP keypair registered — click for re-identification instructions">✓ TAP</button>`
               : '<span style="color:#d1d5db;font-size:13px;" title="No TAP keypair">— TAP</span>'}
           </td>
-        </tr>`).join('');
+          <td style="text-align:center;">
+            <button class="btn-delete" onclick="deleteAgent('${a.agent_id}')" title="Delete agent">✕</button>
+          </td>
+        </tr>
+        ${a.tap_enabled ? `
+        <tr id="reidentify-${a.agent_id}" style="display:none;">
+          <td colspan="6" style="padding:0 12px 16px 12px;background:#f9fafb;border-bottom:1px solid var(--border);">
+            <div style="font-size:12px;color:#374151;line-height:1.7;padding-top:12px;">
+              <strong style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280;">How to re-identify in a new session</strong>
+              <p style="margin:8px 0 4px;">At the start of a new conversation, tell your agent:</p>
+              <div style="background:#fff;border:1px solid var(--border);border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
+                You are agent <strong>${a.agent_id}</strong> on my BOTCHA account (${baseUrl}). Your private key is <strong>&lt;paste private key&gt;</strong>. Re-identify yourself before doing anything else.
+              </div>
+              <p style="margin:4px 0;">The agent will then:</p>
+              <ol style="margin:4px 0 0 18px;padding:0;color:#6b7280;">
+                <li>POST ${baseUrl}/v1/agents/auth with <code style="font-size:11px;">{"agent_id":"${a.agent_id}"}</code> → receive a nonce</li>
+                <li>Sign the nonce with the private key (Ed25519)</li>
+                <li>POST ${baseUrl}/v1/agents/auth/verify with <code style="font-size:11px;">{"challenge_id","agent_id","signature"}</code> → receive an identity JWT</li>
+              </ol>
+              <p style="margin:8px 0 0;color:#9ca3af;font-size:11px;">The identity JWT contains your agent_id claim — proving this is the same agent, not a fresh anonymous session.</p>
+            </div>
+          </td>
+        </tr>` : ''}
+      `).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -167,6 +188,8 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
     .agents-table th { text-align:left; padding:8px 12px; background:#f9fafb; border-bottom:2px solid #e5e7eb; font-weight:600; color:#374151; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
     .agents-table td { padding:12px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
     .agents-table tr:last-child td { border-bottom:none; }
+    .btn-delete { background:none; border:none; color:#d1d5db; font-size:13px; cursor:pointer; padding:2px 6px; border-radius:4px; font-family:inherit; transition:color 0.15s,background 0.15s; }
+    .btn-delete:hover { color:#ef4444; background:#fef2f2; }
     .verified-badge { color:#22c55e; font-size:11px; }
     .unverified-badge { color:#f59e0b; font-size:11px; }
   </style>
@@ -245,11 +268,51 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
       <!-- Agents Table -->
       <div class="card">
         <div class="card-header">
-          <h3>
-            <span class="card-title">Agents</span>
-            <span class="badge-inline">${agents.length} registered</span>
+          <h3 style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+            <span>
+              <span class="card-title">Agents</span>
+              <span class="badge-inline section-badge">${agents.length} registered</span>
+            </span>
+            <button
+              onclick="toggleAddAgent()"
+              style="font-family:var(--font);font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;border-radius:2px;"
+            >+ Add Agent</button>
           </h3>
         </div>
+
+        <!-- Add Agent prompt panel (hidden by default) -->
+        <div id="add-agent-panel" style="display:none;border-bottom:1px solid var(--border);">
+          <div style="padding:16px 20px;">
+
+            <!-- Hidden full prompt (copied to clipboard) -->
+            <span id="agent-prompt" style="display:none;">Register as a BOTCHA agent. Base URL: ${baseUrl}. App ID: ${appId}. Do all steps automatically: 1) GET ${baseUrl}/v1/token?app_id=${appId} — solve the SHA256 speed challenge in-process, then POST ${baseUrl}/v1/token/verify with {"id":"<challenge_id>","answers":["<hash1>",...],"app_id":"${appId}"}. Save access_token as your Bearer token. 2) POST ${baseUrl}/v1/agents/register — Authorization: Bearer <access_token>, body {"name":"<your model name>","operator":"<human name or org>"}. Save agent_id. 3) Generate an Ed25519 keypair. Export public key as raw 32 bytes base64 (strip 12-byte SPKI header). 4) POST ${baseUrl}/v1/agents/register/tap?app_id=${appId} — Authorization: Bearer <access_token>, body {"agent_id":"<from step 2>","name":"<your model name>","public_key":"<raw 32-byte base64>","signature_algorithm":"ed25519","capabilities":[{"action":"browse"},{"action":"search"}]}. 5) Tell the human: agent_id, public key fingerprint, and private key (base64) — they must save the private key, it is the only way to re-identify you. BOTCHA never stores it.</span>
+
+            <!-- Human-readable breakdown -->
+            <div style="font-size:12px;color:#6b7280;margin-bottom:12px;">
+              Copy this prompt and paste it into your AI agent — it will handle all steps automatically.
+            </div>
+
+            <div style="background:var(--bg-raised);border:1px solid var(--border);border-radius:2px;padding:14px 16px;">
+              <ol style="margin:0;padding:0 0 0 18px;font-size:12px;color:#374151;line-height:1.8;font-family:var(--font);">
+                <li><strong>Solve speed challenge</strong> — <code style="font-size:11px;">GET /v1/token?app_id=${appId}</code>, compute SHA256 answers in-process, verify with <code style="font-size:11px;">POST /v1/token/verify</code> → <code style="font-size:11px;">access_token</code></li>
+                <li><strong>Register identity</strong> — <code style="font-size:11px;">POST /v1/agents/register</code> with Bearer token → <code style="font-size:11px;">agent_id</code></li>
+                <li><strong>Generate Ed25519 keypair</strong> — raw 32-byte public key as base64</li>
+                <li><strong>Register keypair</strong> — <code style="font-size:11px;">POST /v1/agents/register/tap</code> with <code style="font-size:11px;">agent_id</code> + public key</li>
+                <li><strong>Report back</strong> — agent_id, key fingerprint, and private key for you to save</li>
+              </ol>
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+                <button onclick="copyAgentPrompt()" type="button"
+                  style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font);font-size:11px;font-weight:500;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;text-transform:uppercase;letter-spacing:0.1em;"
+                  onmouseover="this.style.color='#111827'" onmouseout="this.style.color='var(--text-muted)'">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><rect x="9" y="9" width="13" height="13"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+                  <span id="agent-copy-text">Copy prompt</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
         <div class="card-body"><div class="card-inner" style="padding:0;overflow-x:auto;">
           <table class="agents-table">
             <thead>
@@ -259,6 +322,7 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
                 <th>Operator</th>
                 <th>Reputation</th>
                 <th style="text-align:center;">TAP</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>${agentRows}</tbody>
@@ -266,9 +330,40 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
         </div></div>
       </div>
 
-      <p style="margin-top:20px;font-size:12px;color:#9ca3af;text-align:center;">
-        Agents: <code>GET /account</code> with <code>Accept: application/json</code> + Bearer token for structured data.
-      </p>
+      <script>
+        function toggleAddAgent() {
+          var panel = document.getElementById('add-agent-panel');
+          panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+        function toggleReidentify(agentId) {
+          var row = document.getElementById('reidentify-' + agentId);
+          if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        }
+        function copyAgentPrompt() {
+          var text = document.getElementById('agent-prompt').textContent.trim();
+          navigator.clipboard.writeText(text).then(function() {
+            var label = document.getElementById('agent-copy-text');
+            label.textContent = 'Copied!';
+            setTimeout(function() { label.textContent = 'Copy prompt'; }, 2500);
+          });
+        }
+        async function deleteAgent(agentId) {
+          if (!confirm('Delete agent ' + agentId + '? This cannot be undone.')) return;
+          const res = await fetch('/v1/agents/' + agentId, { method: 'DELETE' });
+          if (res.ok) {
+            var row = document.getElementById('row-' + agentId);
+            if (row) row.remove();
+            var badge = document.querySelector('.section-badge');
+            if (badge) {
+              var n = document.querySelectorAll('[id^="row-"]').length;
+              badge.textContent = n + ' registered';
+            }
+          } else {
+            var data = await res.json();
+            alert('Failed to delete: ' + (data.error || res.status));
+          }
+        }
+      </script>
     </div>
   </main>
   <footer class="global-footer">
