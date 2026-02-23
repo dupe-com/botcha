@@ -263,7 +263,7 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
               </span>
               ${app?.email_verified ? `
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <button class="btn-action" onclick="recoverSecret()" style="border:1px solid var(--border);">
+                <button class="btn-action" onclick="recoverSecret(this)" style="border:1px solid var(--border);">
                   Email recovery code →
                 </button>
                 <span id="recover-status" style="font-size:11px;color:#6b7280;"></span>
@@ -376,18 +376,23 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
       </div>
 
       <script>
-        async function recoverSecret() {
-          var btn = event.target;
+        var _newSecret = '';
+        function copySecret() {
+          navigator.clipboard.writeText(_newSecret).then(function() {
+            var btn = document.getElementById('copy-secret-btn');
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy'; }, 2500); }
+          });
+        }
+        async function recoverSecret(btn) {
           var status = document.getElementById('recover-status');
           btn.disabled = true;
           status.textContent = 'Sending…';
           try {
-            const res = await fetch('/v1/auth/recover', {
+            await fetch('/v1/auth/recover', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
               body: JSON.stringify({email: '${app?.email ?? ''}'})
             });
-            const data = await res.json();
             status.textContent = 'Code sent — check your email.';
             document.getElementById('recover-form').style.display = 'block';
           } catch(e) {
@@ -401,7 +406,6 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           if (!code) { result.textContent = 'Enter the 6-digit code.'; return; }
           result.textContent = 'Verifying…';
           try {
-            // Step 1: exchange device code for session cookie
             const loginRes = await fetch('/dashboard/code', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
@@ -412,7 +416,6 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
               result.textContent = 'Invalid code: ' + (d.message || d.error || loginRes.status);
               return;
             }
-            // Step 2: immediately rotate the secret — session cookie is now set
             result.textContent = 'Rotating secret…';
             const rotateRes = await fetch('/v1/apps/${appId}/rotate-secret', {
               method: 'POST',
@@ -421,12 +424,12 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
             });
             const rotateData = await rotateRes.json();
             if (rotateRes.ok && rotateData.app_secret) {
+              _newSecret = rotateData.app_secret;
               result.innerHTML =
-                '<strong style="color:#22c55e;">✓ New app_secret issued.</strong> Save this now — it will not be shown again:<br>' +
-                '<code style="display:block;margin-top:8px;padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:3px;font-size:12px;word-break:break-all;color:#111827;">' +
-                rotateData.app_secret + '</code>' +
-                '<button onclick="navigator.clipboard.writeText(\'' + rotateData.app_secret + '\').then(()=>this.textContent=\'Copied!\')" ' +
-                'class="btn-action" style="margin-top:6px;border:1px solid var(--border);">Copy</button>';
+                '<strong style="color:#22c55e;">New app_secret issued.</strong> Save this now — it will not be shown again:<br>' +
+                '<code id="new-secret-val" style="display:block;margin-top:8px;padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:3px;font-size:12px;word-break:break-all;color:#111827;"></code>' +
+                '<button id="copy-secret-btn" onclick="copySecret()" class="btn-action" style="margin-top:6px;border:1px solid var(--border);">Copy</button>';
+              document.getElementById('new-secret-val').textContent = rotateData.app_secret;
             } else {
               result.textContent = 'Rotation failed: ' + (rotateData.message || rotateData.error || rotateRes.status);
             }
