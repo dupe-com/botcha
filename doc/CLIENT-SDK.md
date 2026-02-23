@@ -932,6 +932,132 @@ botcha = BotchaVerify(
 
 ---
 
+## Agent Re-identification (v0.22.0+)
+
+Once registered, an agent needs to prove its identity in future sessions without solving a new challenge every time. Three methods are available — choose based on what credentials your agent has access to.
+
+### Method A — OAuth Device Authorization Grant (RFC 8628) — Recommended
+
+Best for agents running in environments where the human operator can approve access once. The resulting `brt_...` refresh token is valid for 90 days and works in any future session with no other secrets.
+
+**One-time setup (run once per agent):**
+
+```bash
+# Step 1: Start device authorization
+curl -X POST https://botcha.ai/v1/oauth/device \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "agent_abc123", "app_id": "app_xyz456"}'
+
+# Response:
+# {
+#   "device_code": "oauthdev_...",
+#   "user_code": "BOTCHA-X4K9MR",
+#   "verification_url": "https://botcha.ai/device",
+#   "expires_in": 600,
+#   "interval": 5,
+#   "message": "Tell your human: visit https://botcha.ai/device and enter BOTCHA-X4K9MR"
+# }
+
+# Step 2: Tell your human to visit the verification_url and enter the user_code.
+
+# Step 3: Poll for the refresh token (every 5 seconds until approved)
+curl -X POST https://botcha.ai/v1/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "device_code": "oauthdev_...",
+    "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+  }'
+
+# While pending: { "error": "authorization_pending" }
+# Once approved: { "access_token": "...", "refresh_token": "brt_abc123...", "expires_in": 3600 }
+# Save the refresh_token — it's valid for 90 days.
+```
+
+**Every future session (instant re-identification):**
+
+```bash
+curl -X POST https://botcha.ai/v1/agents/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "brt_abc123..."}'
+
+# Response:
+# { "success": true, "access_token": "...", "agent_id": "agent_abc123", "expires_in": 3600 }
+```
+
+**Revoke from the dashboard** (Account → Agents → Revoke OAuth) or via API:
+
+```bash
+curl -X POST https://botcha.ai/v1/oauth/revoke \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "agent_abc123", "app_id": "app_xyz456"}'
+```
+
+---
+
+### Method B — Provider API Key Hash
+
+If your agent was registered with a provider API key binding (Anthropic, OpenAI, etc.), re-identify using the same key — it's never stored, only a SHA-256 hash is compared.
+
+```bash
+curl -X POST https://botcha.ai/v1/agents/auth/provider \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "anthropic",
+    "api_key": "sk-ant-...",
+    "app_id": "app_xyz456"
+  }'
+
+# Response: { "success": true, "access_token": "...", "agent_id": "agent_abc123" }
+```
+
+> Note: This only works for Claude Code / CLI agents where `ANTHROPIC_API_KEY` is set in the environment. It does not work in Claude.ai browser sessions.
+
+---
+
+### Method C — TAP Keypair Challenge-Response
+
+For agents with a registered Ed25519 keypair. Must be run as code in a single process (not WebFetch) because you must sign the nonce within 60 seconds.
+
+```bash
+# Step 1: Get a nonce
+curl -X POST https://botcha.ai/v1/agents/auth \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "agent_abc123"}'
+
+# Response: { "challenge_id": "...", "nonce": "...", "expires_in": 60 }
+
+# Step 2: Sign the nonce with your Ed25519 private key, then:
+curl -X POST https://botcha.ai/v1/agents/auth/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "challenge_id": "...",
+    "agent_id": "agent_abc123",
+    "signature": "<base64-encoded Ed25519 signature of nonce>"
+  }'
+
+# Response: { "success": true, "access_token": "...", "agent_id": "agent_abc123" }
+```
+
+---
+
+### Key Recovery (lost `tapk_` private key)
+
+If you lose your TAP private key, the `app_secret` is your recovery anchor. Use it to rotate to a new keypair — your `agent_id` and reputation history are preserved.
+
+```bash
+curl -X POST "https://botcha.ai/v1/agents/agent_abc123/tap/rotate-key?app_id=app_xyz456" \
+  -H "Content-Type: application/json" \
+  -H "x-app-secret: sk_yourappsecret" \
+  -d '{
+    "public_key": "<new-raw-32-byte-Ed25519-public-key-base64>",
+    "signature_algorithm": "ed25519"
+  }'
+
+# Returns new key_id. Old key is immediately invalidated.
+```
+
+---
+
 ## Trusted Agent Protocol (TAP) Endpoints (v0.12.0+)
 
 TAP adds cryptographic agent authentication using HTTP Message Signatures (RFC 9421). TAP-enabled agents register public keys, declare capabilities, and create intent-scoped sessions.
