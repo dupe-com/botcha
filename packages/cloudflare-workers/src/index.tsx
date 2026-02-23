@@ -35,6 +35,7 @@ import {
   handleDeviceCodeChallenge,
   handleDeviceCodeVerify,
   requireDashboardAuth,
+  renderLoginPage,
 } from './dashboard/auth';
 import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBotchaMarkdown, getWhitepaperMarkdown } from './static';
 import { handleMCPRequest, handleMCPDiscovery } from './mcp';
@@ -178,6 +179,11 @@ app.use('*', cors());
 // ============ MOUNT ROUTES ============
 app.route('/', streamRoutes);
 app.route('/dashboard', dashboardRoutes);
+
+// ============ LOGIN PAGE (top-level alias) ============
+// /login is the canonical login URL; /dashboard/login still works via the sub-app
+app.get('/login', renderLoginPage);
+app.post('/login', async (c) => c.redirect('/dashboard/login', 307)); // proxy POSTs to dashboard handler
 
 // ============ ACCOUNT PAGE ============
 // GET /account — app/agent/reputation overview for humans (HTML) and agents (JSON)

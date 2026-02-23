@@ -106,9 +106,9 @@ export const requireDashboardAuth: MiddlewareHandler<{ Bindings: Bindings; Varia
     const isApi = c.req.header('Accept')?.includes('application/json') ||
                   c.req.header('HX-Request');
     if (isApi) {
-      return c.json({ error: 'Authentication required', login: '/dashboard/login' }, 401);
+      return c.json({ error: 'Authentication required', login: '/login' }, 401);
     }
-    return c.redirect('/dashboard/login');
+    return c.redirect('/login');
   }
 
   const result = await verifyToken(sessionToken, c.env.JWT_SECRET, c.env);
@@ -118,9 +118,9 @@ export const requireDashboardAuth: MiddlewareHandler<{ Bindings: Bindings; Varia
     const isApi = c.req.header('Accept')?.includes('application/json') ||
                   c.req.header('HX-Request');
     if (isApi) {
-      return c.json({ error: 'Session expired', login: '/dashboard/login' }, 401);
+      return c.json({ error: 'Session expired', login: '/login' }, 401);
     }
-    return c.redirect('/dashboard/login');
+    return c.redirect('/login');
   }
 
   c.set('dashboardAppId', result.payload.app_id);
@@ -568,44 +568,6 @@ export async function renderLoginPage(c: Context<{ Bindings: Bindings }>) {
         {'>'}_&nbsp;login
       </p>
 
-      {/* Primary: Agent prompt */}
-      <p class="text-muted" style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.15em; text-align: center; margin-bottom: 0.625rem;">
-        Paste this into your AI agent
-      </p>
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-body">
-          <button
-            id="dash-prompt-btn"
-            onclick="copyDashPrompt()"
-            type="button"
-            class="card-inner"
-            style="display: block; width: 100%; padding: 1.5rem; border: none; border-radius: 0; cursor: pointer; font-family: var(--font); text-align: left; text-transform: none; letter-spacing: normal; box-shadow: none; transition: background 0.2s;"
-          >
-            <code id="dash-prompt" style="font-size: 0.9375rem; font-weight: 700; color: var(--accent); line-height: 1.5; display: block; background: none; border: none; padding: 0;">
-              {DASHBOARD_PROMPT}
-            </code>
-            <span
-              id="dash-copy-label"
-              style="display: flex; align-items: center; gap: 0.375rem; margin-top: 1rem; font-size: 0.6875rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; transition: color 0.2s;"
-            >
-              <span
-                id="dash-copy-icon"
-                style="display: flex; transition: color 0.2s;"
-                dangerouslySetInnerHTML={{ __html: COPY_ICON_SVG }}
-              />
-              <span id="dash-copy-text">Click to copy</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <p class="text-muted" style="font-size: 0.75rem; text-align: center; line-height: 1.8; margin-bottom: 1.5rem; padding: 0 2rem;">
-        Your agent solves a challenge, gets a code, and gives you a link.
-      </p>
-
-      <Divider text="returning user?" />
-
-      {/* Secondary: Email Login */}
       <form method="post" action="/dashboard/email-login">
         <Card title="Email Login">
           {error === 'email_missing' && (
@@ -623,7 +585,10 @@ export async function renderLoginPage(c: Context<{ Bindings: Bindings }>) {
         </Card>
       </form>
 
-      <script dangerouslySetInnerHTML={{ __html: LOGIN_COPY_SCRIPT }} />
+      <p class="text-muted" style="font-size: 0.75rem; text-align: center; margin-top: 1.5rem; line-height: 1.8;">
+        New here? Ask your AI agent to run:<br />
+        <code style="font-size: 0.75rem;">curl -s https://botcha.ai -H 'Accept: application/json'</code>
+      </p>
     </LoginLayout>
   );
 }
