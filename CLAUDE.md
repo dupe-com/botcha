@@ -36,6 +36,47 @@ function post(path, body) {
 
 Use the printed `ACCESS_TOKEN` as `Authorization: Bearer <token>` for all subsequent requests. You can also use the slash command `/botcha-identify` (see `.claude/commands/botcha-identify.md`).
 
+## Lost Private Key? Key Recovery
+
+If the private key is lost, the human can re-key the agent using their `app_secret` (the anchor credential they saved when creating their BOTCHA app). Run this in Bash:
+
+```bash
+node -e "
+const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
+const AGENT_ID = 'YOUR_AGENT_ID';
+const APP_SECRET = 'sk_...';           // human's app_secret
+const APP_ID = 'app_...';
+const BASE_URL = 'http://localhost:8787';
+const url = new URL(BASE_URL);
+const lib = url.protocol === 'https:' ? https : http;
+function req(opts, body) {
+  const s = JSON.stringify(body);
+  return new Promise((res,rej) => {
+    const r = lib.request({...opts,headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(s),'x-app-secret':APP_SECRET}},resp=>{let d='';resp.on('data',c=>d+=c);resp.on('end',()=>res(JSON.parse(d)));});
+    r.on('error',rej); r.write(s); r.end();
+  });
+}
+(async()=>{
+  // Generate new Ed25519 keypair
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+  const privRaw = privateKey.export({type:'pkcs8',format:'der'}).slice(16);
+  const pubRaw = publicKey.export({type:'spki',format:'der'}).slice(12);
+  // Rotate key on the server
+  const result = await req(
+    {hostname:url.hostname,port:url.port||(url.protocol==='https:'?443:80),path:'/v1/agents/'+AGENT_ID+'/tap/rotate-key?app_id='+APP_ID,method:'POST'},
+    {public_key:pubRaw.toString('base64'),signature_algorithm:'ed25519'}
+  );
+  if (!result.success) { console.error(JSON.stringify(result)); process.exit(1); }
+  console.log('NEW_PRIVATE_KEY=' + privRaw.toString('base64'));
+  console.log('Key rotated. Give the new private key to your human to save.');
+})();
+"
+```
+
+The `app_secret` is the recovery anchor — it never changes unless explicitly rotated. As long as the human has it, any lost agent private key can be replaced without losing the `agent_id` or reputation history.
+
 ## Project
 
 BOTCHA — reverse CAPTCHA for AI agents. Proves you're a bot, not a human.

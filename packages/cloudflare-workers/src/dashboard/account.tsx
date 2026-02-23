@@ -141,11 +141,14 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
           </td>
           <td style="text-align:center;">
             ${a.tap_enabled
-              ? `<button onclick="toggleReidentify('${a.agent_id}')" style="background:none;border:none;cursor:pointer;font-family:var(--font);font-size:13px;color:#22c55e;padding:0;" title="TAP keypair registered — click for re-identification instructions">✓ TAP</button>`
-              : '<span style="color:#d1d5db;font-size:13px;" title="No TAP keypair">— TAP</span>'}
+              ? `<button class="btn-action" onclick="toggleReidentify('${a.agent_id}')" title="TAP keypair registered — click for re-identification instructions" style="color:#22c55e;">✓ TAP</button>`
+              : '<span style="color:#d1d5db;font-size:11px;font-weight:500;" title="No TAP keypair">— TAP</span>'}
           </td>
-          <td style="text-align:center;">
-            <button class="btn-delete" onclick="deleteAgent('${a.agent_id}')" title="Delete agent">✕</button>
+          <td style="text-align:right;white-space:nowrap;">
+            ${a.tap_enabled
+              ? `<button class="btn-action warn" onclick="toggleRotateKey('${a.agent_id}')" title="Lost your private key? Rotate to a new keypair using your app_secret">↺ rotate</button>`
+              : ''}
+            <button class="btn-action danger" onclick="deleteAgent('${a.agent_id}')" title="Delete agent">✕</button>
           </td>
         </tr>
         ${a.tap_enabled ? `
@@ -164,6 +167,18 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
                 <li>POST ${baseUrl}/v1/agents/auth/verify with <code style="font-size:11px;">{"challenge_id","agent_id","signature"}</code> → receive an identity JWT</li>
               </ol>
               <p style="margin:8px 0 0;color:#9ca3af;font-size:11px;">The identity JWT contains your agent_id claim — proving this is the same agent, not a fresh anonymous session.</p>
+            </div>
+          </td>
+        </tr>
+        <tr id="rotatekey-${a.agent_id}" style="display:none;">
+          <td colspan="6" style="padding:0 12px 16px 12px;background:#fffbeb;border-bottom:1px solid #fde68a;">
+            <div style="font-size:12px;color:#374151;line-height:1.7;padding-top:12px;">
+              <strong style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#92400e;">Lost your private key? Rotate to a new keypair</strong>
+              <p style="margin:8px 0 4px;color:#6b7280;">Your <code style="font-size:11px;">app_secret</code> is the recovery anchor. As long as you have it, you can issue a new keypair to this agent without losing its <code style="font-size:11px;">agent_id</code> or reputation. Tell your agent:</p>
+              <div style="background:#fff;border:1px solid #fde68a;border-radius:2px;padding:10px 12px;font-family:monospace;font-size:12px;color:#374151;margin-bottom:8px;">
+                My BOTCHA agent ${a.agent_id} lost its private key. Rotate its keypair using app_secret &lt;paste app_secret&gt; for app ${appId} at ${baseUrl}. Generate a new Ed25519 keypair, call POST ${baseUrl}/v1/agents/${a.agent_id}/tap/rotate-key?app_id=${appId} with header x-app-secret: &lt;app_secret&gt; and body {"public_key":"&lt;raw 32-byte base64&gt;","signature_algorithm":"ed25519"}, then give me the new private key to save.
+              </div>
+              <p style="margin:4px 0 0;color:#9ca3af;font-size:11px;">The agent generates a new keypair locally, registers the new public key, and returns the new private key for you to store. The old key is invalidated immediately.</p>
             </div>
           </td>
         </tr>` : ''}
@@ -188,8 +203,10 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
     .agents-table th { text-align:left; padding:8px 12px; background:#f9fafb; border-bottom:2px solid #e5e7eb; font-weight:600; color:#374151; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
     .agents-table td { padding:12px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
     .agents-table tr:last-child td { border-bottom:none; }
-    .btn-delete { background:none; border:none; color:#d1d5db; font-size:13px; cursor:pointer; padding:2px 6px; border-radius:4px; font-family:inherit; transition:color 0.15s,background 0.15s; }
-    .btn-delete:hover { color:#ef4444; background:#fef2f2; }
+    .btn-action { background:none; border:none; color:#9ca3af; font-size:11px; font-weight:500; cursor:pointer; padding:3px 7px; border-radius:3px; font-family:var(--font); letter-spacing:0.03em; transition:color 0.15s,background 0.15s; white-space:nowrap; }
+    .btn-action:hover { color:#374151; background:#f3f4f6; }
+    .btn-action.danger:hover { color:#ef4444; background:#fef2f2; }
+    .btn-action.warn:hover { color:#d97706; background:#fffbeb; }
     .verified-badge { color:#22c55e; font-size:11px; }
     .unverified-badge { color:#f59e0b; font-size:11px; }
   </style>
@@ -275,7 +292,8 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
             </span>
             <button
               onclick="toggleAddAgent()"
-              style="font-family:var(--font);font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;border-radius:2px;"
+              class="btn-action"
+              style="border:1px solid var(--border);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;"
             >+ Add Agent</button>
           </h3>
         </div>
@@ -337,6 +355,10 @@ export async function handleAccountPage(c: Context<{ Bindings: Bindings; Variabl
         }
         function toggleReidentify(agentId) {
           var row = document.getElementById('reidentify-' + agentId);
+          if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        }
+        function toggleRotateKey(agentId) {
+          var row = document.getElementById('rotatekey-' + agentId);
           if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
         }
         function copyAgentPrompt() {
