@@ -1,6 +1,6 @@
 # BOTCHA — Active Issues Tracker
 
-*Last updated: 2026-02-20 by Codex*
+*Last updated: 2026-02-23 by Choco*
 
 ---
 
@@ -8,19 +8,17 @@ Closed/merged work is tracked in `CHANGELOG.md`. This file tracks only open issu
 
 ---
 
-## 🐛 OPEN BUGS (filed 2026-02-23 by Choco)
+## ✅ FIXED (2026-02-23 by Choco)
 
 ### Issue #33 — OAuth device flow: use verification_uri_complete
 **URL:** https://github.com/dupe-com/botcha/issues/33
-**PR:** https://github.com/dupe-com/botcha/pull/35 (Copilot + Choco, awaiting merge)
-**Changes:** `message` now uses pre-filled URL; `/device` page countdown only fires after successful lookup; stale comment fixed
-**Priority:** 🔴 HIGH — affects every agent using the device flow
+**PR:** https://github.com/dupe-com/botcha/pull/35 (merged)
+**Fix:** `message` uses pre-filled URL; countdown only fires after successful lookup
 
 ### Issue #34 — Device approval page requires login (wrong UX)
 **URL:** https://github.com/dupe-com/botcha/issues/34
-**Status:** 🟠 Open — not yet started
-**Problem:** Humans tapping the device approval link hit an email login page before seeing the approval screen. Device code should be the trust anchor — no login required.
-**Priority:** 🔴 HIGH — device flow UX is broken for real-world use
+**Commit:** b6f0c98
+**Fix:** Removed `requireDashboardAuth` from `GET /device`; device code is now the sole trust anchor (RFC 8628 §6.1)
 
 ---
 
