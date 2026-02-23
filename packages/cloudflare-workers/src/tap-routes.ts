@@ -7,6 +7,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { validateAppSecret } from './apps.js';
 import { triggerWebhook, type KVNamespace as WebhookKVNamespace } from './webhooks.js';
 import { 
   registerTAPAgent, 
@@ -640,11 +641,25 @@ export async function rotateKeyRoute(c: Context) {
       return c.json({ success: false, error: 'MISSING_AGENT_ID', message: 'Agent ID is required' }, 400);
     }
     
-    const appAccess = await validateAppAccess(c, true);
-    if (!appAccess.valid) {
-      return c.json({ success: false, error: appAccess.error, message: 'Authentication required' }, (appAccess.status || 401) as 401);
+    // Accept either a Bearer JWT (normal flow) or x-app-secret header (recovery flow)
+    const queryAppId = c.req.query('app_id');
+    const appSecretHeader = c.req.header('x-app-secret');
+    let resolvedAppId: string | undefined;
+
+    if (appSecretHeader && queryAppId) {
+      const valid = await validateAppSecret((c.env as any).APPS, queryAppId, appSecretHeader);
+      if (!valid) {
+        return c.json({ success: false, error: 'UNAUTHORIZED', message: 'Invalid app_secret' }, 401);
+      }
+      resolvedAppId = queryAppId;
+    } else {
+      const appAccess = await validateAppAccess(c, true);
+      if (!appAccess.valid) {
+        return c.json({ success: false, error: appAccess.error, message: 'Authentication required. Provide a Bearer token or x-app-secret + app_id.' }, (appAccess.status || 401) as 401);
+      }
+      resolvedAppId = appAccess.appId;
     }
-    
+
     const body = await c.req.json().catch(() => ({}));
     if (!body.public_key || !body.signature_algorithm) {
       return c.json({ success: false, error: 'MISSING_FIELDS', message: 'public_key and signature_algorithm are required' }, 400);
@@ -678,7 +693,7 @@ export async function rotateKeyRoute(c: Context) {
     const agent = agentResult.agent;
     
     // Verify agent belongs to this app
-    if (agent.app_id !== appAccess.appId) {
+    if (agent.app_id !== resolvedAppId) {
       return c.json({ success: false, error: 'UNAUTHORIZED', message: 'Agent does not belong to this app' }, 403);
     }
     
