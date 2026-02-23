@@ -2866,9 +2866,11 @@ app.get('/device', async (c) => {
     <h1>Authorize Agent</h1>
     <p>Your agent is requesting permission to re-identify itself in future sessions without solving a new challenge each time.</p>
     <div id="agent-info"></div>
-    <input id="code-input" type="text" placeholder="BOTCHA-XXXXXX" maxlength="13" value="${prefill}" oninput="this.value=this.value.toUpperCase();lookupCode(this.value)" />
-    <button class="btn btn-approve" onclick="approve()">Approve</button>
-    <button class="btn btn-deny" onclick="deny()">Deny</button>
+    <div id="actions">
+      <input id="code-input" type="text" placeholder="BOTCHA-XXXXXX" maxlength="13" value="${prefill}" oninput="this.value=this.value.toUpperCase();lookupCode(this.value)" />
+      <button class="btn btn-approve" onclick="approve()">Approve</button>
+      <button class="btn btn-deny" onclick="deny()">Deny</button>
+    </div>
     <div id="status"></div>
   </div>
   <script>
@@ -2904,7 +2906,7 @@ app.get('/device', async (c) => {
         });
         const d = await r.json();
         if (d.success) {
-          document.getElementById('code-input').disabled = true;
+          document.getElementById('actions').style.display = 'none';
           if (action === 'approve') {
             status.innerHTML = '<strong style="color:#22c55e;">✓ Approved.</strong> Waiting for your agent to pick up the token…';
             pollForPickup(document.getElementById('code-input').value);
@@ -2917,12 +2919,14 @@ app.get('/device', async (c) => {
       } catch(e) { status.textContent = 'Failed. Try again.'; }
     }
     function copyMsg(el) {
-      navigator.clipboard.writeText(el.textContent).then(function() {
-        document.getElementById('copy-hint').textContent = '✓ Copied';
+      var msg = el.getAttribute('data-msg');
+      navigator.clipboard.writeText(msg).then(function() {
+        el.querySelector('#copy-hint').innerHTML = '✓ Copied!';
       });
     }
     var pickupTimer = null;
     function pollForPickup(code) {
+      var msg = 'I approved the BOTCHA authorization. The user code was: ' + code;
       pickupTimer = setInterval(async function() {
         try {
           const r = await fetch('/v1/oauth/status?user_code=' + encodeURIComponent(code));
@@ -2930,9 +2934,11 @@ app.get('/device', async (c) => {
           if (d.status === 'consumed' || d.status === 'approved') {
             clearInterval(pickupTimer);
             document.getElementById('status').innerHTML =
-              '<strong style="color:#22c55e;">✓ Approved.</strong> Return to your agent and paste this:<br><br>' +
-              '<code id="paste-msg" style="display:block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;padding:10px;font-size:12px;cursor:pointer;text-align:left;line-height:1.6;" onclick="copyMsg(this)">I approved the BOTCHA authorization. The user code was: ' + code + '</code>' +
-              '<span id="copy-hint" style="font-size:11px;color:#9ca3af;">click to copy</span>';
+              '<p style="color:#15803d;font-size:13px;font-weight:600;margin-bottom:12px;">✓ Approved — tap below to copy the confirmation for your agent:</p>' +
+              '<div id="paste-msg" data-msg="' + msg.replace(/"/g,'&quot;') + '" onclick="copyMsg(this)" role="button" style="background:#f0fdf4;border:2px solid #22c55e;border-radius:4px;padding:16px 14px;cursor:pointer;-webkit-tap-highlight-color:rgba(34,197,94,0.15);active:opacity:0.8;">' +
+                '<div style="font-size:12px;color:#374151;line-height:1.6;word-break:break-word;">' + msg + '</div>' +
+                '<div id="copy-hint" style="font-size:11px;color:#22c55e;margin-top:10px;font-weight:600;letter-spacing:0.04em;">📋 TAP TO COPY</div>' +
+              '</div>';
           }
         } catch(e) {}
       }, 2000);
