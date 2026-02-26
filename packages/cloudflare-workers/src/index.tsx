@@ -24,7 +24,7 @@ import {
   type KVNamespace,
 } from './challenges';
 import { SignJWT, jwtVerify } from 'jose';
-import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth';
+import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK, type BotchaTokenPayload } from './auth';
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
 import streamRoutes from './routes/stream';
@@ -165,13 +165,7 @@ type Bindings = {
 };
 
 type Variables = {
-  tokenPayload?: {
-    sub: string;
-    iat: number;
-    exp: number;
-    type: 'botcha-verified';
-    solveTime: number;
-  };
+  tokenPayload?: BotchaTokenPayload;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
