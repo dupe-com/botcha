@@ -32,11 +32,12 @@ export interface BotchaTokenPayload {
   iat: number // issued at
   exp: number // expires at
   jti: string // JWT ID for revocation
-  type: 'botcha-verified'
-  solveTime: number // how fast they solved it (ms)
+  type: 'botcha-verified' | 'botcha-agent-identity' | string
+  solveTime?: number // how fast they solved it (ms); optional for agent-identity tokens
   aud?: string // optional audience claim
   client_ip?: string // optional client IP binding
   app_id?: string // optional app ID (multi-tenant)
+  agent_id?: string // optional agent ID (agent-identity tokens)
 }
 
 /**
@@ -425,6 +426,7 @@ export async function verifyToken(
   options?: {
     requiredAud?: string // expected audience
     clientIp?: string // client IP to validate against
+    allowedTypes?: string[] // allowed token types (default: ['botcha-verified'])
   },
   publicKey?: {
     kty: string
@@ -456,8 +458,9 @@ export async function verifyToken(
       algorithms,
     })
 
-    // Check token type (must be access token, not refresh token)
-    if (payload.type !== 'botcha-verified') {
+    // Check token type (must be an allowed access token type)
+    const allowedTypes = options?.allowedTypes ?? ['botcha-verified']
+    if (!allowedTypes.includes(payload.type as string)) {
       return {
         valid: false,
         error: 'Invalid token type',
@@ -511,11 +514,12 @@ export async function verifyToken(
         iat: payload.iat || 0,
         exp: payload.exp || 0,
         jti: jti || '',
-        type: payload.type as 'botcha-verified',
-        solveTime: payload.solveTime as number,
+        type: payload.type as BotchaTokenPayload['type'],
+        solveTime: payload.solveTime as number | undefined,
         aud: payload.aud as string | undefined,
         client_ip: payload.client_ip as string | undefined,
         app_id: payload.app_id as string | undefined,
+        agent_id: payload.agent_id as string | undefined,
       },
     }
   } catch (error) {

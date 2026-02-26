@@ -13,7 +13,7 @@
  */
 
 import { SignJWT, jwtVerify, importJWK } from 'jose'
-import type { KVNamespace } from './auth.js'
+import type { KVNamespace, BotchaTokenPayload } from './auth.js'
 import type { ES256SigningKeyJWK } from './auth.js'
 import { getSigningPublicKeyJWK } from './auth.js'
 
@@ -238,16 +238,7 @@ function generateEATNonce(): string {
  * @returns Signed EAT JWT
  */
 export async function issueEAT(
-  botchaPayload: {
-    sub: string
-    iat: number
-    exp: number
-    jti: string
-    type: 'botcha-verified'
-    solveTime: number
-    app_id?: string
-    aud?: string
-  },
+  botchaPayload: BotchaTokenPayload,
   signingKey: ES256SigningKeyJWK,
   options?: {
     nonce?: string          // Client-provided nonce for freshness binding
@@ -284,7 +275,7 @@ export async function issueEAT(
     // BOTCHA private claims
     botcha_verified: true,
     botcha_challenge_id: botchaPayload.sub,
-    botcha_solve_time_ms: botchaPayload.solveTime,
+    botcha_solve_time_ms: botchaPayload.solveTime ?? 0,
     botcha_app_id: botchaPayload.app_id,
     botcha_verification_method: options?.verificationMethod ?? 'speed-challenge',
   }
@@ -316,16 +307,7 @@ export async function issueEAT(
  * @returns Signed OIDC-A claims JWT + plain claims object
  */
 export async function buildOIDCAgentClaims(
-  botchaPayload: {
-    sub: string
-    iat: number
-    exp: number
-    jti: string
-    type: 'botcha-verified'
-    solveTime: number
-    app_id?: string
-    aud?: string
-  },
+  botchaPayload: BotchaTokenPayload,
   eatToken: string,
   signingKey: ES256SigningKeyJWK,
   options?: {
@@ -376,7 +358,7 @@ export async function buildOIDCAgentClaims(
     // Verification metadata — reflect the actual challenge type used
     agent_verification: {
       method: `botcha-${verificationMethod}`,
-      solve_time_ms: botchaPayload.solveTime,
+      solve_time_ms: botchaPayload.solveTime ?? 0,
       verified_at: new Date(botchaPayload.iat * 1000).toISOString(),
       issuer: BOTCHA_ISSUER,
       challenge_id: botchaPayload.sub,
@@ -432,15 +414,7 @@ export async function buildOIDCAgentClaims(
  * @returns AgentGrantResult
  */
 export async function issueAgentGrant(
-  botchaPayload: {
-    sub: string
-    iat: number
-    exp: number
-    jti: string
-    type: 'botcha-verified'
-    solveTime: number
-    app_id?: string
-  },
+  botchaPayload: BotchaTokenPayload,
   eatToken: string,
   oidcClaims: OIDCAgentClaims,
   signingKey: ES256SigningKeyJWK,
