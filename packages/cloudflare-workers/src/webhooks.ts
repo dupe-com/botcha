@@ -15,6 +15,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { TAP_ALLOWED_TOKEN_TYPES } from './tap-auth-helpers.js';
 
 // ============ TYPES ============
 
@@ -399,7 +400,7 @@ async function validateAppAccess(c: Context): Promise<{
   }
 
   const publicKey = getVerificationPublicKey(c.env);
-  const result = await verifyToken(token, (c.env as any).JWT_SECRET, c.env, undefined, publicKey);
+  const result = await verifyToken(token, (c.env as any).JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey);
   if (!result.valid || !result.payload) {
     return { valid: false, error: 'INVALID_TOKEN', status: 401 };
   }

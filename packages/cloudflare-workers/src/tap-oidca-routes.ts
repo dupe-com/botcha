@@ -19,6 +19,7 @@ import {
   type ES256SigningKeyJWK,
   type BotchaTokenPayload,
 } from './auth.js'
+import { TAP_ALLOWED_TOKEN_TYPES } from './tap-auth-helpers.js'
 import {
   issueEAT,
   buildOIDCAgentClaims,
@@ -70,7 +71,7 @@ async function verifyBotchaToken(
   }
 
   const publicKey = getPublicKeyFromEnv(c.env)
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey)
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey)
 
   if (!result.valid || !result.payload) {
     return {
@@ -667,7 +668,7 @@ export async function oidcUserInfoRoute(c: Context) {
 
     // Try as BOTCHA access token first
     const publicKey = getPublicKeyFromEnv(c.env)
-    const botchaResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey)
+    const botchaResult = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey)
 
     if (botchaResult.valid && botchaResult.payload) {
       const payload = botchaResult.payload

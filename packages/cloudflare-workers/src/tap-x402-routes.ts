@@ -13,6 +13,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { TAP_ALLOWED_TOKEN_TYPES } from './tap-auth-helpers.js';
 
 function getVerificationPublicKey(env: any) {
   const rawSigningKey = env?.JWT_SIGNING_KEY;
@@ -108,7 +109,7 @@ export async function verifyPaymentRoute(c: Context): Promise<Response> {
       }, 401);
     }
     const publicKey = getVerificationPublicKey(c.env);
-    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey);
     if (!tokenResult.valid) {
       return c.json({
         verified: false,
@@ -377,7 +378,7 @@ export async function agentOnlyX402Route(c: Context): Promise<Response> {
   }
 
   const publicKey = getPublicKey(c.env);
-  const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+  const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey);
 
   if (!tokenResult.valid) {
     return c.json({

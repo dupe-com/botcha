@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "@dupecom/botcha",
@@ -39,7 +40,7 @@
     },
     "packages/cloudflare-workers": {
       "name": "@dupecom/botcha-cloudflare",
-      "version": "0.21.0",
+      "version": "0.23.0",
       "dependencies": {
         "@noble/curves": "^1.9.7",
         "@noble/hashes": "^1.8.0",

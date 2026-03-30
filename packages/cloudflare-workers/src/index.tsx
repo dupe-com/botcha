@@ -303,14 +303,18 @@ async function requireAppId(c: Context<{ Bindings: Bindings; Variables: Variable
     }
   }
 
-  // Try JWT claim if Bearer token present
+  // Try JWT claim if Bearer token present.
+  // Accepts both botcha-verified (fresh challenge) and botcha-agent-identity
+  // (OAuth re-identification) tokens so agents can omit X-App-ID.
   let jwtAppId: string | undefined;
   const authHeader = c.req.header('authorization');
   const token = extractBearerToken(authHeader);
   if (token) {
     try {
       const publicKey = getPublicKey(c.env);
-      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+      const result = await verifyToken(token, c.env.JWT_SECRET, c.env, {
+        allowedTypes: ['botcha-verified', 'botcha-agent-identity'],
+      }, publicKey);
       if (result.valid && result.payload?.app_id) {
         jwtAppId = result.payload.app_id;
       }

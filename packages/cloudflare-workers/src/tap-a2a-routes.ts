@@ -10,8 +10,8 @@
  */
 
 import type { Context } from 'hono';
-import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
 import type { KVNamespace as SessionsKV } from './agents.js';
+import { validateTAPAppAccess } from './tap-auth-helpers.js';
 import {
   getBotchaAgentCard,
   attestCard,
@@ -20,53 +20,6 @@ import {
   listVerifiedCards,
   type A2AAgentCard,
 } from './tap-a2a.js';
-
-// ============ HELPERS ============
-
-function getVerificationPublicKey(env: any) {
-  const rawSigningKey = env?.JWT_SIGNING_KEY;
-  if (!rawSigningKey) return undefined;
-  try {
-    const signingKey = JSON.parse(rawSigningKey) as ES256SigningKeyJWK;
-    return getSigningPublicKeyJWK(signingKey);
-  } catch {
-    console.error('Failed to parse JWT_SIGNING_KEY for A2A route verification');
-    return undefined;
-  }
-}
-
-async function validateAppAccess(c: Context, requireAuth: boolean = true): Promise<{
-  valid: boolean;
-  appId?: string;
-  error?: string;
-  status?: number;
-}> {
-  const queryAppId = c.req.query('app_id');
-  const authHeader = c.req.header('authorization');
-  const token = extractBearerToken(authHeader);
-
-  if (!token) {
-    if (!requireAuth) return { valid: true, appId: queryAppId };
-    return { valid: false, error: 'UNAUTHORIZED', status: 401 };
-  }
-
-  const publicKey = getVerificationPublicKey(c.env);
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
-  if (!result.valid || !result.payload) {
-    return { valid: false, error: 'INVALID_TOKEN', status: 401 };
-  }
-
-  const jwtAppId = (result.payload as any).app_id as string | undefined;
-  if (!jwtAppId) {
-    return { valid: false, error: 'MISSING_APP_ID', status: 403 };
-  }
-
-  if (queryAppId && queryAppId !== jwtAppId) {
-    return { valid: false, error: 'APP_ID_MISMATCH', status: 403 };
-  }
-
-  return { valid: true, appId: jwtAppId };
-}
 
 // ============ ROUTE HANDLERS ============
 
@@ -104,7 +57,7 @@ export async function agentCardRoute(c: Context) {
  */
 export async function attestCardRoute(c: Context) {
   try {
-    const appAccess = await validateAppAccess(c, true);
+    const appAccess = await validateTAPAppAccess(c, true);
     if (!appAccess.valid) {
       return c.json({
         success: false,

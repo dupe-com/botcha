@@ -19,6 +19,7 @@ import {
   getSigningPublicKeyJWK,
   type ES256SigningKeyJWK,
 } from './auth.js';
+import { TAP_ALLOWED_TOKEN_TYPES } from './tap-auth-helpers.js';
 import {
   generateBotchaDIDDocument,
   resolveDIDWeb,
@@ -114,7 +115,7 @@ export async function issueVCRoute(c: Context) {
     }
 
     const publicKey = getPublicKeyJwk(c.env);
-    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey);
 
     if (!tokenResult.valid || !tokenResult.payload) {
       return c.json({

@@ -18,6 +18,7 @@
 
 import type { Context } from 'hono';
 import { extractBearerToken, verifyToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK } from './auth.js';
+import { validateTAPAppAccess, TAP_ALLOWED_TOKEN_TYPES } from './tap-auth-helpers.js';
 import {
   parseANSName,
   resolveANSName,
@@ -54,7 +55,8 @@ async function getOptionalAppId(c: Context): Promise<string | undefined> {
   if (!token) return undefined;
 
   const publicKey = getVerificationPublicKey(c.env);
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+  // Accept both challenge-verified and agent-identity tokens
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey);
   if (result.valid && result.payload?.app_id) {
     return result.payload.app_id;
   }
@@ -282,7 +284,8 @@ export async function verifyANSNameRoute(c: Context) {
     }
 
     const publicKey = getVerificationPublicKey(c.env);
-    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    // Accept both challenge-verified and agent-identity tokens
+    const tokenResult = await verifyToken(token, c.env.JWT_SECRET, c.env, { allowedTypes: TAP_ALLOWED_TOKEN_TYPES }, publicKey);
     if (!tokenResult.valid) {
       return c.json({
         success: false,
