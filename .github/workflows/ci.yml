@@ -41,6 +41,9 @@ jobs:
           cd packages/cloudflare-workers
           bun run build
 
+      - name: Verify CJS output
+        run: node scripts/verify-cjs.cjs
+
       - name: Run TypeScript tests
         run: bun run test
 
