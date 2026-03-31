@@ -36,6 +36,9 @@ jobs:
       - name: Run type check
         run: bun run build
 
+      - name: CJS smoke test
+        run: node scripts/cjs-smoke.cjs
+
       - name: Run Cloudflare Workers build
         run: |
           cd packages/cloudflare-workers

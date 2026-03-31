@@ -7,6 +7,7 @@ export default defineConfig({
     'middleware/hono': 'src/middleware/hono.ts',
   },
   format: ['esm', 'cjs'],
+  noExternal: ['jose'],
   dts: true,
   splitting: false,
   clean: true,
