@@ -13,6 +13,29 @@ Format: [Semantic Versioning](https://semver.org/). Newest entries first.
 In active review on `epic/oidc-a-attestation`. Current open issues are tracked in [BUGS.md](./BUGS.md).
 Roadmap status and scope are tracked in [ROADMAP.md](./ROADMAP.md).
 
+### CJS Support (PR #37)
+
+`@dupecom/botcha`, `@dupecom/botcha-verify`, and `@dupecom/botcha-langchain` now ship both ESM and CommonJS builds. CJS consumers can `require()` these packages without any bundler workarounds.
+
+**Build tooling**
+- Replaced `tsc` with `tsup` in all three packages — outputs `.js` (ESM) and `.cjs` (CJS) alongside `.d.ts` and `.d.cts` declaration files
+
+**Package exports updated**
+- Each export subpath now includes a `"require"` condition (`.cjs`) alongside the existing `"import"` condition
+- `"main"` points to the `.cjs` entry for legacy CJS tooling
+- `"module"` field added pointing to the `.js` ESM entry (bundler hint)
+- `"types"` condition moved to first position per TypeScript recommendation
+
+```js
+// CJS — now works
+const { BotchaClient } = require('@dupecom/botcha/client');
+const { verifyBotchaToken } = require('@dupecom/botcha-verify');
+const { BotchaTool } = require('@dupecom/botcha-langchain');
+
+// ESM — unchanged
+import { BotchaClient } from '@dupecom/botcha/client';
+```
+
 ---
 
 ## [0.23.0] — 2026-02-23

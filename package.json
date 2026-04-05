@@ -5,21 +5,25 @@
   "workspaces": [
     "packages/*"
   ],
-  "main": "dist/lib/index.js",
+  "main": "dist/lib/index.cjs",
+  "module": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
+      "types": "./dist/lib/index.d.ts",
       "import": "./dist/lib/index.js",
-      "types": "./dist/lib/index.d.ts"
+      "require": "./dist/lib/index.cjs"
     },
     "./client": {
+      "types": "./dist/lib/client/index.d.ts",
       "import": "./dist/lib/client/index.js",
-      "types": "./dist/lib/client/index.d.ts"
+      "require": "./dist/lib/client/index.cjs"
     },
     "./middleware": {
+      "types": "./dist/src/middleware/tap-enhanced-verify.d.ts",
       "import": "./dist/src/middleware/tap-enhanced-verify.js",
-      "types": "./dist/src/middleware/tap-enhanced-verify.d.ts"
+      "require": "./dist/src/middleware/tap-enhanced-verify.cjs"
     }
   },
   "files": [
@@ -29,7 +33,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "dev": "cd packages/cloudflare-workers && bun run dev",
     "prepublishOnly": "bun run build",
     "test": "vitest",
@@ -79,6 +83,7 @@
     "@vitest/ui": "^4.0.18",
     "express": "^4.18.2",
     "happy-dom": "^20.4.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^4.0.18"
