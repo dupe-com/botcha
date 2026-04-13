@@ -84,7 +84,7 @@ curl https://botcha.ai/agent-only -H "Authorization: Bearer <token>"
 | Method | Path | Description |
 |--------|------|-------------|
 | \`POST\` | \`/v1/agents/register\` | Register agent identity (name, operator, version) |
-| \`GET\` | \`/v1/agents/:id\` | Get agent by ID (public, no auth) |
+| \`GET\` | \`/v1/agents/:id\` | Get agent by ID (public, no auth); use \`me\` with Bearer token to resolve current agent |
 | \`GET\` | \`/v1/agents\` | List all agents for your app (auth required) |
 
 ### Webhooks (v0.22.0)
@@ -244,7 +244,7 @@ curl https://botcha.ai/agent-only/x402 \
 
 | Method | Path | Description |
 |--------|------|-------------|
-| \`GET\` | \`/v1/reputation/:agent_id\` | Get agent reputation score |
+| \`GET\` | \`/v1/reputation/:agent_id\` | Get agent reputation score (alias: \`GET /v1/agents/:id/reputation\`) |
 | \`POST\` | \`/v1/reputation/events\` | Record a reputation event |
 | \`GET\` | \`/v1/reputation/:agent_id/events\` | List reputation events |
 | \`POST\` | \`/v1/reputation/:agent_id/reset\` | Reset reputation (admin) |
@@ -532,7 +532,7 @@ Endpoint: POST https://botcha.ai/gate - Submit code form, redirects to /go/:code
 
 # Agent Registry Endpoints (app_id required)
 Endpoint: POST https://botcha.ai/v1/agents/register - Register agent identity — requires app_id
-Endpoint: GET https://botcha.ai/v1/agents/:id - Get agent by ID (public, no auth) — requires app_id
+Endpoint: GET https://botcha.ai/v1/agents/:id - Get agent by ID (public, no auth) — requires app_id; use "me" as the ID with a Bearer token to fetch the currently authenticated agent
 Endpoint: GET https://botcha.ai/v1/agents - List all agents for authenticated app — requires app_id
 Endpoint: DELETE https://botcha.ai/v1/agents/:id - Delete agent — requires dashboard session
 
@@ -599,6 +599,8 @@ Endpoint: POST https://botcha.ai/v1/verify/attestation - Verify attestation toke
 # Agent Reputation Scoring (v0.18.0) (app_id required)
 Endpoint: GET https://botcha.ai/v1/reputation/:agent_id - Get agent reputation score (0-1000, 5 tiers) — requires app_id
 Endpoint: POST https://botcha.ai/v1/reputation/events - Record a reputation event (18 action types, 6 categories) — requires app_id
+Reputation-Event-Categories: verification: challenge_solved|challenge_failed|auth_success|auth_failure; attestation: attestation_issued|attestation_verified|attestation_revoked; delegation: delegation_granted|delegation_received|delegation_revoked; session: session_created|session_expired|session_terminated; violation: rate_limit_exceeded|invalid_token|abuse_detected; endorsement: endorsement_received|endorsement_given
+Reputation-Alias: GET /v1/agents/:id/reputation is an alias for GET /v1/reputation/:agent_id
 Endpoint: GET https://botcha.ai/v1/reputation/:agent_id/events - List reputation events (?category=&limit=) — requires app_id
 Endpoint: POST https://botcha.ai/v1/reputation/:agent_id/reset - Reset reputation to default (admin action) — requires app_id
 
@@ -750,8 +752,8 @@ TAP-Register: POST /v1/agents/register/tap with {name, public_key, signature_alg
 TAP-Algorithms: ed25519 (Visa recommended), ecdsa-p256-sha256, rsa-pss-sha256
 TAP-Trust-Levels: basic, verified, enterprise
 TAP-Capabilities: Array of {action, resource, constraints} — scoped access control
-TAP-Session-Create: POST /v1/sessions/tap with {agent_id, user_context, intent}
-TAP-Session-Get: GET /v1/sessions/:id/tap — includes time_remaining
+TAP-Session-Create: POST /v1/sessions/tap with {agent_id, user_context, intent, ttl_seconds?} — ttl_seconds must be a positive integer (max 86400); defaults to 3600 if omitted
+TAP-Session-Get: GET /v1/sessions/:id/tap — includes time_remaining_seconds (integer, seconds until expiry)
 TAP-Get-Agent: GET /v1/agents/:id/tap — includes public_key for verification
 TAP-List-Agents: GET /v1/agents/tap?app_id=...&tap_only=true
 TAP-Middleware-Modes: tap, signature-only, challenge-only, flexible
@@ -1656,7 +1658,7 @@ export function getOpenApiSpec(version: string) {
       "/v1/agents/{id}": {
         get: {
           summary: "Get agent by ID",
-          description: "Retrieve agent information by agent ID. Public endpoint, no authentication required.",
+          description: "Retrieve agent information by agent ID. Public endpoint, no authentication required. Use \"me\" as the id with a Bearer token (Authorization: Bearer <access_token>) to retrieve the currently authenticated agent without knowing your own agent_id.",
           operationId: "getAgent",
           parameters: [
             {
@@ -1664,7 +1666,7 @@ export function getOpenApiSpec(version: string) {
               in: "path",
               required: true,
               schema: { type: "string" },
-              description: "The agent_id to retrieve (e.g., 'agent_abc123')"
+              description: "The agent_id to retrieve (e.g., 'agent_abc123'), or the special value 'me' to resolve from the Bearer token"
             }
           ],
           responses: {
@@ -1676,6 +1678,7 @@ export function getOpenApiSpec(version: string) {
                 }
               }
             },
+            "401": { description: "Unauthorized — only returned when using 'me' without a valid Bearer token" },
             "404": { description: "Agent not found" }
           }
         }
@@ -2265,13 +2268,15 @@ export function getOpenApiSpec(version: string) {
                     "user_context": { type: "string", description: "User context identifier" },
                     "intent": {
                       type: "object",
+                      required: ["action"],
                       properties: {
-                        "action": { type: "string", description: "Intended action (e.g., read, write)" },
+                        "action": { type: "string", enum: ["browse", "compare", "purchase", "audit", "search"], description: "Intended action" },
                         "resource": { type: "string", description: "Target resource path" },
-                        "purpose": { type: "string", description: "Human-readable purpose" }
+                        "scope": { type: "array", items: { type: "string" }, description: "Optional scope constraints" }
                       },
                       description: "Declared intent for the session"
-                    }
+                    },
+                    "ttl_seconds": { type: "integer", minimum: 1, maximum: 86400, description: "Session TTL in seconds (default: 3600, max: 86400). Must be a positive integer." }
                   }
                 }
               }
@@ -2279,8 +2284,8 @@ export function getOpenApiSpec(version: string) {
           },
           responses: {
             "201": { description: "TAP session created with capabilities and expiry" },
-            "400": { description: "Missing required fields or invalid intent" },
-            "403": { description: "Agent lacks required capability for declared intent" },
+            "400": { description: "Missing required fields, invalid intent, or invalid ttl_seconds" },
+            "403": { description: "Agent lacks required capability for declared intent or TAP not enabled" },
             "404": { description: "Agent not found" }
           }
         }
@@ -2810,7 +2815,7 @@ export function getOpenApiSpec(version: string) {
                   properties: {
                     "agent_id": { type: "string", description: "Agent to record event for" },
                     "category": { type: "string", enum: ["verification", "attestation", "delegation", "session", "violation", "endorsement"], description: "Event category" },
-                    "action": { type: "string", description: "Event action (e.g. challenge_solved, abuse_detected)" },
+                    "action": { type: "string", enum: ["challenge_solved", "challenge_failed", "auth_success", "auth_failure", "attestation_issued", "attestation_verified", "attestation_revoked", "delegation_granted", "delegation_received", "delegation_revoked", "session_created", "session_expired", "session_terminated", "rate_limit_exceeded", "invalid_token", "abuse_detected", "endorsement_received", "endorsement_given"], description: "Event action — must match the selected category. verification: challenge_solved|challenge_failed|auth_success|auth_failure; attestation: attestation_issued|attestation_verified|attestation_revoked; delegation: delegation_granted|delegation_received|delegation_revoked; session: session_created|session_expired|session_terminated; violation: rate_limit_exceeded|invalid_token|abuse_detected; endorsement: endorsement_received|endorsement_given" },
                     "source_agent_id": { type: "string", description: "Source agent for endorsements" },
                     "metadata": { type: "object", additionalProperties: { type: "string" }, description: "Optional key/value metadata" }
                   }

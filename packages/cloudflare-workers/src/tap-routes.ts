@@ -481,7 +481,33 @@ export async function createTAPSessionRoute(c: Context) {
         message: capabilityCheck.error
       }, 403);
     }
-    
+
+    // Validate and apply ttl_seconds if provided.
+    // The default (3600s) and max (86400s) are enforced in createTAPSession;
+    // we reject nonsensical values here so callers get a clear error rather
+    // than silent truncation or a session that looks like it succeeded but
+    // has a different TTL than requested.
+    const MAX_TTL = 86400; // 24 hours
+    if (body.ttl_seconds !== undefined) {
+      const ttl = body.ttl_seconds;
+      if (typeof ttl !== 'number' || !Number.isFinite(ttl) || !Number.isInteger(ttl) || ttl <= 0) {
+        return c.json({
+          success: false,
+          error: 'INVALID_TTL',
+          message: 'ttl_seconds must be a positive integer (max 86400)',
+        }, 400);
+      }
+      if (ttl > MAX_TTL) {
+        return c.json({
+          success: false,
+          error: 'INVALID_TTL',
+          message: `ttl_seconds must not exceed ${MAX_TTL} (24 hours)`,
+        }, 400);
+      }
+      // Wire the caller's TTL into the intent so createTAPSession picks it up.
+      intentResult.intent!.duration = ttl;
+    }
+
     // Create session
     const sessionResult = await createTAPSession(
       c.env.SESSIONS,
@@ -574,7 +600,8 @@ export async function getTAPSessionRoute(c: Context) {
       intent: session.intent,
       created_at: new Date(session.created_at).toISOString(),
       expires_at: new Date(session.expires_at).toISOString(),
-      time_remaining: Math.max(0, session.expires_at - Date.now())
+      // time_remaining_seconds: seconds until expiry (use expires_at for authoritative value)
+      time_remaining_seconds: Math.max(0, Math.floor((session.expires_at - Date.now()) / 1000)),
     });
     
   } catch (error) {
