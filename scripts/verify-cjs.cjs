@@ -64,4 +64,5 @@ if (failed > 0) {
   process.exit(1);
 } else {
   console.log('\nAll CJS checks passed ✓\n');
+  process.exit(0);
 }
