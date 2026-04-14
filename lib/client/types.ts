@@ -229,7 +229,7 @@ export interface TAPSessionResponse {
   intent: TAPIntent;
   created_at?: string;
   expires_at: string;
-  time_remaining?: number;
+  time_remaining_seconds?: number;
 }
 
 // ============ JWK / JWKS Types ============
@@ -381,7 +381,7 @@ export interface DelegationResponse {
   revoked_at?: string | null;
   revocation_reason?: string | null;
   metadata?: Record<string, string> | null;
-  time_remaining?: number;
+  time_remaining_seconds?: number;
 }
 
 export interface DelegationListResponse {
@@ -465,7 +465,7 @@ export interface AttestationResponse {
   revoked?: boolean;
   revoked_at?: string | null;
   revocation_reason?: string | null;
-  time_remaining?: number;
+  time_remaining_seconds?: number;
 }
 
 export interface AttestationListResponse {

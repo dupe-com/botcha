@@ -15,6 +15,49 @@ Roadmap status and scope are tracked in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [0.24.0] — 2026-04-14
+
+### CJS (CommonJS) Support (PR #40, closes #37)
+
+`@dupecom/botcha` now ships both ESM and CommonJS builds. CJS consumers can `require()` the package without bundler workarounds.
+
+```js
+// CJS — now works
+const { botcha, verify, solve } = require('@dupecom/botcha');
+const { BotchaClient } = require('@dupecom/botcha/client');
+const { createTAPVerifyMiddleware } = require('@dupecom/botcha/middleware');
+
+// ESM — unchanged
+import { botcha, verify, solve } from '@dupecom/botcha';
+```
+
+- Dual build via `tsconfig.cjs.json` — outputs to `dist/cjs/` with `{type: "commonjs"}` marker
+- `exports` map updated with `require` conditions; `types` moved first per bundler spec
+- CI verification step (`scripts/verify-cjs.cjs`) ensures CJS output stays valid
+
+### TAP UX Improvements (PR #41)
+
+Five fixes found during agent walkthrough testing:
+
+- **`GET /v1/agents/me`** — resolve current agent from Bearer token (was 404)
+- **`ttl_seconds` validation** — `POST /v1/sessions/tap` now rejects negative, zero, non-integer, or >86400 values with `400 INVALID_TTL` (was silently ignored)
+- **`time_remaining` → `time_remaining_seconds`** — renamed and converted from ms to integer seconds in TAP session, delegation, and attestation responses (**breaking**)
+- **`ACTION_CATEGORY_MISMATCH`** — error response now includes `valid_actions` array
+- **`GET /v1/agents/:id/reputation`** — alias for `GET /v1/reputation/:agent_id`
+
+### Auth Fixes (PRs #36, #38)
+
+- Agent-identity tokens now accepted in app-gate middleware and all TAP routes (PR #38)
+- `verifyToken` gains `allowedTypes` option for granular token type acceptance (PR #36)
+
+### OAuth Device Flow Fixes (PR #35)
+
+- Auto-fill and auto-submit via `verification_uri_complete`
+- Countdown timer only starts after successful code lookup
+- Buttons hide after action; copy confirmation is a prominent tap target
+
+---
+
 ## [0.23.0] — 2026-02-23
 
 ### Agent Re-identification (PR #32)

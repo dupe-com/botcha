@@ -56,6 +56,16 @@ Use cases:
 npm install @dupecom/botcha
 ```
 
+Works with both ESM (`import`) and CommonJS (`require`):
+
+```js
+// ESM
+import { BotchaClient } from '@dupecom/botcha/client';
+
+// CJS
+const { BotchaClient } = require('@dupecom/botcha/client');
+```
+
 ### Python
 
 ```bash

@@ -927,7 +927,7 @@ export class BotchaClient {
    * Get a TAP session by ID.
    *
    * @param sessionId - The session ID to retrieve
-   * @returns TAP session details including time_remaining
+   * @returns TAP session details including time_remaining_seconds
    * @throws Error if session not found or expired
    */
   async getTAPSession(sessionId: string): Promise<TAPSessionResponse> {

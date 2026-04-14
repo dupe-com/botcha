@@ -1326,7 +1326,7 @@ describe('BotchaClient', () => {
           success: true,
           delegation_id: 'del_abc123',
           revoked: false,
-          time_remaining: 3000000,
+          time_remaining_seconds: 3000,
         }),
       });
 
@@ -1577,7 +1577,7 @@ describe('BotchaClient', () => {
           attestation_id: 'att_abc123',
           can: ['read:invoices'],
           revoked: false,
-          time_remaining: 3000000,
+          time_remaining_seconds: 3000,
         }),
       });
 

@@ -12,7 +12,7 @@ routes = [
 
 # Environment variables
 [vars]
-BOTCHA_VERSION = "0.23.0"
+BOTCHA_VERSION = "0.24.0"
 BOTCHA_INTERNAL_APP_ID = "app_18c27735e31b61f5"
 BOTCHA_BASE_URL = "https://botcha.ai"
 # JWT_SECRET is stored securely via: wrangler secret put JWT_SECRET

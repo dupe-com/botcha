@@ -6,7 +6,7 @@
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.21.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export) |
+| [`@dupecom/botcha`](https://www.npmjs.com/package/@dupecom/botcha) | 0.24.0 | Core SDK with client (`/client` export) + middleware (`/middleware` export). ESM + CJS. |
 | [`@dupecom/botcha-langchain`](https://www.npmjs.com/package/@dupecom/botcha-langchain) | 0.1.1 | LangChain Tool integration |
 | [`botcha`](https://pypi.org/project/botcha/) (Python) | 0.21.0 | Python SDK on PyPI |
 | [`@dupecom/botcha-verify`](../packages/verify/) | 0.2.0 | Server-side verification (Express/Hono middleware) |
