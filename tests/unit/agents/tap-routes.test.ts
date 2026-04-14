@@ -936,6 +936,160 @@ describe('TAP Routes - createTAPSessionRoute', () => {
     expect(updatedAgent.last_verified_at).toBeDefined();
     expect(updatedAgent.last_verified_at).toBeGreaterThanOrEqual(beforeMs);
   });
+
+  // --- ttl_seconds validation ---
+
+  const tapEnabledAgent: TAPAgent = {
+    agent_id: TEST_AGENT_ID,
+    app_id: TEST_APP_ID,
+    name: 'TTLAgent',
+    created_at: Date.now(),
+    tap_enabled: true,
+    capabilities: [{ action: 'browse' }],
+  };
+
+  test('should accept valid ttl_seconds and honour it in the response', async () => {
+    const agentsKV = new MockKV();
+    const sessionsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, tapEnabledAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      sessionsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'ctx',
+        intent: { action: 'browse' },
+        ttl_seconds: 600,
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    // expires_at should be ~600s from now (allow ±5s slop)
+    const expiresAt = new Date(data.expires_at).getTime();
+    const expectedMs = Date.now() + 600 * 1000;
+    expect(Math.abs(expiresAt - expectedMs)).toBeLessThan(5000);
+  });
+
+  test('should reject negative ttl_seconds with INVALID_TTL', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, tapEnabledAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'ctx',
+        intent: { action: 'browse' },
+        ttl_seconds: -300,
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('INVALID_TTL');
+  });
+
+  test('should reject zero ttl_seconds with INVALID_TTL', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, tapEnabledAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'ctx',
+        intent: { action: 'browse' },
+        ttl_seconds: 0,
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('INVALID_TTL');
+  });
+
+  test('should reject ttl_seconds exceeding 86400 with INVALID_TTL', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, tapEnabledAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'ctx',
+        intent: { action: 'browse' },
+        ttl_seconds: 999999,
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('INVALID_TTL');
+    expect(data.message).toContain('86400');
+  });
+
+  test('should reject non-integer ttl_seconds with INVALID_TTL', async () => {
+    const agentsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, tapEnabledAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'ctx',
+        intent: { action: 'browse' },
+        ttl_seconds: 3600.5,
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('INVALID_TTL');
+  });
+
+  test('should use default TTL when ttl_seconds is omitted', async () => {
+    const agentsKV = new MockKV();
+    const sessionsKV = new MockKV();
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, tapEnabledAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      sessionsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'ctx',
+        intent: { action: 'browse' },
+        // no ttl_seconds
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+    // Default TTL is 3600s — expires_at should be ~1 hour from now
+    const expiresAt = new Date(data.expires_at).getTime();
+    const expectedMs = Date.now() + 3600 * 1000;
+    expect(Math.abs(expiresAt - expectedMs)).toBeLessThan(5000);
+  });
 });
 
 describe('TAP Routes - getTAPSessionRoute', () => {
@@ -973,7 +1127,8 @@ describe('TAP Routes - getTAPSessionRoute', () => {
     expect(data.app_id).toBe(TEST_APP_ID);
     expect(data.capabilities).toHaveLength(1);
     expect(data.intent.action).toBe('browse');
-    expect(data.time_remaining).toBeGreaterThan(0);
+    expect(data.time_remaining_seconds).toBeGreaterThan(0);
+    expect(data.time_remaining).toBeUndefined(); // old ms field removed
   });
 
   test('should return 404 when session not found', async () => {

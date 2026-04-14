@@ -21,6 +21,7 @@ import {
   isValidCategory,
   isValidAction,
   isValidCategoryAction,
+  CATEGORY_ACTIONS,
   type RecordEventOptions,
   type ReputationEventCategory,
   type ReputationEventAction,
@@ -161,10 +162,12 @@ export async function recordReputationEventRoute(c: Context) {
     }
 
     if (!isValidCategoryAction(body.category, body.action)) {
+      const validActionsForCategory = CATEGORY_ACTIONS[body.category as ReputationEventCategory] ?? [];
       return c.json({
         success: false,
         error: 'ACTION_CATEGORY_MISMATCH',
-        message: `Action "${body.action}" does not belong to category "${body.category}"`
+        message: `Action "${body.action}" does not belong to category "${body.category}". Valid actions for "${body.category}": ${validActionsForCategory.join(', ')}`,
+        valid_actions: validActionsForCategory,
       }, 400);
     }
 

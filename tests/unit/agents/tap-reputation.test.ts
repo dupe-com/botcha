@@ -9,6 +9,7 @@ import {
   isValidCategoryAction,
   isValidCategory,
   isValidAction,
+  CATEGORY_ACTIONS,
   type RecordEventOptions,
   type ReputationScore,
   type ReputationEventCategory,
@@ -244,6 +245,44 @@ describe('TAP Agent Reputation Scoring', () => {
       expect(isValidCategoryAction('verification', 'attestation_issued')).toBe(false);
       expect(isValidCategoryAction('endorsement', 'challenge_solved')).toBe(false);
       expect(isValidCategoryAction('delegation', 'abuse_detected')).toBe(false);
+    });
+  });
+
+  // ============ CATEGORY_ACTIONS export ============
+
+  describe('CATEGORY_ACTIONS', () => {
+    test('is exported and covers all 6 categories', () => {
+      const categories = Object.keys(CATEGORY_ACTIONS);
+      expect(categories).toContain('verification');
+      expect(categories).toContain('attestation');
+      expect(categories).toContain('delegation');
+      expect(categories).toContain('session');
+      expect(categories).toContain('violation');
+      expect(categories).toContain('endorsement');
+      expect(categories).toHaveLength(6);
+    });
+
+    test('each category has at least one action', () => {
+      for (const [category, actions] of Object.entries(CATEGORY_ACTIONS)) {
+        expect(actions.length).toBeGreaterThan(0);
+        for (const action of actions) {
+          expect(typeof action).toBe('string');
+          expect(action.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    test('all listed actions pass isValidCategoryAction', () => {
+      for (const [category, actions] of Object.entries(CATEGORY_ACTIONS)) {
+        for (const action of actions) {
+          expect(isValidCategoryAction(category as ReputationEventCategory, action as ReputationEventAction)).toBe(true);
+        }
+      }
+    });
+
+    test('totals 18 actions across all categories', () => {
+      const total = Object.values(CATEGORY_ACTIONS).reduce((sum, actions) => sum + actions.length, 0);
+      expect(total).toBe(18);
     });
   });
 

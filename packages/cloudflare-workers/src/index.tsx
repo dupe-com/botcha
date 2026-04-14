@@ -2489,6 +2489,10 @@ app.post('/v1/agents/register/tap', registerTAPAgentRoute);
 app.get('/v1/agents/tap', listTAPAgentsRoute);
 app.get('/v1/agents/:id/tap', getTAPAgentRoute);
 
+// Convenience alias — GET /v1/agents/:id/reputation → GET /v1/reputation/:agent_id
+// Must be registered before the generic /v1/agents/:id handler (Hono first-match routing).
+app.get('/v1/agents/:id/reputation', getReputationRoute);
+
 // Agent identity auth — prove you are a specific registered agent
 app.post('/v1/agents/auth', handleAgentAuthChallenge);
 app.post('/v1/agents/auth/verify', handleAgentAuthVerify);
@@ -2720,11 +2724,11 @@ app.post('/v1/agents/register', async (c) => {
   }
 });
 
-// Get agent by ID
+// Get agent by ID — supports "me" as a shorthand for the authenticated agent
 app.get('/v1/agents/:id', async (c) => {
   try {
-    const agent_id = c.req.param('id');
-    
+    let agent_id = c.req.param('id');
+
     if (!agent_id) {
       return c.json({
         success: false,
@@ -2732,9 +2736,32 @@ app.get('/v1/agents/:id', async (c) => {
         message: 'Agent ID is required',
       }, 400);
     }
-    
+
+    // Support "me" as a shorthand for the currently authenticated agent
+    if (agent_id === 'me') {
+      const authHeader = c.req.header('authorization');
+      const bearerToken = extractBearerToken(authHeader);
+      if (!bearerToken) {
+        return c.json({
+          success: false,
+          error: 'UNAUTHORIZED',
+          message: 'Authorization: Bearer <token> is required to use /v1/agents/me',
+        }, 401);
+      }
+      const publicKey = getPublicKey(c.env);
+      const verification = await verifyToken(bearerToken, c.env.JWT_SECRET, c.env, undefined, publicKey);
+      if (!verification.valid || !verification.payload?.agent_id) {
+        return c.json({
+          success: false,
+          error: 'UNAUTHORIZED',
+          message: 'Invalid or expired token — must be an agent-identity token to use /v1/agents/me',
+        }, 401);
+      }
+      agent_id = verification.payload.agent_id;
+    }
+
     const agent = await getAgent(c.env.AGENTS, agent_id);
-    
+
     if (!agent) {
       return c.json({
         success: false,
@@ -2742,7 +2769,7 @@ app.get('/v1/agents/:id', async (c) => {
         message: `No agent found with ID: ${agent_id}`,
       }, 404);
     }
-    
+
     return c.json({
       success: true,
       agent_id: agent.agent_id,

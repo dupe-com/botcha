@@ -459,7 +459,7 @@ export async function resetReputation(
 
 // ============ VALIDATION ============
 
-const CATEGORY_ACTIONS: Record<ReputationEventCategory, ReputationEventAction[]> = {
+export const CATEGORY_ACTIONS: Record<ReputationEventCategory, ReputationEventAction[]> = {
   verification: ['challenge_solved', 'challenge_failed', 'auth_success', 'auth_failure'],
   attestation: ['attestation_issued', 'attestation_verified', 'attestation_revoked'],
   delegation: ['delegation_granted', 'delegation_received', 'delegation_revoked'],
