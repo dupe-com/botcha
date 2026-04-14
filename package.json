@@ -5,31 +5,36 @@
   "workspaces": [
     "packages/*"
   ],
-  "main": "dist/lib/index.js",
+  "main": "dist/cjs/lib/index.js",
   "types": "dist/lib/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/lib/index.js",
-      "types": "./dist/lib/index.d.ts"
+      "types": "./dist/lib/index.d.ts",
+      "require": "./dist/cjs/lib/index.js",
+      "import": "./dist/lib/index.js"
     },
     "./client": {
-      "import": "./dist/lib/client/index.js",
-      "types": "./dist/lib/client/index.d.ts"
+      "types": "./dist/lib/client/index.d.ts",
+      "require": "./dist/cjs/lib/client/index.js",
+      "import": "./dist/lib/client/index.js"
     },
     "./middleware": {
-      "import": "./dist/src/middleware/tap-enhanced-verify.js",
-      "types": "./dist/src/middleware/tap-enhanced-verify.d.ts"
+      "types": "./dist/src/middleware/tap-enhanced-verify.d.ts",
+      "require": "./dist/cjs/src/middleware/tap-enhanced-verify.js",
+      "import": "./dist/src/middleware/tap-enhanced-verify.js"
     }
   },
   "files": [
     "dist/lib",
+    "dist/cjs",
     "dist/src",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({type:'commonjs'},null,2))\"",
+    "test:cjs": "node scripts/verify-cjs.cjs",
     "dev": "cd packages/cloudflare-workers && bun run dev",
     "prepublishOnly": "bun run build",
     "test": "vitest",
