@@ -61,13 +61,19 @@ export async function createDelegationRoute(c: Context) {
       }, 400);
     }
 
+    // Normalize: accept plain strings like ["browse", "search"] as well as objects [{action:"browse"}]
+    const normalizedCapabilities = body.capabilities.map((cap: any) =>
+      typeof cap === 'string' ? { action: cap } : cap
+    );
+
     // Validate capability actions
-    for (const cap of body.capabilities) {
+    for (const cap of normalizedCapabilities) {
       if (!cap.action || !(TAP_VALID_ACTIONS as readonly string[]).includes(cap.action)) {
         return c.json({
           success: false,
           error: 'INVALID_CAPABILITY',
-          message: `Invalid capability action. Valid: ${TAP_VALID_ACTIONS.join(', ')}`
+          message: `Invalid capability action "${cap.action}". Valid actions: ${TAP_VALID_ACTIONS.join(', ')}. ` +
+            `Capabilities must be objects like {"action":"browse"} or plain strings like "browse".`
         }, 400);
       }
     }
@@ -75,7 +81,7 @@ export async function createDelegationRoute(c: Context) {
     const options: CreateDelegationOptions = {
       grantor_id: body.grantor_id,
       grantee_id: body.grantee_id,
-      capabilities: body.capabilities,
+      capabilities: normalizedCapabilities,
       duration_seconds: body.duration_seconds,
       max_depth: body.max_depth,
       parent_delegation_id: body.parent_delegation_id,

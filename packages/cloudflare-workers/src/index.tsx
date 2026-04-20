@@ -2749,12 +2749,13 @@ app.get('/v1/agents/:id', async (c) => {
         }, 401);
       }
       const publicKey = getPublicKey(c.env);
-      const verification = await verifyToken(bearerToken, c.env.JWT_SECRET, c.env, undefined, publicKey);
+      // Accept both challenge-verified tokens and agent-identity tokens (from OAuth refresh flow)
+      const verification = await verifyToken(bearerToken, c.env.JWT_SECRET, c.env, { allowedTypes: ['botcha-verified', 'botcha-agent-identity'] }, publicKey);
       if (!verification.valid || !verification.payload?.agent_id) {
         return c.json({
           success: false,
           error: 'UNAUTHORIZED',
-          message: 'Invalid or expired token — must be an agent-identity token to use /v1/agents/me',
+          message: 'Invalid or expired token — must be a botcha-verified or agent-identity token to use /v1/agents/me',
         }, 401);
       }
       agent_id = verification.payload.agent_id;
