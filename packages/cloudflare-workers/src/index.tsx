@@ -24,7 +24,7 @@ import {
   type KVNamespace,
 } from './challenges';
 import { SignJWT, jwtVerify } from 'jose';
-import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK, type BotchaTokenPayload } from './auth';
+import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, ALL_BOTCHA_ACCESS_TOKEN_TYPES, type ES256SigningKeyJWK, type BotchaTokenPayload } from './auth';
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
 import streamRoutes from './routes/stream';
@@ -1631,7 +1631,12 @@ app.post('/v1/token/validate', async (c) => {
   }
 
   const validatePublicKey = getPublicKey(c.env);
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, validatePublicKey);
+  // Accept all BOTCHA access token types — this is a public validation endpoint.
+  // Refresh tokens (botcha-refresh) are excluded: they are bearer credentials
+  // and must never be exposed to third-party validators.
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, {
+    allowedTypes: [...ALL_BOTCHA_ACCESS_TOKEN_TYPES],
+  }, validatePublicKey);
 
   if (!result.valid) {
     return c.json({

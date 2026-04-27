@@ -1,6 +1,6 @@
 # BOTCHA — Active Issues Tracker
 
-*Last updated: 2026-04-20 by Choco*
+*Last updated: 2026-04-27 by Choco*
 
 ---
 
@@ -36,18 +36,25 @@ Dual ESM/CJS build via tsconfig.cjs.json + verify-cjs.cjs CI check.
 
 ## 🔄 IN PROGRESS
 
-### PR — Three TAP UX bugs (2026-04-20 sprint, Choco)
-**Branch:** `fix/agent-me-reputation-delegation-ux`
-**Bugs confirmed on live API 2026-04-20:**
+### PR — Four UX/correctness bugs (2026-04-27 sprint, Choco)
+**Branch:** `fix/token-validate-all-types`
+**Bugs confirmed on live API:**
 
-1. **`GET /v1/agents/me` rejects agent-identity tokens** — `verifyToken` called with `undefined` options (defaults to `botcha-verified` only). OAuth-refresh tokens are blocked even though they ARE valid agent-identity tokens.
-   - **Fix:** Pass `{ allowedTypes: ['botcha-verified', 'botcha-agent-identity'] }` (same pattern as all TAP routes)
+**Bug 1 (2026-04-20): `GET /v1/agents/me` rejects agent-identity tokens**
+`verifyToken` called with `undefined` options (defaults to `botcha-verified` only). OAuth-refresh tokens are blocked on the one route designed specifically to help agents identify themselves.
+- **Fix:** Pass `{ allowedTypes: ['botcha-verified', 'botcha-agent-identity'] }`
 
-2. **`GET /v1/agents/:id/reputation` → 400 MISSING_AGENT_ID** — Alias route registered with `:id` param but `getReputationRoute` reads `c.req.param('agent_id')`.
-   - **Fix:** Try `c.req.param('agent_id') || c.req.param('id')` in handler
+**Bug 2 (2026-04-20): `GET /v1/agents/:id/reputation` → 400 MISSING_AGENT_ID**
+Alias route registered with `:id` param but `getReputationRoute` reads `c.req.param('agent_id')` — always undefined via this alias.
+- **Fix:** Try `c.req.param('agent_id') || c.req.param('id')` in handler
 
-3. **`POST /v1/delegations` — string capabilities give misleading error** — Passing `["browse", "search"]` returns "Invalid capability action. Valid: browse, compare, purchase, audit, search" — implying the value is wrong when the actual issue is the format.
-   - **Fix:** Normalize strings to `{action: string}` objects before validation; clearer error message naming the bad action and accepted formats
+**Bug 3 (2026-04-20): `POST /v1/delegations` — string capabilities give misleading error**
+Passing `["browse", "search"]` returns "Invalid capability action. Valid: browse…" — implying the value is wrong when the actual issue is the format (`{action: "browse"}` required).
+- **Fix:** Normalize strings to `{action: string}` objects before validation; clearer error message
+
+**Bug 4 (2026-04-27): `POST /v1/token/validate` rejects attestation and agent-identity tokens**
+The public validation endpoint is documented as "verify any BOTCHA token" but calls `verifyToken` with `undefined` options — defaulting to `allowedTypes: ['botcha-verified']`. Any non-challenge token (agent-identity, attestation, ANS badge, VC) gets `{"valid": false, "error": "Invalid token type"}`.
+- **Fix:** Export `ALL_BOTCHA_ACCESS_TOKEN_TYPES` constant from `auth.ts`; pass it as `allowedTypes` to the validate endpoint. Refresh tokens intentionally excluded.
 
 ---
 
@@ -78,6 +85,10 @@ Dual ESM/CJS build via tsconfig.cjs.json + verify-cjs.cjs CI check.
 
 ### 5. Delegation field naming inconsistency (docs vs API)
 **Location:** `POST /v1/delegations`
-**Issue:** Natural field names are `delegator_agent_id`/`delegate_agent_id` but API uses `grantor_id`/`grantee_id`. AI agents consistently use the wrong names (tested 2026-04-13).
+**Issue:** Natural field names are `delegator_agent_id`/`delegate_agent_id` but API uses `grantor_id`/`grantee_id`. AI agents consistently use the wrong names (tested 2026-04-13 and 2026-04-27).
 **Fix:** Accept both field names (alias) or update docs/OpenAPI to be clearer
 **Priority:** 🟡 MINOR — docs confusion
+
+### 6. No session listing endpoint
+**Issue:** Agents cannot list their own active sessions (e.g., `GET /v1/sessions?agent_id=...`). Must manually track session IDs.
+**Priority:** 🟡 MINOR — convenience feature, not a correctness bug
