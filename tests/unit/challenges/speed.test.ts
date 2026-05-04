@@ -19,12 +19,14 @@ describe('Speed Challenge', () => {
     });
 
     test('adjusts timeout based on RTT when client timestamp provided', () => {
-      const clientTimestamp = Date.now() - 100; // Simulate 100ms RTT
+      const clientTimestamp = Date.now() - 100; // Simulate ~100ms RTT
       const challenge = generateSpeedChallenge(clientTimestamp);
       
       expect(challenge.timeLimit).toBeGreaterThan(500); // Should be adjusted
       expect(challenge).toHaveProperty('rttInfo');
-      expect(challenge.rttInfo?.measuredRtt).toBe(100);
+      // measuredRtt should be ≥100ms — use range check because clock ticks during test execution
+      expect(challenge.rttInfo?.measuredRtt).toBeGreaterThanOrEqual(100);
+      expect(challenge.rttInfo?.measuredRtt).toBeLessThan(200); // sanity upper bound
       expect(challenge.rttInfo?.adjustedTimeout).toBeGreaterThan(500);
     });
 
