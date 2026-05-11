@@ -1,6 +1,6 @@
 # BOTCHA — Active Issues Tracker
 
-*Last updated: 2026-04-13 by Choco*
+*Last updated: 2026-04-27 by Choco*
 
 ---
 
@@ -26,23 +26,35 @@ Full OIDC-A attestation endpoint — EAT tokens, agent grants, OAuth AS metadata
 ### PR #26 — A2A Agent Card (MERGED)
 A2A trust oracle with agent cards. Merged.
 
+### PR #41 — TAP UX Improvements (MERGED v0.24.0)
+**Bugs fixed:** agents/me 404 fix, INVALID_TTL validation, time_remaining_seconds, ACTION_CATEGORY_MISMATCH hint, reputation alias route.
+
+### Issue #37 / PR #40 — CJS Support (MERGED v0.24.0)
+Dual ESM/CJS build via tsconfig.cjs.json + verify-cjs.cjs CI check.
+
 ---
 
 ## 🔄 IN PROGRESS
 
-### PR #41 — TAP UX Improvements (open, needs BOTCHA verify + CI)
-**URL:** https://github.com/dupe-com/botcha/pull/41
-**Bugs fixed (all confirmed on live API 2026-04-13):**
-1. `GET /v1/agents/me` → 404 (now resolves from Bearer token)
-2. `ttl_seconds: -100` on `POST /v1/sessions/tap` → silently accepted (now 400 INVALID_TTL)
-3. `GET /v1/sessions/:id/tap` returns `time_remaining` in ms (renamed to `time_remaining_seconds`, now integer seconds)
-4. `ACTION_CATEGORY_MISMATCH` error gives no hint about valid actions (now includes `valid_actions` array)
-5. `GET /v1/agents/:id/reputation` → 404 (alias route added, must come before generic `:id`)
+### PR — Four UX/correctness bugs (2026-04-27 sprint, Choco)
+**Branch:** `fix/token-validate-all-types`
+**Bugs confirmed on live API:**
 
-### Issue #37 — CJS Support
-**URL:** https://github.com/dupe-com/botcha/issues/37
-**PRs:** #39 (Copilot, uses tsup), #40 (chocothebot, uses tsc + tsconfig.cjs.json)
-**Recommendation:** Merge PR #39 — more comprehensive, covers langchain + verify packages, uses tsup for better bundler compatibility. Supersedes #40.
+**Bug 1 (2026-04-20): `GET /v1/agents/me` rejects agent-identity tokens**
+`verifyToken` called with `undefined` options (defaults to `botcha-verified` only). OAuth-refresh tokens are blocked on the one route designed specifically to help agents identify themselves.
+- **Fix:** Pass `{ allowedTypes: ['botcha-verified', 'botcha-agent-identity'] }`
+
+**Bug 2 (2026-04-20): `GET /v1/agents/:id/reputation` → 400 MISSING_AGENT_ID**
+Alias route registered with `:id` param but `getReputationRoute` reads `c.req.param('agent_id')` — always undefined via this alias.
+- **Fix:** Try `c.req.param('agent_id') || c.req.param('id')` in handler
+
+**Bug 3 (2026-04-20): `POST /v1/delegations` — string capabilities give misleading error**
+Passing `["browse", "search"]` returns "Invalid capability action. Valid: browse…" — implying the value is wrong when the actual issue is the format (`{action: "browse"}` required).
+- **Fix:** Normalize strings to `{action: string}` objects before validation; clearer error message
+
+**Bug 4 (2026-04-27): `POST /v1/token/validate` rejects attestation and agent-identity tokens**
+The public validation endpoint is documented as "verify any BOTCHA token" but calls `verifyToken` with `undefined` options — defaulting to `allowedTypes: ['botcha-verified']`. Any non-challenge token (agent-identity, attestation, ANS badge, VC) gets `{"valid": false, "error": "Invalid token type"}`.
+- **Fix:** Export `ALL_BOTCHA_ACCESS_TOKEN_TYPES` constant from `auth.ts`; pass it as `allowedTypes` to the validate endpoint. Refresh tokens intentionally excluded.
 
 ---
 
@@ -73,6 +85,10 @@ A2A trust oracle with agent cards. Merged.
 
 ### 5. Delegation field naming inconsistency (docs vs API)
 **Location:** `POST /v1/delegations`
-**Issue:** Natural field names are `delegator_agent_id`/`delegate_agent_id` but API uses `grantor_id`/`grantee_id`. AI agents consistently use the wrong names (tested 2026-04-13).
+**Issue:** Natural field names are `delegator_agent_id`/`delegate_agent_id` but API uses `grantor_id`/`grantee_id`. AI agents consistently use the wrong names (tested 2026-04-13 and 2026-04-27).
 **Fix:** Accept both field names (alias) or update docs/OpenAPI to be clearer
 **Priority:** 🟡 MINOR — docs confusion
+
+### 6. No session listing endpoint
+**Issue:** Agents cannot list their own active sessions (e.g., `GET /v1/sessions?agent_id=...`). Must manually track session IDs.
+**Priority:** 🟡 MINOR — convenience feature, not a correctness bug

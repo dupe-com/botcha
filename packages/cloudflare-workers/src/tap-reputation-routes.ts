@@ -35,7 +35,8 @@ import {
  */
 export async function getReputationRoute(c: Context) {
   try {
-    const agentId = c.req.param('agent_id');
+    // Support both :agent_id (primary route) and :id (alias route /v1/agents/:id/reputation)
+    const agentId = c.req.param('agent_id') || c.req.param('id');
     if (!agentId) {
       return c.json({
         success: false,

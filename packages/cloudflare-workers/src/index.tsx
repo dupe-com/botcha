@@ -24,7 +24,7 @@ import {
   type KVNamespace,
 } from './challenges';
 import { SignJWT, jwtVerify } from 'jose';
-import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, type ES256SigningKeyJWK, type BotchaTokenPayload } from './auth';
+import { generateToken, verifyToken, extractBearerToken, revokeToken, refreshAccessToken, getSigningPublicKeyJWK, ALL_BOTCHA_ACCESS_TOKEN_TYPES, type ES256SigningKeyJWK, type BotchaTokenPayload } from './auth';
 import { checkRateLimit, getClientIP } from './rate-limit';
 import { verifyBadge, generateBadgeSvg, generateBadgeHtml, createBadgeResponse } from './badge';
 import streamRoutes from './routes/stream';
@@ -1631,7 +1631,12 @@ app.post('/v1/token/validate', async (c) => {
   }
 
   const validatePublicKey = getPublicKey(c.env);
-  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, undefined, validatePublicKey);
+  // Accept all BOTCHA access token types — this is a public validation endpoint.
+  // Refresh tokens (botcha-refresh) are excluded: they are bearer credentials
+  // and must never be exposed to third-party validators.
+  const result = await verifyToken(token, c.env.JWT_SECRET, c.env, {
+    allowedTypes: [...ALL_BOTCHA_ACCESS_TOKEN_TYPES],
+  }, validatePublicKey);
 
   if (!result.valid) {
     return c.json({
@@ -2749,12 +2754,13 @@ app.get('/v1/agents/:id', async (c) => {
         }, 401);
       }
       const publicKey = getPublicKey(c.env);
-      const verification = await verifyToken(bearerToken, c.env.JWT_SECRET, c.env, undefined, publicKey);
+      // Accept both challenge-verified tokens and agent-identity tokens (from OAuth refresh flow)
+      const verification = await verifyToken(bearerToken, c.env.JWT_SECRET, c.env, { allowedTypes: ['botcha-verified', 'botcha-agent-identity'] }, publicKey);
       if (!verification.valid || !verification.payload?.agent_id) {
         return c.json({
           success: false,
           error: 'UNAUTHORIZED',
-          message: 'Invalid or expired token — must be an agent-identity token to use /v1/agents/me',
+          message: 'Invalid or expired token — must be a botcha-verified or agent-identity token to use /v1/agents/me',
         }, 401);
       }
       agent_id = verification.payload.agent_id;

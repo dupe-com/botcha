@@ -531,6 +531,20 @@ export async function verifyToken(
 }
 
 /**
+ * All known BOTCHA token types.
+ * Used by the public /v1/token/validate endpoint to accept any BOTCHA-issued token.
+ * Note: refresh tokens (botcha-refresh) are intentionally excluded — they are
+ * bearer credentials and should not be validated by third parties.
+ */
+export const ALL_BOTCHA_ACCESS_TOKEN_TYPES = [
+  'botcha-verified',          // Standard challenge-pass token
+  'botcha-agent-identity',    // Agent OAuth / refresh-flow identity token
+  'botcha-attestation',       // TAP capability attestation token
+  'botcha-ans-badge',         // ANS badge token
+  'botcha-vc',                // W3C Verifiable Credential token
+] as const;
+
+/**
  * Extract Bearer token from Authorization header
  */
 export function extractBearerToken(authHeader?: string): string | null {
