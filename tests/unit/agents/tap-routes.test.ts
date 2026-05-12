@@ -718,7 +718,7 @@ describe('TAP Routes - createTAPSessionRoute', () => {
 
     expect(response.status).toBe(400);
     expect(data.success).toBe(false);
-    expect(data.error).toBe('INVALID_INTENT');
+    expect(data.error).toBe('INVALID_INTENT_FORMAT');  // string intent → FORMAT error (not INTENT)
   });
 
   test('should return 400 when intent has invalid action', async () => {
