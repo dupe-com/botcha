@@ -457,13 +457,24 @@ export async function createTAPSessionRoute(c: Context) {
       }, 403);
     }
     
-    // Parse intent
+    // Parse intent — must be an object with an 'action' field.
+    // Agents commonly pass a plain string (e.g. "browse") instead of
+    // the required object ({action: "browse"}); give a clear fix hint.
+    if (typeof body.intent !== 'object' || Array.isArray(body.intent) || body.intent === null) {
+      return c.json({
+        success: false,
+        error: 'INVALID_INTENT_FORMAT',
+        message: `intent must be an object with an 'action' field, not a ${Array.isArray(body.intent) ? 'array' : typeof body.intent}. Example: {"action": "browse"} or {"action": "purchase", "resource": "/cart"}`,
+        valid_actions: ['browse', 'compare', 'purchase', 'audit', 'search'],
+      }, 400);
+    }
     const intentResult = parseTAPIntent(JSON.stringify(body.intent));
     if (!intentResult.valid) {
       return c.json({
         success: false,
         error: 'INVALID_INTENT',
-        message: intentResult.error
+        message: intentResult.error,
+        valid_actions: ['browse', 'compare', 'purchase', 'audit', 'search'],
       }, 400);
     }
     

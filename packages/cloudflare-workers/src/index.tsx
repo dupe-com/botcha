@@ -49,6 +49,7 @@ import { WhitepaperPage } from './dashboard/whitepaper';
 import { DocsPage } from './dashboard/docs';
 import { handleAccountPage, handleAccountJson } from './dashboard/account';
 import { createAgent, getAgent, listAgents, deleteAgent } from './agents';
+import { getTAPAgent } from './tap-agents.js';
 import { handleAgentAuthChallenge, handleAgentAuthVerify, handleAgentAuthProvider } from './agent-auth';
 import { handleOAuthDevice, handleOAuthToken, handleOAuthApprove, handleAgentAuthRefresh, handleOAuthRevoke, handleOAuthStatus } from './oauth-agent';
 import {
@@ -2766,9 +2767,9 @@ app.get('/v1/agents/:id', async (c) => {
       agent_id = verification.payload.agent_id;
     }
 
-    const agent = await getAgent(c.env.AGENTS, agent_id);
+    const tapResult = await getTAPAgent(c.env.AGENTS, agent_id);
 
-    if (!agent) {
+    if (!tapResult.success || !tapResult.agent) {
       return c.json({
         success: false,
         error: 'AGENT_NOT_FOUND',
@@ -2776,7 +2777,11 @@ app.get('/v1/agents/:id', async (c) => {
       }, 404);
     }
 
-    return c.json({
+    const agent = tapResult.agent;
+
+    // Build response — include TAP fields when present so agents can
+    // introspect their own capabilities, TAP status, and trust level.
+    const response: Record<string, unknown> = {
       success: true,
       agent_id: agent.agent_id,
       app_id: agent.app_id,
@@ -2784,7 +2789,37 @@ app.get('/v1/agents/:id', async (c) => {
       operator: agent.operator,
       version: agent.version,
       created_at: new Date(agent.created_at).toISOString(),
-    });
+      // TAP fields — always included (null/false when TAP not configured)
+      tap_enabled: agent.tap_enabled ?? false,
+      trust_level: agent.trust_level ?? null,
+      capabilities: agent.capabilities ?? [],
+    };
+
+    // Only include key_fingerprint when a public key is registered
+    if (agent.key_fingerprint) {
+      response.key_fingerprint = agent.key_fingerprint;
+    }
+
+    // Include last_verified_at when the agent has been TAP-verified
+    if (agent.last_verified_at) {
+      response.last_verified_at = new Date(agent.last_verified_at).toISOString();
+    }
+
+    // Include ANS info when registered
+    if (agent.ans_name) {
+      response.ans_name = agent.ans_name;
+      response.ans_trust_level = agent.ans_trust_level ?? null;
+      if (agent.ans_verified_at) {
+        response.ans_verified_at = new Date(agent.ans_verified_at).toISOString();
+      }
+    }
+
+    // Include DID when registered
+    if (agent.did) {
+      response.did = agent.did;
+    }
+
+    return c.json(response);
   } catch (error) {
     return c.json({
       success: false,

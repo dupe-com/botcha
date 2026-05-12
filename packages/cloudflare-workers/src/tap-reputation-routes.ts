@@ -155,10 +155,13 @@ export async function recordReputationEventRoute(c: Context) {
     }
 
     if (!isValidAction(body.action)) {
+      const allValidActions = Object.values(CATEGORY_ACTIONS).flat();
       return c.json({
         success: false,
         error: 'INVALID_ACTION',
-        message: `Invalid action: "${body.action}"`
+        message: `Invalid action: "${body.action}". Valid actions: ${allValidActions.join(', ')}. Note: actions must also match their category — see 'valid_actions_by_category'.`,
+        valid_actions: allValidActions,
+        valid_actions_by_category: CATEGORY_ACTIONS,
       }, 400);
     }
 
