@@ -41,7 +41,7 @@ import { ROBOTS_TXT, AI_TXT, AI_PLUGIN_JSON, SITEMAP_XML, getOpenApiSpec, getBot
 import { handleMCPRequest, handleMCPDiscovery } from './mcp';
 import { MCPSetupPage } from './dashboard/mcp-setup';
 import { OG_IMAGE_BASE64 } from './og-image';
-import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret, EmailAlreadyRegisteredError } from './apps';
+import { createApp, getApp, getAppByEmail, verifyEmailCode, rotateAppSecret, regenerateVerificationCode, validateAppSecret, EmailAlreadyRegisteredError, createPairCode, consumePairCode, updateAppRegistrationPolicy } from './apps';
 import { sendEmail, verificationEmail, recoveryEmail, secretRotatedEmail } from './email';
 import { LandingPage, VerifiedLandingPage } from './dashboard/landing';
 import { ShowcasePage } from './dashboard/showcase';
@@ -223,8 +223,20 @@ app.use('/v1/*', async (c, next) => {
 // Rate limiting middleware for challenge generation (app-scoped when app_id present)
 async function rateLimitMiddleware(c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) {
   const clientIP = getClientIP(c.req.raw);
-  const appId = c.req.query('app_id') || c.req.header('x-app-id');
-  const rateLimitResult = await checkRateLimit(c.env.RATE_LIMITS, clientIP, 100, appId);
+  // Only scope rate limits to an app_id that comes from a verified JWT — never
+  // from an unauthenticated query param/header, which any attacker can spoof to
+  // exhaust a victim app's quota (issue #45, Vector 1).
+  let authenticatedAppId: string | undefined;
+  const authHeader = c.req.header('authorization');
+  const maybeToken = extractBearerToken(authHeader);
+  if (maybeToken) {
+    const publicKey = getPublicKey(c.env);
+    const check = await verifyToken(maybeToken, c.env.JWT_SECRET, c.env, undefined, publicKey);
+    if (check.valid && check.payload?.app_id) {
+      authenticatedAppId = check.payload.app_id as string;
+    }
+  }
+  const rateLimitResult = await checkRateLimit(c.env.RATE_LIMITS, clientIP, 100, authenticatedAppId);
 
   // Add rate limit headers
   c.header('X-RateLimit-Limit', '100');
@@ -2486,6 +2498,65 @@ app.post('/v1/apps/:id/rotate-secret', async (c) => {
   });
 });
 
+// Generate a single-use pairing code for agent registration (paired policy only).
+// Requires app owner authentication (app_secret or dashboard session).
+app.post('/v1/apps/:id/pair', async (c) => {
+  const app_id = c.req.param('id');
+  const body = await c.req.json<{ app_secret?: string }>().catch(() => ({} as { app_secret?: string }));
+
+  const auth = await authorizeAppManagement(c, app_id, body.app_secret);
+  if (!auth.authorized) {
+    return c.json({ success: false, error: auth.error, message: auth.message }, auth.status as 401 | 403);
+  }
+
+  const appInfo = await getApp(c.env.APPS, app_id);
+  if (!appInfo) {
+    return c.json({ success: false, error: 'APP_NOT_FOUND', message: 'App not found' }, 404);
+  }
+
+  const pair_code = await createPairCode(c.env.CHALLENGES, app_id);
+  return c.json({
+    success: true,
+    pair_code,
+    expires_in: 900,
+    message: `Share this one-time code with your agent. It is valid for 15 minutes and can only be used once. Agent must include it as { "pair_code": "${pair_code}" } in POST /v1/agents/register.`,
+  });
+});
+
+// Update app registration policy (open | paired).
+// Requires app owner authentication (app_secret or dashboard session).
+app.post('/v1/apps/:id/settings', async (c) => {
+  const app_id = c.req.param('id');
+  const body = await c.req.json<{ app_secret?: string; registration_policy?: string }>().catch(() => ({} as { app_secret?: string; registration_policy?: string }));
+
+  const auth = await authorizeAppManagement(c, app_id, body.app_secret);
+  if (!auth.authorized) {
+    return c.json({ success: false, error: auth.error, message: auth.message }, auth.status as 401 | 403);
+  }
+
+  const { registration_policy } = body;
+  if (registration_policy !== undefined) {
+    if (registration_policy !== 'open' && registration_policy !== 'paired') {
+      return c.json({
+        success: false,
+        error: 'INVALID_VALUE',
+        message: 'registration_policy must be "open" or "paired"',
+      }, 400);
+    }
+    const ok = await updateAppRegistrationPolicy(c.env.APPS, app_id, registration_policy);
+    if (!ok) {
+      return c.json({ success: false, error: 'APP_NOT_FOUND', message: 'App not found' }, 404);
+    }
+  }
+
+  const appInfo = await getApp(c.env.APPS, app_id);
+  return c.json({
+    success: true,
+    app_id,
+    registration_policy: appInfo?.registration_policy ?? 'open',
+  });
+});
+
 // ============ TAP (TRUSTED AGENT PROTOCOL) ENDPOINTS ============
 // NOTE: TAP routes MUST come before generic /v1/agents/:id to prevent
 // Hono from matching "tap" as an :id parameter.
@@ -2688,11 +2759,11 @@ app.post('/v1/agents/register', async (c) => {
       }, appAccess.status as 401 | 403 | 400);
     }
     const app_id = appAccess.appId!;
-    
+
     // Parse request body
-    const body = await c.req.json<{ name?: string; operator?: string; version?: string }>().catch(() => ({} as { name?: string; operator?: string; version?: string }));
-    const { name, operator, version } = body;
-    
+    const body = await c.req.json<{ name?: string; operator?: string; version?: string; pair_code?: string }>().catch(() => ({} as { name?: string; operator?: string; version?: string; pair_code?: string }));
+    const { name, operator, version, pair_code } = body;
+
     if (!name || typeof name !== 'string') {
       return c.json({
         success: false,
@@ -2700,7 +2771,27 @@ app.post('/v1/agents/register', async (c) => {
         message: 'Agent name is required. Provide { "name": "Your Agent Name" } in the request body.',
       }, 400);
     }
-    
+
+    // Enforce pairing policy: if the app requires a pair_code, validate and consume it
+    const appInfo = await getApp(c.env.APPS, app_id);
+    if (appInfo?.registration_policy === 'paired') {
+      if (!pair_code) {
+        return c.json({
+          success: false,
+          error: 'PAIR_CODE_REQUIRED',
+          message: 'This app requires a pairing code for agent registration. Ask your app owner to generate one via POST /v1/apps/:id/pair.',
+        }, 403);
+      }
+      const consumed = await consumePairCode(c.env.CHALLENGES, pair_code, app_id);
+      if (!consumed) {
+        return c.json({
+          success: false,
+          error: 'INVALID_PAIR_CODE',
+          message: 'The pair_code is invalid, expired, already used, or does not belong to this app.',
+        }, 403);
+      }
+    }
+
     // Create the agent
     const agent = await createAgent(c.env.AGENTS, app_id, { name, operator, version });
     
