@@ -2222,12 +2222,11 @@ app.post('/v1/apps', async (c) => {
       email: result.email,
       email_verified: false,
       verification_required: true,
-      verification_code: result.verification_code,
-      warning: '⚠️ Save your app_secret now — it cannot be retrieved again! A verification code has also been sent to your email.',
+      warning: '⚠️ Save your app_secret now — it cannot be retrieved again! A verification code has been sent to your email.',
       credential_advice: 'Store the app_id and app_secret securely. Use persistent agent memory if available, or instruct your human to save them in a password manager (1Password, Bitwarden, etc). If lost, recovery is available via the verified email.',
       created_at: new Date().toISOString(),
       rate_limit: 100,
-      next_step: `POST /v1/apps/${result.app_id}/verify-email with { "code": "${result.verification_code}", "app_secret": "${result.app_secret}" }`,
+      next_step: `Check your email for a 6-digit verification code, then POST /v1/apps/${result.app_id}/verify-email with { "code": "<6-digit code from email>", "app_secret": "${result.app_secret}" }`,
     }, 201);
   } catch (error) {
     if (error instanceof EmailAlreadyRegisteredError) {
