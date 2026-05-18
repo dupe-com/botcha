@@ -294,13 +294,34 @@ export async function registerTAPAgentRoute(c: Context) {
  */
 export async function getTAPAgentRoute(c: Context) {
   try {
-    const agentId = c.req.param('id');
-    if (!agentId) {
+    const rawId = c.req.param('id');
+    if (!rawId) {
       return c.json({
         success: false,
         error: 'MISSING_AGENT_ID',
         message: 'Agent ID is required'
       }, 400);
+    }
+
+    // Support "me" as a shorthand for the authenticated agent
+    let agentId = rawId;
+    if (rawId === 'me') {
+      const appAccess = await validateTAPAppAccess(c, true);
+      if (!appAccess.valid) {
+        return c.json({
+          success: false,
+          error: appAccess.error,
+          message: 'Authentication required to use "me" shorthand',
+        }, (appAccess.status || 401) as 401);
+      }
+      if (!appAccess.agentId) {
+        return c.json({
+          success: false,
+          error: 'UNAUTHORIZED',
+          message: 'Cannot use "me" shorthand — token does not carry an agent_id. Use a botcha-verified or agent-identity token.',
+        }, 401);
+      }
+      agentId = appAccess.agentId;
     }
     
     const result = await getTAPAgent(c.env.AGENTS, agentId);

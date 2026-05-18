@@ -36,8 +36,8 @@ import {
 export async function getReputationRoute(c: Context) {
   try {
     // Support both :agent_id (primary route) and :id (alias route /v1/agents/:id/reputation)
-    const agentId = c.req.param('agent_id') || c.req.param('id');
-    if (!agentId) {
+    const rawId = c.req.param('agent_id') || c.req.param('id');
+    if (!rawId) {
       return c.json({
         success: false,
         error: 'MISSING_AGENT_ID',
@@ -52,6 +52,19 @@ export async function getReputationRoute(c: Context) {
         error: appAccess.error,
         message: 'Authentication required'
       }, (appAccess.status || 401) as 401);
+    }
+
+    // Support "me" as a shorthand for the authenticated agent
+    let agentId = rawId;
+    if (rawId === 'me') {
+      if (!appAccess.agentId) {
+        return c.json({
+          success: false,
+          error: 'UNAUTHORIZED',
+          message: 'Cannot use "me" shorthand — token does not carry an agent_id. Use a botcha-verified or agent-identity token.',
+        }, 401);
+      }
+      agentId = appAccess.agentId;
     }
 
     const result = await getReputationScore(
