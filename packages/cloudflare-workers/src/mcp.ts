@@ -116,7 +116,7 @@ Revocation is KV-backed with fail-open on infrastructure errors.`,
 
 App lifecycle:
 1. POST /v1/apps {"email": "..."} → app_id + app_secret (save the secret!)
-2. POST /v1/apps/:id/verify-email {"code": "123456"} → enables recovery
+2. POST /v1/apps/:id/verify-email {"code": "123456", "app_secret": "sk_..."} → enables recovery
 3. Use app_id on all API calls via ?app_id=, X-App-Id header, or JWT claim`,
     endpoints: [
       'POST /v1/apps',
