@@ -2246,8 +2246,7 @@ app.post('/v1/apps', async (c) => {
         success: false,
         error: 'EMAIL_ALREADY_REGISTERED',
         message: `Email ${error.email} is already registered.`,
-        existing_app_id: error.existing_app_id,
-        recovery: `POST /v1/auth/recover with { "email": "${error.email}" } to recover your credentials.`,
+        recovery: `POST /v1/auth/recover with { "email": "${error.email}" } to receive a BOTCHA code by email. Your human can then visit https://botcha.ai, click "Account", and enter the code to retrieve their app_id and share it with you.`,
       }, 409);
     }
     return c.json({
