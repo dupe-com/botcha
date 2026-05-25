@@ -19,6 +19,7 @@ import { Agent, KVNamespace, generateAgentId } from './agents.js';
 export interface TAPAgent extends Agent {
   // Cryptographic identity (optional for backward compatibility)
   public_key?: string;           // PEM-encoded public key
+  key_fingerprint?: string;      // SHA-256 fingerprint of the public key (derived, cached)
   signature_algorithm?: 'ecdsa-p256-sha256' | 'rsa-pss-sha256' | 'ed25519';
   key_created_at?: number;       // When the key was generated
   key_expires_at?: number;       // When the key expires (epoch ms)
