@@ -1,6 +1,6 @@
 # BOTCHA — Active Issues Tracker
 
-*Last updated: 2026-04-27 by Choco*
+*Last updated: 2026-06-22 by Choco*
 
 ---
 
@@ -36,29 +36,39 @@ Dual ESM/CJS build via tsconfig.cjs.json + verify-cjs.cjs CI check.
 
 ## 🔄 IN PROGRESS
 
-### PR — Four UX/correctness bugs (2026-04-27 sprint, Choco)
-**Branch:** `fix/token-validate-all-types`
-**Bugs confirmed on live API:**
+### PR #55 — Hybrid challenge missing access_token (2026-06-22 sprint, Choco)
+**Branch:** `fix/hybrid-challenge-missing-token`
+**PR:** https://github.com/dupe-com/botcha/pull/55
 
-**Bug 1 (2026-04-20): `GET /v1/agents/me` rejects agent-identity tokens**
-`verifyToken` called with `undefined` options (defaults to `botcha-verified` only). OAuth-refresh tokens are blocked on the one route designed specifically to help agents identify themselves.
-- **Fix:** Pass `{ allowedTypes: ['botcha-verified', 'botcha-agent-identity'] }`
-
-**Bug 2 (2026-04-20): `GET /v1/agents/:id/reputation` → 400 MISSING_AGENT_ID**
-Alias route registered with `:id` param but `getReputationRoute` reads `c.req.param('agent_id')` — always undefined via this alias.
-- **Fix:** Try `c.req.param('agent_id') || c.req.param('id')` in handler
-
-**Bug 3 (2026-04-20): `POST /v1/delegations` — string capabilities give misleading error**
-Passing `["browse", "search"]` returns "Invalid capability action. Valid: browse…" — implying the value is wrong when the actual issue is the format (`{action: "browse"}` required).
-- **Fix:** Normalize strings to `{action: string}` objects before validation; clearer error message
-
-**Bug 4 (2026-04-27): `POST /v1/token/validate` rejects attestation and agent-identity tokens**
-The public validation endpoint is documented as "verify any BOTCHA token" but calls `verifyToken` with `undefined` options — defaulting to `allowedTypes: ['botcha-verified']`. Any non-challenge token (agent-identity, attestation, ANS badge, VC) gets `{"valid": false, "error": "Invalid token type"}`.
-- **Fix:** Export `ALL_BOTCHA_ACCESS_TOKEN_TYPES` constant from `auth.ts`; pass it as `allowedTypes` to the validate endpoint. Refresh tokens intentionally excluded.
+**Bug (2026-06-22): Hybrid challenge returns badge but no access_token**
+The hybrid challenge is now the default (`GET /v1/challenges` returns hybrid by default).
+On success it returned only a `badge` JWT — not a `botcha-verified` access_token + refresh_token.
+The speed-only path correctly called `generateToken()`. All three hybrid handlers did not.
+- **Root cause:** `verifyHybridChallenge` didn't propagate `app_id`; handlers never called `generateToken()`
+- **Fix:** Propagate `app_id` in return value; add `generateToken()` to all 3 hybrid verify handlers
+- **Tests:** `tests/unit/challenges/hybrid-token-issuance.test.ts` (3 tests, all passing)
 
 ---
 
 ## 🔮 TECHNICAL DEBT (existing in main, deprioritized)
+
+### 7. POST /v1/sessions/tap requires agent_id in body (no JWT binding)
+**Location:** `tap-routes.ts` → `createTAPSessionRoute`
+**Issue:** Handler requires `agent_id` in body but never validates it matches the authenticated agent's JWT claim. An agent with a valid token could theoretically pass a different agent_id — no access control check.
+**Fix:** Extract `agent_id` from JWT payload (`c.get('tokenPayload')?.agent_id`); use it instead of / in addition to body `agent_id`. If both present, verify they match.
+**Priority:** 🟠 MAJOR — authentication gap
+
+### 8. Capability format inconsistency across API surfaces
+**Location:** `POST /v1/sessions/tap` vs `POST /v1/attestations` vs `POST /v1/delegations`
+**Issue:** Three different capability formats: `{action: "browse"}` objects (sessions), `"browse:*"` strings (attestations), `{action: "browse"}` objects (delegations). Agents consistently pass the wrong format.
+**Fix:** Normalize all inputs to a single canonical format, or document clearly in each endpoint's error message what format is expected.
+**Priority:** 🟡 MINOR — developer experience
+
+### 9. Hybrid challenge solver patterns needed (reasoning question coverage)
+**Location:** `challenges.ts` → REASONING_QUESTIONS bank
+**Issue:** During agent sprint, ~30% of reasoning questions were unmatched by any solver pattern. New question types discovered: LIFO → stack, "neck but no head" → bottle, string length questions, "occurs once in a minute..." → letter M, "remove letter from startling" → starling, "what connects: river, money, blood" → bank, etc.
+**Note:** Not a blocking bug but shows the question bank has grown past common patterns. Adding these to the Python solver library for future sprints.
+**Priority:** 🟡 MINOR — agent usability
 
 ### 1. KV Read-Modify-Write Race Condition
 **Location:** `last_verified_at` updates on TAP session creation

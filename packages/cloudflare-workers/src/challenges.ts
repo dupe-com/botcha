@@ -1234,6 +1234,7 @@ export async function verifyHybridChallenge(
   speed: { passed: boolean; solveTimeMs?: number; reason?: string };
   reasoning: { passed: boolean; score?: string; solveTimeMs?: number; reason?: string };
   totalTimeMs?: number;
+  app_id?: string; // propagated from challenge for token generation (parity with speed challenge)
 }> {
   let hybrid: HybridChallenge | null = null;
 
@@ -1306,5 +1307,7 @@ export async function verifyHybridChallenge(
       reason: reasoningResult.reason,
     },
     totalTimeMs,
+    // Propagate app_id for token generation (parity with verifySpeedChallenge)
+    app_id: hybrid!.app_id,
   };
 }

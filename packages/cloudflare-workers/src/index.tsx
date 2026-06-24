@@ -1222,8 +1222,11 @@ app.post('/v1/challenges/:id/verify', async (c) => {
     type?: string;
     speed_answers?: string[];
     reasoning_answers?: Record<string, string>;
+    audience?: string;
+    bind_ip?: boolean;
+    app_id?: string;
   }>();
-  const { answers, answer, type, speed_answers, reasoning_answers } = body;
+  const { answers, answer, type, speed_answers, reasoning_answers, audience, bind_ip } = body;
 
   // Hybrid challenge (default)
   if (type === 'hybrid' || (speed_answers && reasoning_answers)) {
@@ -1252,6 +1255,47 @@ app.post('/v1/challenges/:id/verify', async (c) => {
       const baseUrl = new URL(c.req.url).origin;
       const badge = await createBadgeResponse('hybrid-challenge', c.env.JWT_SECRET, baseUrl, result.speed.solveTimeMs);
 
+      // Issue a botcha-verified JWT (same as speed-only challenge) so agents can
+      // immediately use the token for API calls. Previously the hybrid path only
+      // returned a badge, leaving agents unable to authenticate after passing.
+      const challengeAppId = result.app_id;
+      const signingKey = getSigningKey(c.env);
+      const tokenResult = await generateToken(
+        id,
+        result.speed.solveTimeMs || 0,
+        c.env.JWT_SECRET,
+        c.env,
+        {
+          aud: audience,
+          clientIp: bind_ip ? clientIP : undefined,
+          app_id: challengeAppId,
+        },
+        signingKey
+      );
+
+      // Generate short human-readable gate code (BOTCHA-XXXX)
+      const gateChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let gateCode = 'BOTCHA-';
+      for (let i = 0; i < 6; i++) gateCode += gateChars[Math.floor(Math.random() * gateChars.length)];
+      try {
+        await c.env.CHALLENGES.put(`gate:${gateCode}`, tokenResult.access_token, { expirationTtl: 300 });
+      } catch {
+        // Fail-open: if KV fails, agent can still use the JWT directly
+      }
+
+      // Webhook: token.created
+      if (challengeAppId) {
+        const webhookCtx = c.executionCtx;
+        if (webhookCtx?.waitUntil) {
+          webhookCtx.waitUntil(triggerWebhook(
+            c.env.AGENTS as unknown as WebhookKVNamespace,
+            challengeAppId,
+            'token.created',
+            { solve_time_ms: result.speed.solveTimeMs, audience }
+          ));
+        }
+      }
+
       return c.json({
         success: true,
         message: `🔥 HYBRID TEST PASSED! Speed: ${result.speed.solveTimeMs}ms, Reasoning: ${result.reasoning.score}`,
@@ -1259,7 +1303,25 @@ app.post('/v1/challenges/:id/verify', async (c) => {
         reasoning: result.reasoning,
         totalTimeMs: result.totalTimeMs,
         verdict: '🤖 VERIFIED AI AGENT (speed + reasoning confirmed)',
+        // === Token (use this for API calls) ===
+        access_token: tokenResult.access_token,
+        expires_in: tokenResult.expires_in,
+        refresh_token: tokenResult.refresh_token,
+        refresh_expires_in: tokenResult.refresh_expires_in,
+        // === Human handoff ===
+        human_link: `${baseUrl}/go/${gateCode}`,
+        human_code: gateCode,
+        human_instruction: `Give your human this link to open in their browser: ${baseUrl}/go/${gateCode}`,
+        // === What to do next ===
+        usage: {
+          header: 'Authorization: Bearer <access_token>',
+          try_it: 'GET /agent-only',
+          refresh: 'POST /v1/token/refresh with {"refresh_token":"<refresh_token>"}',
+        },
+        // === Badge (shareable proof) ===
         badge,
+        // Backward compatibility
+        token: tokenResult.access_token,
       });
     }
 
@@ -1793,8 +1855,9 @@ app.get('/v1/hybrid', rateLimitMiddleware, async (c) => {
 
 // Verify hybrid challenge (v1 API)
 app.post('/v1/hybrid', async (c) => {
-  const body = await c.req.json<{ id?: string; speed_answers?: string[]; reasoning_answers?: Record<string, string> }>();
-  const { id, speed_answers, reasoning_answers } = body;
+  const body = await c.req.json<{ id?: string; speed_answers?: string[]; reasoning_answers?: Record<string, string>; audience?: string; bind_ip?: boolean }>();
+  const { id, speed_answers, reasoning_answers, audience, bind_ip } = body;
+  const clientIP = getClientIP(c.req.raw);
 
   if (!id || !speed_answers || !reasoning_answers) {
     return c.json({
@@ -1810,6 +1873,16 @@ app.post('/v1/hybrid', async (c) => {
     const baseUrl = new URL(c.req.url).origin;
     const badge = await createBadgeResponse('hybrid-challenge', c.env.JWT_SECRET, baseUrl, result.speed.solveTimeMs);
 
+    const signingKey = getSigningKey(c.env);
+    const tokenResult = await generateToken(
+      id,
+      result.speed.solveTimeMs || 0,
+      c.env.JWT_SECRET,
+      c.env,
+      { aud: audience, clientIp: bind_ip ? clientIP : undefined, app_id: result.app_id },
+      signingKey
+    );
+
     return c.json({
       success: true,
       message: `🔥 HYBRID TEST PASSED! Speed: ${result.speed.solveTimeMs}ms, Reasoning: ${result.reasoning.score}`,
@@ -1817,6 +1890,10 @@ app.post('/v1/hybrid', async (c) => {
       reasoning: result.reasoning,
       totalTimeMs: result.totalTimeMs,
       verdict: '🤖 VERIFIED AI AGENT (speed + reasoning confirmed)',
+      access_token: tokenResult.access_token,
+      expires_in: tokenResult.expires_in,
+      refresh_token: tokenResult.refresh_token,
+      token: tokenResult.access_token, // backward compat
       badge,
     });
   }
@@ -1872,8 +1949,9 @@ app.get('/api/hybrid-challenge', async (c) => {
 });
 
 app.post('/api/hybrid-challenge', async (c) => {
-  const body = await c.req.json<{ id?: string; speed_answers?: string[]; reasoning_answers?: Record<string, string> }>();
-  const { id, speed_answers, reasoning_answers } = body;
+  const body = await c.req.json<{ id?: string; speed_answers?: string[]; reasoning_answers?: Record<string, string>; audience?: string; bind_ip?: boolean }>();
+  const { id, speed_answers, reasoning_answers, audience, bind_ip } = body;
+  const clientIP = getClientIP(c.req.raw);
 
   if (!id || !speed_answers || !reasoning_answers) {
     return c.json({
@@ -1889,6 +1967,16 @@ app.post('/api/hybrid-challenge', async (c) => {
     const baseUrl = new URL(c.req.url).origin;
     const badge = await createBadgeResponse('hybrid-challenge', c.env.JWT_SECRET, baseUrl, result.speed.solveTimeMs);
 
+    const signingKey = getSigningKey(c.env);
+    const tokenResult = await generateToken(
+      id,
+      result.speed.solveTimeMs || 0,
+      c.env.JWT_SECRET,
+      c.env,
+      { aud: audience, clientIp: bind_ip ? clientIP : undefined, app_id: result.app_id },
+      signingKey
+    );
+
     return c.json({
       success: true,
       message: `🔥 HYBRID TEST PASSED! Speed: ${result.speed.solveTimeMs}ms, Reasoning: ${result.reasoning.score}`,
@@ -1896,6 +1984,10 @@ app.post('/api/hybrid-challenge', async (c) => {
       reasoning: result.reasoning,
       totalTimeMs: result.totalTimeMs,
       verdict: '🤖 VERIFIED AI AGENT (speed + reasoning confirmed)',
+      access_token: tokenResult.access_token,
+      expires_in: tokenResult.expires_in,
+      refresh_token: tokenResult.refresh_token,
+      token: tokenResult.access_token, // backward compat
       badge,
     });
   }
