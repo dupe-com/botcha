@@ -115,3 +115,62 @@ describe('verifyHybridChallenge — app_id propagation', () => {
     expect(result.app_id).toBe(APP_ID);
   });
 });
+
+describe('verifyHybridChallenge — totalTimeMs correctness', () => {
+  /**
+   * Regression test for: hybrid.issuedAt was captured AFTER async sub-challenge
+   * generation, causing totalTimeMs < speed.solveTimeMs (physically impossible).
+   *
+   * Fix: capture issuedAt = Date.now() BEFORE generateSpeedChallenge() and
+   * generateReasoningChallenge() calls. Now totalTimeMs >= speed.solveTimeMs.
+   */
+  it('totalTimeMs is >= speed.solveTimeMs (issuedAt captured before async ops)', async () => {
+    const kv = makeMockKV();
+    const challenge = await generateHybridChallenge(kv);
+
+    const speedAnswers = solveSpeed(challenge.speed.problems);
+
+    const stored = await kv.get(`hybrid:${challenge.id}`);
+    const hybridData: HybridChallenge = JSON.parse(stored);
+
+    const reasoningStored = await kv.get(`challenge:${hybridData.reasoningChallengeId}`);
+    const reasoningData = JSON.parse(reasoningStored);
+    const reasoningAnswers: Record<string, string> = {};
+    for (const [qid, accepted] of Object.entries(reasoningData.expectedAnswers as Record<string, string[]>)) {
+      reasoningAnswers[qid] = (accepted as string[])[0];
+    }
+
+    const result = await verifyHybridChallenge(challenge.id, speedAnswers, reasoningAnswers, kv);
+
+    expect(result.valid).toBe(true);
+    expect(result.totalTimeMs).toBeDefined();
+    expect(typeof result.totalTimeMs).toBe('number');
+
+    // The critical invariant: total wall-clock time must be >= the speed sub-test time.
+    // Before the fix, hybrid.issuedAt was stamped AFTER async sub-challenge creation,
+    // making totalTimeMs LESS than speed.solveTimeMs — physically impossible.
+    expect(result.totalTimeMs!).toBeGreaterThanOrEqual(result.speed.solveTimeMs ?? 0);
+  });
+
+  it('totalTimeMs is >= reasoning.solveTimeMs', async () => {
+    const kv = makeMockKV();
+    const challenge = await generateHybridChallenge(kv);
+
+    const speedAnswers = solveSpeed(challenge.speed.problems);
+
+    const stored = await kv.get(`hybrid:${challenge.id}`);
+    const hybridData: HybridChallenge = JSON.parse(stored);
+
+    const reasoningStored = await kv.get(`challenge:${hybridData.reasoningChallengeId}`);
+    const reasoningData = JSON.parse(reasoningStored);
+    const reasoningAnswers: Record<string, string> = {};
+    for (const [qid, accepted] of Object.entries(reasoningData.expectedAnswers as Record<string, string[]>)) {
+      reasoningAnswers[qid] = (accepted as string[])[0];
+    }
+
+    const result = await verifyHybridChallenge(challenge.id, speedAnswers, reasoningAnswers, kv);
+
+    expect(result.valid).toBe(true);
+    expect(result.totalTimeMs!).toBeGreaterThanOrEqual(result.reasoning.solveTimeMs ?? 0);
+  });
+});
