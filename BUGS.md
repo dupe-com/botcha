@@ -36,27 +36,31 @@ Dual ESM/CJS build via tsconfig.cjs.json + verify-cjs.cjs CI check.
 
 ## 🔄 IN PROGRESS
 
-### PR #55 — Hybrid challenge missing access_token (2026-06-22 sprint, Choco)
-**Branch:** `fix/hybrid-challenge-missing-token`
-**PR:** https://github.com/dupe-com/botcha/pull/55
+### PR #56 — TAP session auth + totalTimeMs fix (2026-06-29 sprint, Choco)
+**Branch:** `fix/tap-session-auth-and-timing`
+**PR:** https://github.com/dupe-com/botcha/pull/56
 
-**Bug (2026-06-22): Hybrid challenge returns badge but no access_token**
-The hybrid challenge is now the default (`GET /v1/challenges` returns hybrid by default).
-On success it returned only a `badge` JWT — not a `botcha-verified` access_token + refresh_token.
-The speed-only path correctly called `generateToken()`. All three hybrid handlers did not.
-- **Root cause:** `verifyHybridChallenge` didn't propagate `app_id`; handlers never called `generateToken()`
-- **Fix:** Propagate `app_id` in return value; add `generateToken()` to all 3 hybrid verify handlers
-- **Tests:** `tests/unit/challenges/hybrid-token-issuance.test.ts` (3 tests, all passing)
+**Bug A (2026-06-29): POST /v1/sessions/tap has no authentication — CRITICAL**
+Any caller could create TAP sessions for arbitrary agents by supplying their agent_id in the body.
+The tap_enabled gate was enforced but there was nothing stopping unauthenticated access.
+- **Root cause:** `createTAPSessionRoute` never called `validateTAPAppAccess` unlike every other TAP route
+- **Fix:** Add `validateTAPAppAccess(c, true)` at the top; verify app_id and agent_id match JWT claims
+- **Tests:** 5 new auth enforcement tests (401, 403 cross-app, 403 agent_id mismatch, app-level token)
+
+**Bug B (2026-06-29): totalTimeMs < speed.solveTimeMs in hybrid verify response**
+`hybrid.issuedAt` was captured after two async KV writes, making totalTimeMs appear smaller than sub-challenge times — impossible math visible to every agent caller.
+- **Root cause:** `issuedAt = Date.now()` placed after `await generateSpeedChallenge()` + `await generateReasoningChallenge()`
+- **Fix:** Capture `issuedAt` before async operations; use it in both `issuedAt` and `expiresAt`
+- **Tests:** 2 new timing invariant tests (totalTimeMs >= speed.solveTimeMs, >= reasoning.solveTimeMs)
 
 ---
 
 ## 🔮 TECHNICAL DEBT (existing in main, deprioritized)
 
-### 7. POST /v1/sessions/tap requires agent_id in body (no JWT binding)
+### ✅ 7. POST /v1/sessions/tap requires agent_id in body (no JWT binding) — FIXED in PR #56
 **Location:** `tap-routes.ts` → `createTAPSessionRoute`
-**Issue:** Handler requires `agent_id` in body but never validates it matches the authenticated agent's JWT claim. An agent with a valid token could theoretically pass a different agent_id — no access control check.
-**Fix:** Extract `agent_id` from JWT payload (`c.get('tokenPayload')?.agent_id`); use it instead of / in addition to body `agent_id`. If both present, verify they match.
-**Priority:** 🟠 MAJOR — authentication gap
+**Fix:** `validateTAPAppAccess` added; app_id and agent_id cross-checked against JWT claims.
+**PR:** https://github.com/dupe-com/botcha/pull/56
 
 ### 8. Capability format inconsistency across API surfaces
 **Location:** `POST /v1/sessions/tap` vs `POST /v1/attestations` vs `POST /v1/delegations`

@@ -618,7 +618,183 @@ describe('TAP Routes - listTAPAgentsRoute', () => {
 describe('TAP Routes - createTAPSessionRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // createTAPSessionRoute now requires a valid BOTCHA bearer token.
+    // Set up default auth mocks so existing tests continue to pass.
+    // Override per-test for auth-failure scenarios.
+    mockExtractBearerToken.mockReturnValue('mock-jwt-token');
+    mockVerifyToken.mockResolvedValue({
+      valid: true,
+      payload: {
+        type: 'botcha-agent-identity',
+        app_id: TEST_APP_ID,
+        agent_id: TEST_AGENT_ID,
+      },
+    });
   });
+
+  // ---- Auth enforcement tests (added with fix/tap-session-auth-and-timing) ----
+
+  test('should return 401 when no bearer token provided', async () => {
+    mockExtractBearerToken.mockReturnValue(null);
+
+    const mockContext = createMockContext({
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_123',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('UNAUTHORIZED');
+  });
+
+  test('should return 401 when bearer token is invalid', async () => {
+    mockExtractBearerToken.mockReturnValue('bad-token');
+    mockVerifyToken.mockResolvedValue({ valid: false });
+
+    const mockContext = createMockContext({
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_123',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('INVALID_TOKEN');
+  });
+
+  test('should return 403 when agent does not belong to authenticated app', async () => {
+    // Token authenticates app_other, but agent belongs to TEST_APP_ID
+    mockVerifyToken.mockResolvedValue({
+      valid: true,
+      payload: {
+        type: 'botcha-agent-identity',
+        app_id: 'app_other_xyz',
+        agent_id: TEST_AGENT_ID,
+      },
+    });
+
+    const agentsKV = new MockKV();
+    const testAgent: TAPAgent = {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID, // belongs to TEST_APP_ID, not 'app_other_xyz'
+      name: 'TestAgent',
+      created_at: Date.now(),
+      tap_enabled: true,
+      capabilities: [{ action: 'browse', scope: ['*'] }],
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_123',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('UNAUTHORIZED');
+  });
+
+  test('should return 403 when agent_id in body does not match JWT agent_id', async () => {
+    const OTHER_AGENT_ID = 'agent_other_9999';
+    // Token authenticates AGENT_A, but body requests session for AGENT_B
+    mockVerifyToken.mockResolvedValue({
+      valid: true,
+      payload: {
+        type: 'botcha-agent-identity',
+        app_id: TEST_APP_ID,
+        agent_id: OTHER_AGENT_ID, // JWT says other agent
+      },
+    });
+
+    const agentsKV = new MockKV();
+    const testAgent: TAPAgent = {
+      agent_id: TEST_AGENT_ID, // body says TEST_AGENT_ID
+      app_id: TEST_APP_ID,
+      name: 'TestAgent',
+      created_at: Date.now(),
+      tap_enabled: true,
+      capabilities: [{ action: 'browse', scope: ['*'] }],
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_123',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('AGENT_ID_MISMATCH');
+    expect(data.message).toContain('may only create sessions for itself');
+  });
+
+  test('should allow app-level token (no agent_id in JWT) to create session for any agent in same app', async () => {
+    // App-level token (like a challenge-verified token) has no agent_id
+    mockVerifyToken.mockResolvedValue({
+      valid: true,
+      payload: {
+        type: 'botcha-verified',
+        app_id: TEST_APP_ID,
+        // no agent_id — app-level token
+      },
+    });
+
+    const agentsKV = new MockKV();
+    const sessionsKV = new MockKV();
+    const testAgent: TAPAgent = {
+      agent_id: TEST_AGENT_ID,
+      app_id: TEST_APP_ID,
+      name: 'TestAgent',
+      created_at: Date.now(),
+      tap_enabled: true,
+      capabilities: [{ action: 'browse', scope: ['products'] }],
+    };
+    agentsKV.seed(`agent:${TEST_AGENT_ID}`, testAgent);
+
+    const mockContext = createMockContext({
+      agentsKV,
+      sessionsKV,
+      json: vi.fn().mockResolvedValue({
+        agent_id: TEST_AGENT_ID,
+        user_context: 'user_hash_123',
+        intent: { action: 'browse' },
+      }),
+    });
+
+    const response = await createTAPSessionRoute(mockContext);
+    const data = await response.json();
+
+    // App-level tokens (no agent_id constraint) should still work
+    expect(response.status).toBe(201);
+    expect(data.success).toBe(true);
+  });
+
+  // ---- End auth enforcement tests ----
 
   test('should create TAP session successfully', async () => {
     const agentsKV = new MockKV();

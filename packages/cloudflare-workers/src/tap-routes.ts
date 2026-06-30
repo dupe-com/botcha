@@ -443,6 +443,18 @@ export async function listTAPAgentsRoute(c: Context) {
  */
 export async function createTAPSessionRoute(c: Context) {
   try {
+    // Authenticate the caller: requires a valid BOTCHA token (challenge-verified or agent-identity).
+    // Without this check, any unauthenticated caller could create TAP sessions for arbitrary agents
+    // by simply supplying their agent_id in the request body — a full authentication bypass.
+    const appAccess = await validateTAPAppAccess(c, true);
+    if (!appAccess.valid) {
+      return c.json({
+        success: false,
+        error: appAccess.error,
+        message: 'Authentication required. Include a valid BOTCHA bearer token.',
+      }, (appAccess.status || 401) as 401);
+    }
+
     const body = await c.req.json().catch(() => ({}));
     
     if (!body.agent_id || !body.user_context || !body.intent) {
@@ -464,6 +476,26 @@ export async function createTAPSessionRoute(c: Context) {
     }
     
     const agent = agentResult.agent!;
+
+    // Verify the agent belongs to the authenticated app.
+    // Prevents one app's token from creating sessions for another app's agents.
+    if (agent.app_id !== appAccess.appId) {
+      return c.json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Agent does not belong to this app',
+      }, 403);
+    }
+
+    // If the JWT carries a specific agent_id (agent-identity token), it MUST match
+    // the body agent_id. Prevents agent_A from creating sessions as agent_B.
+    if (appAccess.agentId && appAccess.agentId !== agent.agent_id) {
+      return c.json({
+        success: false,
+        error: 'AGENT_ID_MISMATCH',
+        message: 'The agent_id in the request body does not match the authenticated agent. An agent may only create sessions for itself.',
+      }, 403);
+    }
 
     // Gate: agent must have TAP enabled (i.e. a registered public key).
     // tap_enabled is set to true only when a public key is registered, so this

@@ -1180,6 +1180,11 @@ export async function generateHybridChallenge(
   cleanExpired();
 
   const id = uuid();
+  // Capture issuedAt BEFORE any async operations so that totalTimeMs in the
+  // verify response correctly reflects the full elapsed time seen by the caller.
+  // Previously, issuedAt was stamped after two KV writes (~300-600ms), causing
+  // totalTimeMs to appear smaller than speed.solveTimeMs — impossible math.
+  const issuedAt = Date.now();
 
   // Generate both sub-challenges (speed with RTT awareness)
   const speedChallenge = await generateSpeedChallenge(kv, clientTimestamp, app_id);
@@ -1189,8 +1194,8 @@ export async function generateHybridChallenge(
     id,
     speedChallengeId: speedChallenge.id,
     reasoningChallengeId: reasoningChallenge.id,
-    issuedAt: Date.now(),
-    expiresAt: Date.now() + 35000,
+    issuedAt,
+    expiresAt: issuedAt + 35000,
     app_id,
   };
 
